@@ -172,6 +172,27 @@ public sealed class SecurityPolicyEnforcer
     }
 
     /// <summary>
+    /// The policy decision for a file: Allow, Deny, or ApprovalRequired.
+    /// </summary>
+    public PolicyDecision EvaluateFile(string filePath, string content)
+    {
+        if (!IsCloudSendAllowed())
+            return PolicyDecision.Deny("Workspace is in Offline mode");
+
+        if (!IsPathAllowed(filePath))
+            return PolicyDecision.Deny($"File path blocked by policy: {filePath}");
+
+        var scan = ScanContent(filePath, content);
+        if (!scan.Passed)
+            return PolicyDecision.Deny($"Secret scan failed: {scan.Findings.Count} finding(s) in {filePath}", scan);
+
+        if (_policy.Mode == ExfiltrationMode.PreviewRequired)
+            return PolicyDecision.ApprovalRequired(scan);
+
+        return PolicyDecision.Allow(scan);
+    }
+
+    /// <summary>
     /// Checks if a file path is allowed for cloud send.
     /// </summary>
     public bool IsPathAllowed(string filePath)
@@ -207,19 +228,29 @@ public sealed class SecurityPolicyEnforcer
     /// </summary>
     public (bool allowed, SecurityScanResult? scanResult, string? reason) CheckBeforeSend(string filePath, string content)
     {
-        if (!IsCloudSendAllowed())
-            return (false, null, "Workspace is in Offline mode");
-
-        if (!IsPathAllowed(filePath))
-            return (false, null, $"File path blocked by policy: {filePath}");
-
-        var scan = ScanContent(filePath, content);
-        if (!scan.Passed)
-            return (false, scan, $"Secret scan failed: {scan.Findings.Count} finding(s)");
-
-        if (_policy.Mode == ExfiltrationMode.PreviewRequired)
-            return (true, scan, "Preview required before send");
-
-        return (true, scan, null);
+        var decision = EvaluateFile(filePath, content);
+        return decision switch
+        {
+            { IsAllowed: true, IsApprovalRequired: false } => (true, decision.ScanResult, null),
+            { IsApprovalRequired: true } => (true, decision.ScanResult, "Preview required before send"),
+            _ => (false, decision.ScanResult, decision.Reason),
+        };
     }
+}
+
+/// <summary>
+/// Security policy decision for a file: Allow, Deny, or ApprovalRequired.
+/// All Payload output paths must call EvaluateFile and respect the decision.
+/// </summary>
+public sealed record PolicyDecision
+{
+    public bool IsAllowed { get; init; }
+    public bool IsApprovalRequired { get; init; }
+    public string? Reason { get; init; }
+    public SecurityScanResult? ScanResult { get; init; }
+
+    public static PolicyDecision Allow(SecurityScanResult? scanResult = null) => new() { IsAllowed = true, ScanResult = scanResult };
+    public static PolicyDecision Deny(string reason, SecurityScanResult? scanResult = null) => new() { IsAllowed = false, Reason = reason, ScanResult = scanResult };
+    public static PolicyDecision ApprovalRequired(SecurityScanResult? scanResult = null) =>
+        new() { IsAllowed = false, IsApprovalRequired = true, Reason = "Preview required before send", ScanResult = scanResult };
 }

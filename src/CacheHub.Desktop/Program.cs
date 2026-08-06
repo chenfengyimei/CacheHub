@@ -476,11 +476,12 @@ app.MapGet("/api/v1/context/{id}/payload", async (string id, IContextPackageRepo
     if (ws is null) return Results.NotFound(new { error = "Workspace not found" });
 
     var generator = new PayloadGenerator();
+    var enforcer = new CacheHub.Core.Security.SecurityPolicyEnforcer();
     var payload = generator.Generate(manifest, path =>
     {
         var fullPath = SafeResolvePath(ws.RootPath, path);
         return fullPath is not null && File.Exists(fullPath) ? File.ReadAllText(fullPath) : "";
-    });
+    }, enforcer);
 
     return Results.Ok(new
     {

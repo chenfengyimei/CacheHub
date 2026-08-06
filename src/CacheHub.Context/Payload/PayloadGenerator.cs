@@ -1,6 +1,7 @@
 using System.Text;
 using CacheHub.Core.Context;
 using CacheHub.Core.Identifiers;
+using CacheHub.Core.Security;
 using CacheHub.Context.Chunking;
 
 namespace CacheHub.Context.Payload;
@@ -8,6 +9,9 @@ namespace CacheHub.Context.Payload;
 /// <summary>
 /// Generates Context Package Payload from a Manifest and file contents.
 /// Payload contains actual code content, separated from Manifest metadata.
+/// Security: if a SecurityPolicyEnforcer is provided, every file is evaluated
+/// before inclusion in the Payload. Denied files are excluded; ApprovalRequired
+/// files are excluded from content but listed as requiring approval.
 /// </summary>
 public sealed class PayloadGenerator
 {
@@ -15,21 +19,32 @@ public sealed class PayloadGenerator
 
     /// <summary>
     /// Generates a Payload from a Manifest and content provider.
+    /// If securityEnforcer is provided, files are filtered by policy.
     /// </summary>
     public ContextPackagePayload Generate(
         ContextPackageManifest manifest,
-        Func<string, string> contentProvider)
+        Func<string, string> contentProvider,
+        SecurityPolicyEnforcer? securityEnforcer = null)
     {
         var items = new List<PayloadItem>();
         var totalTokens = 0;
-        // Use the manifest's context target as the per-file chunk budget, with a
-        // sensible floor so very small budgets don't zero out every file.
         var chunkBudget = Math.Max(manifest.Budget.ContextTarget, 1000);
 
         foreach (var file in manifest.SelectedFiles)
         {
             var content = contentProvider(file.Path);
             if (string.IsNullOrEmpty(content)) continue;
+
+            // Security: evaluate file before including in payload
+            if (securityEnforcer is not null)
+            {
+                var decision = securityEnforcer.EvaluateFile(file.Path, content);
+                if (!decision.IsAllowed)
+                {
+                    // Denied or ApprovalRequired — skip content, don't output
+                    continue;
+                }
+            }
 
             var chunks = _chunker.Chunk(file.Path, content, file.Mode, chunkBudget);
 
@@ -58,10 +73,12 @@ public sealed class PayloadGenerator
 
     /// <summary>
     /// Generates a Markdown-formatted payload string.
+    /// If securityEnforcer is provided, files are filtered by policy.
     /// </summary>
     public string GenerateMarkdown(
         ContextPackageManifest manifest,
-        Func<string, string> contentProvider)
+        Func<string, string> contentProvider,
+        SecurityPolicyEnforcer? securityEnforcer = null)
     {
         var sb = new StringBuilder();
 
@@ -76,6 +93,22 @@ public sealed class PayloadGenerator
         {
             var content = contentProvider(file.Path);
             if (string.IsNullOrEmpty(content)) continue;
+
+            // Security: evaluate file before including in payload
+            if (securityEnforcer is not null)
+            {
+                var decision = securityEnforcer.EvaluateFile(file.Path, content);
+                if (!decision.IsAllowed)
+                {
+                    if (decision.IsApprovalRequired)
+                        sb.AppendLine($"## ⚠ {file.Path} (requires approval)");
+                    else
+                        sb.AppendLine($"## 🚫 {file.Path} (blocked by security policy)");
+                    sb.AppendLine($"- Reason: {decision.Reason}");
+                    sb.AppendLine();
+                    continue;
+                }
+            }
 
             var ext = Path.GetExtension(file.Path).TrimStart('.');
             sb.AppendLine($"## {file.Path}");
