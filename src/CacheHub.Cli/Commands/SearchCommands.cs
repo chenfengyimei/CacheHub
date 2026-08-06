@@ -22,7 +22,19 @@ public static class SearchCommands
         var wsId = GetOpt(args, "--workspace");
         var limitStr = GetOpt(args, "--limit") ?? "50";
         var outputJson = HasFlag(args, "--output=json") || HasFlag(args, "--json");
-        var limit = int.Parse(limitStr, System.Globalization.CultureInfo.InvariantCulture);
+
+        if (string.IsNullOrEmpty(wsId))
+        {
+            Console.Error.WriteLine("Error: --workspace=<id> is required");
+            Console.Error.WriteLine("Usage: cachehub search <query> --workspace=<id> [--limit=N] [--output=json]");
+            return 1;
+        }
+
+        if (!int.TryParse(limitStr, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var limit))
+        {
+            Console.Error.WriteLine($"Error: Invalid limit value: {limitStr}");
+            return 1;
+        }
 
         var appData = new AppDataDirectory();
         var dbPath = appData.GetWorkspaceDatabasePath("main");
@@ -34,21 +46,17 @@ public static class SearchCommands
         ]);
         runner.Migrate();
 
-        // If workspace specified, get its active snapshot
-        IndexSnapshotId? snapshotId = null;
-        if (!string.IsNullOrEmpty(wsId))
+        // Get active snapshot for workspace
+        var snapshotId = await GetActiveSnapshotIdAsync(factory, wsId);
+        if (snapshotId is null)
         {
-            snapshotId = await GetActiveSnapshotIdAsync(factory, wsId);
-            if (snapshotId is null)
-            {
-                Console.Error.WriteLine($"No active index snapshot found for workspace: {wsId}");
-                Console.Error.WriteLine("Run 'cachehub index build --id=<workspace-id>' first.");
-                return 1;
-            }
+            Console.Error.WriteLine($"No active index snapshot found for workspace: {wsId}");
+            Console.Error.WriteLine("Run 'cachehub index build --id=<workspace-id>' first.");
+            return 1;
         }
 
         var fts = new Fts5Index(factory);
-        var results = await fts.SearchAsync(snapshotId ?? IndexSnapshotId.New(), query, limit);
+        var results = await fts.SearchAsync(snapshotId, query, limit);
 
         if (results.Count == 0)
         {

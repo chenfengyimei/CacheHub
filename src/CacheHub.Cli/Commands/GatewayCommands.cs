@@ -40,11 +40,17 @@ public static class GatewayCommands
             Console.Error.WriteLine("Warning: --provider-key not set; Gateway will forward without auth header");
         }
 
+        if (!int.TryParse(port, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var portNum))
+        {
+            Console.Error.WriteLine($"Error: Invalid port number: {port}");
+            return 1;
+        }
+
         var config = new GatewayConfig
         {
             ProviderBaseUrl = baseUrl,
             ProviderApiKey = apiKey ?? "",
-            Port = int.Parse(port, System.Globalization.CultureInfo.InvariantCulture),
+            Port = portNum,
         };
 
         Console.Error.WriteLine($"Starting CacheHub Gateway on http://{config.Host}:{config.Port}");

@@ -132,10 +132,22 @@ public static class ConfigCommands
                 }
                 break;
             case "gateway.enabled":
-                config = config with { Gateway = (config.Gateway ?? new GatewayConfigFile()) with { Enabled = bool.Parse(value) } };
+                if (bool.TryParse(value, out var enabled))
+                    config = config with { Gateway = (config.Gateway ?? new GatewayConfigFile()) with { Enabled = enabled } };
+                else
+                {
+                    Console.Error.WriteLine($"Invalid boolean value: {value}. Use true or false.");
+                    return 1;
+                }
                 break;
             case "gateway.port":
-                config = config with { Gateway = (config.Gateway ?? new GatewayConfigFile()) with { Port = int.Parse(value, System.Globalization.CultureInfo.InvariantCulture) } };
+                if (int.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var portNum))
+                    config = config with { Gateway = (config.Gateway ?? new GatewayConfigFile()) with { Port = portNum } };
+                else
+                {
+                    Console.Error.WriteLine($"Invalid port number: {value}");
+                    return 1;
+                }
                 break;
             case "gateway.providerurl":
                 config = config with { Gateway = (config.Gateway ?? new GatewayConfigFile()) with { ProviderUrl = value } };

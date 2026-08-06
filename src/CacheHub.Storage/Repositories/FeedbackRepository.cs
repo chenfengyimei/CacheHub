@@ -96,6 +96,7 @@ public sealed class SqliteFeedbackRepository(SqliteConnectionFactory factory) : 
 
     private static ContextFeedback MapFeedback(SqliteDataReader reader, SqliteConnection conn)
     {
+        var feedbackId = reader.GetString(reader.GetOrdinal("id"));
         var ctxId = reader.GetString(reader.GetOrdinal("context_package_id"));
         return new ContextFeedback
         {
@@ -109,20 +110,25 @@ public sealed class SqliteFeedbackRepository(SqliteConnectionFactory factory) : 
             TotalWorkflowInputTokens = reader.IsDBNull(reader.GetOrdinal("total_workflow_input_tokens")) ? null : reader.GetInt32(reader.GetOrdinal("total_workflow_input_tokens")),
             TotalWorkflowOutputTokens = reader.IsDBNull(reader.GetOrdinal("total_workflow_output_tokens")) ? null : reader.GetInt32(reader.GetOrdinal("total_workflow_output_tokens")),
             TestsPassed = reader.IsDBNull(reader.GetOrdinal("tests_passed")) ? null : reader.GetInt32(reader.GetOrdinal("tests_passed")) == 1,
-            FilesActuallyRead = LoadFileList(conn, ctxId, "actually_read"),
-            AdditionalFilesRequested = LoadFileList(conn, ctxId, "additional_requested"),
-            SelectedFilesUsed = LoadFileList(conn, ctxId, "selected_used"),
-            SelectedFilesIgnored = LoadFileList(conn, ctxId, "selected_ignored"),
-            PatchFiles = LoadFileList(conn, ctxId, "patch_files"),
-            TestsRun = LoadFileList(conn, ctxId, "tests_run"),
+            FilesActuallyRead = LoadFileList(conn, feedbackId, "actually_read"),
+            AdditionalFilesRequested = LoadFileList(conn, feedbackId, "additional_requested"),
+            SelectedFilesUsed = LoadFileList(conn, feedbackId, "selected_used"),
+            SelectedFilesIgnored = LoadFileList(conn, feedbackId, "selected_ignored"),
+            PatchFiles = LoadFileList(conn, feedbackId, "patch_files"),
+            TestsRun = LoadFileList(conn, feedbackId, "tests_run"),
         };
     }
 
-    private static List<string> LoadFileList(SqliteConnection conn, string contextPackageId, string fileType)
+    private static List<string> LoadFileList(SqliteConnection conn, string feedbackId, string fileType)
     {
-        // Note: This is a simplified loader that queries by context_package_id via feedback join.
-        // In production, we'd pass feedback_id. For simplicity in this read path, we return empty lists.
-        // The Save path correctly stores files with feedback_id.
-        return [];
+        var result = new List<string>();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT file_path FROM feedback_files WHERE feedback_id = $fid AND file_type = $type;";
+        cmd.Parameters.AddWithValue("$fid", feedbackId);
+        cmd.Parameters.AddWithValue("$type", fileType);
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+            result.Add(reader.GetString(0));
+        return result;
     }
 }

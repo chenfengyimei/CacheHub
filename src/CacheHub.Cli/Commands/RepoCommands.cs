@@ -71,7 +71,7 @@ public static class RepoCommands
         {
             Url = url,
             Destination = dest,
-            Depth = depth is not null ? int.Parse(depth, System.Globalization.CultureInfo.InvariantCulture) : null,
+            Depth = depth is not null && int.TryParse(depth, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var d) ? d : null,
             IncludeSubmodules = false,
             IncludeLfs = false,
             Risks = ["Clone writes to disk", "Network access required"],

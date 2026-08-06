@@ -403,6 +403,8 @@ public static class ContextCommands
         [
             new Migration0001Initial(),
             new Migration0002Fts5(),
+            new Migration0003ContextPackages(),
+            new Migration0004Feedback(),
         ]);
         runner.Migrate();
 

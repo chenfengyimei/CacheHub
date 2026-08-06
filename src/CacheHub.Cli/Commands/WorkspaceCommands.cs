@@ -18,27 +18,11 @@ public static class WorkspaceCommands
 
         return args[0] switch
         {
-            "workspace" => await HandleWorkspaceAsync(args.AsSpan(1).ToArray()),
-            "capabilities" => HandleCapabilities(),
-            _ => PrintUsage(),
-        };
-    }
-
-    private static async Task<int> HandleWorkspaceAsync(string[] args)
-    {
-        if (args.Length == 0)
-        {
-            Console.WriteLine("Usage: cachehub workspace <import|status|list|remove> [options]");
-            return 1;
-        }
-
-        return args[0] switch
-        {
             "import" => await HandleWorkspaceImportAsync(args.AsSpan(1).ToArray()),
             "list" => await HandleWorkspaceListAsync(),
             "status" => await HandleWorkspaceStatusAsync(args.AsSpan(1).ToArray()),
             "remove" => await HandleWorkspaceRemoveAsync(args.AsSpan(1).ToArray()),
-            _ => 1,
+            _ => PrintUsage(),
         };
     }
 
@@ -59,7 +43,13 @@ public static class WorkspaceCommands
         appData.EnsureCreated();
         var dbPath = appData.GetWorkspaceDatabasePath("main");
         var factory = new SqliteConnectionFactory(dbPath);
-        var runner = new MigrationRunner(factory, dbPath, [new Migration0001Initial()]);
+        var runner = new MigrationRunner(factory, dbPath,
+        [
+            new Migration0001Initial(),
+            new Migration0002Fts5(),
+            new Migration0003ContextPackages(),
+            new Migration0004Feedback(),
+        ]);
         runner.Migrate();
         var repo = new SqliteWorkspaceRepository(factory);
         var workspace = Workspace.Create(name, path);

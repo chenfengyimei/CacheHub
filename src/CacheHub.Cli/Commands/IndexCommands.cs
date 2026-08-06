@@ -54,6 +54,8 @@ public static class IndexCommands
         [
             new Migration0001Initial(),
             new Migration0002Fts5(),
+            new Migration0003ContextPackages(),
+            new Migration0004Feedback(),
         ]);
         runner.Migrate();
 
@@ -237,7 +239,7 @@ public static class IndexCommands
     }
 
     private static string? GetOption(string[] args, string prefix)
-        => args.FirstOrDefault(a => a.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))?[prefix.Length..];
+        => args.FirstOrDefault(a => a.StartsWith(prefix + "=", StringComparison.OrdinalIgnoreCase))?[prefix.Length..];
 
     private static async Task InsertSnapshotAsync(SqliteConnectionFactory factory, IndexSnapshotId snapshotId, WorkspaceId workspaceId)
     {

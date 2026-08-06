@@ -39,13 +39,15 @@ public static class CleanCommands
             return 0;
         }
 
+        var deletedCount = 0;
+        var failedCount = 0;
         foreach (var file in files)
         {
-            try { File.Delete(file); }
-            catch { }
+            try { File.Delete(file); deletedCount++; }
+            catch (Exception ex) { Console.Error.WriteLine($"  Failed to delete: {file} - {ex.Message}"); failedCount++; }
         }
 
-        Console.WriteLine($"Deleted {files.Length} temp files.");
+        Console.WriteLine($"Deleted {deletedCount} temp files." + (failedCount > 0 ? $" ({failedCount} failed)" : ""));
         return 0;
     }
 
@@ -69,13 +71,15 @@ public static class CleanCommands
             return 0;
         }
 
+        var deletedCount = 0;
+        var failedCount = 0;
         foreach (var file in files)
         {
-            try { File.Delete(file); }
-            catch { }
+            try { File.Delete(file); deletedCount++; }
+            catch (Exception ex) { Console.Error.WriteLine($"  Failed to delete: {file} - {ex.Message}"); failedCount++; }
         }
 
-        Console.WriteLine($"Deleted {files.Length} cache files ({totalSize / 1024.0 / 1024.0:F2} MB).");
+        Console.WriteLine($"Deleted {deletedCount} cache files ({totalSize / 1024.0 / 1024.0:F2} MB)." + (failedCount > 0 ? $" ({failedCount} failed)" : ""));
         return 0;
     }
 
@@ -97,13 +101,15 @@ public static class CleanCommands
             return 0;
         }
 
+        var deletedCount = 0;
+        var failedCount = 0;
         foreach (var dir in dirs)
         {
-            try { Directory.Delete(dir, recursive: true); }
-            catch { }
+            try { Directory.Delete(dir, recursive: true); deletedCount++; }
+            catch (Exception ex) { Console.Error.WriteLine($"  Failed to delete: {dir} - {ex.Message}"); failedCount++; }
         }
 
-        Console.WriteLine($"Deleted {dirs.Length} export directories.");
+        Console.WriteLine($"Deleted {deletedCount} export directories." + (failedCount > 0 ? $" ({failedCount} failed)" : ""));
         return 0;
     }
 
