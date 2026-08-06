@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "project": "CacheHub",
-  "currentPhase": "R2-CORE-COMPLETE",
-  "currentTask": "R2 core 8/10 complete (W002 Recall multi-source and W004 Tree-sitter require external deps). Next: R3 通用协议与安全 GUI Beta",
+  "currentPhase": "R3-CORE-COMPLETE",
+  "currentTask": "R3 core 5/8 + 2 additional audit fixes. Next: R4 真实 Benchmark 或 R5 独立 Gateway",
   "repository": {
     "branch": "main",
     "dirty": false,
@@ -17,19 +17,16 @@
   },
   "r0CompletedTasks": "10/10 (all P0 issues resolved)",
   "r1CompletedTasks": "10/10 (indexing & persistence trustworthy)",
-  "r2CompletedTasks": [
-    "R2-W001: Unicode/Chinese task parsing (deterministic-query-v2)",
-    "R2-W003: Ranking only implements actual features (deterministic-v2 v4, SizeEfficiency)",
-    "R2-W005: Anchor-based Chunking (chunking-v2, LineAnchor)",
-    "R2-W006: Token Budget reserves in formula (budget-v2, MaxAvailable)",
-    "R2-W007: Immutable PayloadPlan (Manifest/Payload share plan)",
-    "R2-W008: RepoMap real directory tree + importance scoring + budget (repomap-v2)",
-    "R2-W009: Context Expand symbol support (ExpandBySymbol, file_symbols query)",
-    "R2-W010: Context Explain complete FeatureBreakdown (ExplainResult, weighted contributions)"
+  "r2CompletedTasks": "8/10 core (W002/W004 deferred)",
+  "r3CompletedTasks": [
+    "R3-W001: ErrorEnvelope unified (CLI + Desktop API)",
+    "R3-W005: Git LFS fix + credential redaction + output limit",
+    "R3-W006: Project Detection — no guessing, parse .csproj",
+    "R3-W007: File Export Plan/Apply separation + backup + atomic",
+    "R3-W008: Feedback validation (Context/Workspace)",
+    "CTX-P1-004: Ghost file (0-token) exclusion",
+    "API-P1-003: Desktop API index build endpoint"
   ],
-  "r2SkippedTasks": [
-    "R2-W002: Recall multi-source (requires FTS+symbol DB integration in CLI — partially done via callbacks)",
-    "R2-W004: Tree-sitter (requires native library integration — deferred to later phase)"
-  ],
-  "lastUpdated": "2026-08-07T02:10:00Z"
+  "totalAuditIssuesFixed": 43,
+  "lastUpdated": "2026-08-07T02:25:00Z"
 }
