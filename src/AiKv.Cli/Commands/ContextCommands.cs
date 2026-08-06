@@ -18,7 +18,7 @@ namespace AiKv.Cli.Commands;
 /// </summary>
 public static class ContextCommands
 {
-    private static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions _jsonOpts = new() { WriteIndented = true };
     public static async Task<int> HandleAsync(string[] args)
     {
         if (args.Length == 0)
@@ -89,7 +89,7 @@ public static class ContextCommands
 
         if (outputJson)
         {
-            var json = JsonSerializer.Serialize(manifest, JsonOpts);
+            var json = JsonSerializer.Serialize(manifest, _jsonOpts);
             Console.WriteLine(json);
         }
         else

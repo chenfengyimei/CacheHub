@@ -9,7 +9,7 @@ namespace AiKv.Cli.Commands;
 /// </summary>
 public static class CapabilitiesCommands
 {
-    private static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions _jsonOpts = new() { WriteIndented = true };
     public static int Handle(string[] args)
     {
         var outputJson = args.Contains("--output=json", StringComparer.OrdinalIgnoreCase)
@@ -44,7 +44,7 @@ public static class CapabilitiesCommands
 
         if (outputJson)
         {
-            var json = JsonSerializer.Serialize(cd, JsonOpts);
+            var json = JsonSerializer.Serialize(cd, _jsonOpts);
             Console.WriteLine(json);
         }
         else
