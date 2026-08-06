@@ -6,6 +6,8 @@ using AiKv.Context.Recall;
 using AiKv.Context.Selection;
 using AiKv.Core.Context;
 using AiKv.Core.Identifiers;
+using AiKv.Core.Security;
+using AiKv.Core.Tokens;
 
 namespace AiKv.Context.Engine;
 
@@ -24,10 +26,13 @@ public sealed record ContextBuildRequest
     public string? SecurityPolicyVersion { get; init; }
     public string? IgnoreRulesHash { get; init; }
     public string? RepoMapVersion { get; init; }
+    public string? ModelId { get; init; }
+    public SecurityPolicy? SecurityPolicy { get; init; }
 }
 
 /// <summary>
 /// Context Engine: builds deterministically ranked, budget-constrained Context Packages.
+/// Integrates TokenizerRegistry for accurate token estimation and SecurityPolicyEnforcer for pre-send checks.
 /// </summary>
 public sealed class ContextEngine
 {
@@ -35,9 +40,17 @@ public sealed class ContextEngine
     private readonly RecallPipeline _recall = new();
     private readonly RankingEngine _ranking = new();
     private readonly SelectionEngine _selection = new();
+    private readonly TokenizerRegistry _tokenizers;
+    private readonly SecurityPolicyEnforcer? _securityEnforcer;
+
+    public ContextEngine(TokenizerRegistry? tokenizers = null, SecurityPolicy? securityPolicy = null)
+    {
+        _tokenizers = tokenizers ?? new TokenizerRegistry();
+        _securityEnforcer = securityPolicy is not null ? new SecurityPolicyEnforcer(securityPolicy) : null;
+    }
 
     /// <summary>
-    /// Builds a Context Package manifest (and optionally payload).
+    /// Builds a Context Package manifest with integrated tokenization and security checks.
     /// </summary>
     public ContextPackageManifest Build(
         ContextBuildRequest request,
@@ -48,11 +61,37 @@ public sealed class ContextEngine
     {
         var budget = request.Budget ?? DefaultTokenBudgetPolicy.Create();
         var profile = request.RankingProfile ?? DefaultRankingProfile.Create();
+        var tokenizer = request.ModelId is not null
+            ? _tokenizers.GetForModel(request.ModelId)
+            : _tokenizers.Default;
 
         var parsedTask = _taskParser.Parse(request.Task);
         var candidates = _recall.Recall(parsedTask, indexedFilesProvider(), request.GitDiffFiles, request.CurrentFile);
         var ranked = _ranking.Rank(candidates, profile, parsedTask, request.CurrentFile);
         var selected = _selection.Select(ranked, budget, contentProvider, hashProvider);
+
+        // Security scan on selected files
+        var securityPassed = true;
+        var securityFindings = new List<string>();
+        var cloudSendAllowed = true;
+        var scannerVersion = "none";
+
+        if (_securityEnforcer is not null)
+        {
+            cloudSendAllowed = _securityEnforcer.IsCloudSendAllowed();
+            scannerVersion = SecretScanner.Version;
+
+            foreach (var file in selected.SelectedFiles)
+            {
+                var content = contentProvider(file.Path);
+                var (allowed, scan, reason) = _securityEnforcer.CheckBeforeSend(file.Path, content);
+                if (!allowed)
+                {
+                    securityPassed = false;
+                    securityFindings.Add($"{file.Path}: {reason}");
+                }
+            }
+        }
 
         var manifest = new ContextPackageManifest
         {
@@ -81,8 +120,8 @@ public sealed class ContextEngine
                 ContextHardLimit = budget.ContextHardLimit,
                 SafetyMargin = budget.SafetyMargin,
                 ActualEstimate = selected.TotalEstimatedTokens,
-                Tokenizer = budget.Tokenizer,
-                TokenizerVersion = budget.TokenizerVersion,
+                Tokenizer = tokenizer.Id,
+                TokenizerVersion = tokenizer.Version,
             },
             SelectedFiles = selected.SelectedFiles.Select(f => new Core.Context.SelectedFile
             {
@@ -101,13 +140,14 @@ public sealed class ContextEngine
             }).ToList(),
             Safety = new Core.Context.SafetyInfo
             {
-                CloudSendAllowed = true,
-                SecretsScanPassed = true,
+                CloudSendAllowed = cloudSendAllowed,
+                SecretsScanPassed = securityPassed,
                 IgnoreRulesHash = request.IgnoreRulesHash,
-                SecurityPolicyVersion = request.SecurityPolicyVersion,
-                SecretScannerVersion = "none",
+                SecurityPolicyVersion = request.SecurityPolicyVersion ?? _securityEnforcer?.IsCloudSendAllowed().ToString(),
+                SecretScannerVersion = scannerVersion,
+                SensitiveExclusions = securityFindings.Count > 0 ? securityFindings : null,
             },
-            ContextEngineVersion = "0.1.0",
+            ContextEngineVersion = "0.2.0",
             ChunkingStrategyVersion = ChunkingStrategy.Version,
             TokenBudgetPolicyVersion = DefaultTokenBudgetPolicy.Version,
             RepoMapVersion = request.RepoMapVersion,
