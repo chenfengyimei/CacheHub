@@ -35,6 +35,7 @@ if (args.Length == 0)
     Console.WriteLine("  version [--output=json]             Show version info");
     Console.WriteLine("  help [command]                      Show help (all or command-specific)");
     Console.WriteLine("  explain --id=<ctx-id>               Explain context selection and potential misses");
+    Console.WriteLine("  search <query> [--workspace=<id>]   Search indexed files (FTS5)");
     Console.WriteLine("  integration verify                 Verify installation and integration");
     return 1;
 }
@@ -54,5 +55,6 @@ return args[0] switch
     "version" => VersionCommands.Handle(args.AsSpan(1).ToArray()),
     "help" => HelpCommands.Handle(args.AsSpan(1).ToArray()),
     "explain" => await ExplainCommands.HandleAsync(args.AsSpan(1).ToArray()),
+    "search" => await SearchCommands.HandleAsync(args.AsSpan(1).ToArray()),
     _ => 1,
 };

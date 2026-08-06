@@ -12,6 +12,7 @@ using AiKv.Core.Workspaces;
 using AiKv.Storage;
 using AiKv.Storage.Database;
 using AiKv.Storage.Database.Migrations;
+using AiKv.Storage.Search;
 using AiKv.Storage.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -258,6 +259,40 @@ app.MapPost("/api/v1/workspaces/{id}/export", async (string id, IWorkspaceReposi
         workspaceId = id,
         exportedTo = exportDir,
         files = new[] { "workspace.json", "repomap.md" },
+    });
+});
+
+// === Search ===
+app.MapGet("/api/v1/search", async (string q, string? workspace, int? limit, SqliteConnectionFactory factory) =>
+{
+    if (string.IsNullOrWhiteSpace(q))
+        return Results.BadRequest(new { error = "Query parameter 'q' is required" });
+
+    var wsId = workspace ?? "";
+    IndexSnapshotId? snapshotId = null;
+
+    if (!string.IsNullOrEmpty(wsId))
+    {
+        await using var conn = factory.CreateOpenConnection();
+        using var snapCmd = conn.CreateCommand();
+        snapCmd.CommandText = "SELECT id FROM index_snapshots WHERE workspace_id = $ws AND status = 'Active' LIMIT 1;";
+        snapCmd.Parameters.AddWithValue("$ws", wsId);
+        await using var snapReader = await snapCmd.ExecuteReaderAsync();
+        if (await snapReader.ReadAsync())
+            snapshotId = IndexSnapshotId.Parse(snapReader.GetString(0));
+    }
+
+    if (snapshotId is null)
+        return Results.Ok(new { results = Array.Empty<object>(), message = "No active index snapshot found" });
+
+    var fts = new Fts5Index(factory);
+    var results = await fts.SearchAsync(snapshotId, q, limit ?? 50);
+
+    return Results.Ok(new
+    {
+        query = q,
+        count = results.Count,
+        results = results.Select(r => new { path = r.Path, language = r.Language, snippet = r.Snippet }),
     });
 });
 
