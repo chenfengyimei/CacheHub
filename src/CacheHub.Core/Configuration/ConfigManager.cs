@@ -123,7 +123,11 @@ public sealed class ConfigManager
         var dir = Path.GetDirectoryName(_configPath);
         if (dir is not null) Directory.CreateDirectory(dir);
         var json = JsonSerializer.Serialize(config, _jsonOpts);
-        File.WriteAllText(_configPath, json);
+
+        // Atomic write: write to temp file then replace, to avoid config corruption on crash.
+        var tmpPath = _configPath + ".tmp";
+        File.WriteAllText(tmpPath, json);
+        File.Move(tmpPath, _configPath, overwrite: true);
     }
 
     public bool Exists => File.Exists(_configPath);

@@ -54,6 +54,8 @@ public sealed class LruCache : IDisposable
     private readonly LinkedList<CacheEntry> _lruList = [];
     private readonly Dictionary<string, LinkedListNode<CacheEntry>> _map = new();
     private readonly long _maxSizeBytes;
+    private readonly Dictionary<CacheType, long> _hitCounts = new();
+    private readonly Dictionary<CacheType, long> _missCounts = new();
     private long _currentSizeBytes;
     private bool _disposed;
 
@@ -76,13 +78,19 @@ public sealed class LruCache : IDisposable
     {
         lock (_lock)
         {
-            if (!_map.TryGetValue(key, out var node)) return null;
+            if (!_map.TryGetValue(key, out var node))
+            {
+                RecordMiss(node?.Value?.Type);
+                return null;
+            }
 
             // Check TTL
             if (node.Value.TtlSeconds is not null &&
                 DateTimeOffset.UtcNow.Subtract(node.Value.CreatedAt).TotalSeconds > node.Value.TtlSeconds)
             {
+                var ttlType = node.Value.Type;
                 RemoveNode(node);
+                RecordMiss(ttlType);
                 return null;
             }
 
@@ -90,7 +98,8 @@ public sealed class LruCache : IDisposable
             _lruList.Remove(node);
             _lruList.AddFirst(node);
 
-            return node.Value with { IsHit = true };
+            RecordHit(node.Value.Type);
+            return node.Value;
         }
     }
 
@@ -126,6 +135,8 @@ public sealed class LruCache : IDisposable
             _lruList.Clear();
             _map.Clear();
             _currentSizeBytes = 0;
+            _hitCounts.Clear();
+            _missCounts.Clear();
         }
     }
 
@@ -134,18 +145,28 @@ public sealed class LruCache : IDisposable
         lock (_lock)
         {
             var entries = _map.Values.Where(n => n.Value.Type == type).Select(n => n.Value).ToList();
-            var hits = entries.Count(e => e.IsHit);
-            var total = entries.Count;
+            var hits = _hitCounts.GetValueOrDefault(type);
+            var misses = _missCounts.GetValueOrDefault(type);
+            var total = hits + misses;
             return new CacheStats
             {
                 Type = type,
-                TotalEntries = total,
+                TotalEntries = entries.Count,
                 TotalSizeBytes = entries.Sum(e => e.SizeBytes),
-                Hits = hits,
-                Misses = total - hits,
+                Hits = (int)hits,
+                Misses = (int)misses,
                 HitRate = total > 0 ? (double)hits / total : 0,
             };
         }
+    }
+
+    private void RecordHit(CacheType type) =>
+        _hitCounts[type] = _hitCounts.GetValueOrDefault(type) + 1;
+
+    private void RecordMiss(CacheType? type)
+    {
+        if (type is null) return;
+        _missCounts[type.Value] = _missCounts.GetValueOrDefault(type.Value) + 1;
     }
 
     private void EvictIfNeeded()

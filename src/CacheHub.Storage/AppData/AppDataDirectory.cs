@@ -56,11 +56,18 @@ public sealed class AppDataDirectory
         var cutoff = DateTimeOffset.UtcNow - age;
         foreach (var file in Directory.EnumerateFiles(TempPath))
         {
-            var lastWrite = new DateTimeOffset(File.GetLastWriteTimeUtc(file));
-            if (lastWrite < cutoff)
+            try
             {
-                File.Delete(file);
+                var lastWrite = new DateTimeOffset(File.GetLastWriteTimeUtc(file));
+                if (lastWrite < cutoff)
+                {
+                    File.Delete(file);
+                }
             }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+            catch (FileNotFoundException) { }
+            catch (DirectoryNotFoundException) { }
         }
     }
 

@@ -115,7 +115,7 @@ public sealed partial class TypeScriptRegexParser : ICodeParser
         };
     }
 
-    [GeneratedRegex(@"import\s+(?:(\{[^}]+\}|[\w*]+)\s+from\s+)?['""]([^'""]+)['""]")]
+    [GeneratedRegex(@"import\s+(?:(\{[^}]+\}|[\w*]+(?:\s+as\s+\w+)?)\s+from\s+)?['""]([^'""]+)['""]")]
     private static partial Regex ImportRegex();
 
     [GeneratedRegex(@"export\s+(class|interface|function|enum|const|type)\s+(\w+)")]
