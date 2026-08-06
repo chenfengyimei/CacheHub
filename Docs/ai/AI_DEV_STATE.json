@@ -1,11 +1,10 @@
 {
   "schemaVersion": 1,
   "project": "AI_KV",
-  "currentPhase": "P08",
+  "currentPhase": "P10",
   "currentTask": null,
   "repository": {
     "branch": "main",
-    "head": "",
     "dirty": false,
     "uncommittedFiles": []
   },
@@ -24,8 +23,9 @@
     "CLI 支持 --output=json，stdout/stderr 分离",
     "Integration Kit: Universal Skill + CLI Agent 教程 + ContextFeedback 协议",
     "Benchmark: Recall@K/Precision/聚合/阶段门/失败归因/JSON报告",
-    "0.1-beta UI: ASP.NET Core 最小 Web 状态页面（ADR-0004，P14 迁移 Avalonia）",
-    "Desktop 项目: loopback HTTP API + 静态 HTML，深色主题，GUI 只调用应用服务"
+    "0.1-beta UI: ASP.NET Core 最小 Web 状态页面（ADR-0004）",
+    "Repository Manager: Git 进程封装 + URL 解析 + 安全 Clone",
+    "项目检测: 9种生态检测器 + Monorepo + 初始化计划（只读+审批）"
   ],
   "risks": [
     "许可证未正式确定（LICENSE 占位）",
@@ -36,8 +36,7 @@
   ],
   "blockers": [],
   "nextActions": [
-    "开始 P08-W001: 封装 Git 进程执行",
-    "开始 P08-W002: 仓库 URL 解析"
+    "开始 P10-W001: 实现统一 Cache Metadata"
   ],
-  "lastUpdated": "2026-08-06T19:05:00Z"
+  "lastUpdated": "2026-08-06T19:15:00Z"
 }
