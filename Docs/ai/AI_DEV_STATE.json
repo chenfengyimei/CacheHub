@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "project": "AI_KV",
-  "currentPhase": "P07",
+  "currentPhase": "P08",
   "currentTask": null,
   "repository": {
     "branch": "main",
@@ -18,26 +18,26 @@
   },
   "decisions": [
     "使用 .NET 9 + C# latest",
-    "强类型标识符使用 record + StrongId 基类",
     "Context Package Manifest/Payload 分离，JSON Schema v1 冻结",
-    "RankingProfile 版本化(deterministic-v1 v3)，权重和=1.0",
-    "ChunkingStrategy v1 + TokenBudget + SelectionEngine 五模式",
+    "RankingProfile 版本化 + ChunkingStrategy + TokenBudget + SelectionEngine 五模式",
     "ContextEngine 集成全流程，输出版本化 Manifest",
     "CLI 支持 --output=json，stdout/stderr 分离",
     "Integration Kit: Universal Skill + CLI Agent 教程 + ContextFeedback 协议",
     "Benchmark: Recall@K/Precision/聚合/阶段门/失败归因/JSON报告",
-    "阶段门阈值: Recall≥90% / 遗漏率≤10% / 成功率≥95% / Token减少≥20%"
+    "0.1-beta UI: ASP.NET Core 最小 Web 状态页面（ADR-0004，P14 迁移 Avalonia）",
+    "Desktop 项目: loopback HTTP API + 静态 HTML，深色主题，GUI 只调用应用服务"
   ],
   "risks": [
     "许可证未正式确定（LICENSE 占位）",
     "Tree-sitter 原生库打包策略待后续确定（当前用 Regex 替代）",
-    "Tokenizer 为粗略估算（chars/4），非精确模型 Tokenizer",
-    "Local API 尚未实现（仅 CLI）",
+    "Tokenizer 为粗略估算（chars/4）",
+    "Local API 仅支持 workspace 管理，context build API 待实现",
     "Benchmark 需要真实任务集和 Ground Truth 标注"
   ],
   "blockers": [],
   "nextActions": [
-    "开始 P07: 最小 GUI 0.1-beta"
+    "开始 P08-W001: 封装 Git 进程执行",
+    "开始 P08-W002: 仓库 URL 解析"
   ],
-  "lastUpdated": "2026-08-06T19:00:00Z"
+  "lastUpdated": "2026-08-06T19:05:00Z"
 }
