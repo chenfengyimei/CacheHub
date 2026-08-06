@@ -37,14 +37,20 @@ public sealed class SqliteContextPackageRepository(SqliteConnectionFactory facto
                  ignore_rules_hash, security_policy_version, secret_scanner_version, approval_id,
                  sensitive_exclusions_json,
                  context_engine_version, chunking_strategy_version, token_budget_policy_version,
-                 created_at)
+                 created_at,
+                 repository_commit, branch, dirty_state_hash,
+                 extracted_symbols_json, extracted_paths_json, parser_versions_json,
+                 repo_map_version, parent_package_id)
             VALUES ($id, $sv, $ws, $snap, $task, $rpId, $rpVer, $ct, $chl, $ae,
                     $mcw, $art, $rrt, $sm, $qpv, $tok, $tokVer,
                     $sfc, $ec, $sfJson, $ecJson,
                     $csa, $ssp,
                     $irh, $spv, $ssv, $aid,
                     $seJson,
-                    $cev, $csv, $tbpv, $ca);
+                    $cev, $csv, $tbpv, $ca,
+                    $rc, $br, $dsh,
+                    $esJson, $epJson, $pvJson,
+                    $rmv, $ppid);
             """;
         AddParam(cmd, "$id", manifest.Id.Value);
         AddParam(cmd, "$sv", manifest.SchemaVersion);
@@ -80,6 +86,20 @@ public sealed class SqliteContextPackageRepository(SqliteConnectionFactory facto
         AddParam(cmd, "$csv", manifest.ChunkingStrategyVersion);
         AddParam(cmd, "$tbpv", manifest.TokenBudgetPolicyVersion);
         AddParam(cmd, "$ca", manifest.CreatedAt.ToString("O", CultureInfo.InvariantCulture));
+        AddParam(cmd, "$rc", (object?)manifest.RepositoryCommit ?? DBNull.Value);
+        AddParam(cmd, "$br", (object?)manifest.Branch ?? DBNull.Value);
+        AddParam(cmd, "$dsh", (object?)manifest.DirtyStateHash ?? DBNull.Value);
+        AddParam(cmd, "$esJson", manifest.Task.ExtractedSymbols is not null
+            ? JsonSerializer.Serialize(manifest.Task.ExtractedSymbols, _jsonOpts)
+            : DBNull.Value);
+        AddParam(cmd, "$epJson", manifest.Task.ExtractedPaths is not null
+            ? JsonSerializer.Serialize(manifest.Task.ExtractedPaths, _jsonOpts)
+            : DBNull.Value);
+        AddParam(cmd, "$pvJson", manifest.ParserVersions is not null
+            ? JsonSerializer.Serialize(manifest.ParserVersions, _jsonOpts)
+            : DBNull.Value);
+        AddParam(cmd, "$rmv", (object?)manifest.RepoMapVersion ?? DBNull.Value);
+        AddParam(cmd, "$ppid", (object?)manifest.ParentPackageId?.Value ?? DBNull.Value);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -123,6 +143,13 @@ public sealed class SqliteContextPackageRepository(SqliteConnectionFactory facto
         var selectedFiles = DeserializeList<SelectedFile>(reader, "selected_files_json");
         var excludedCandidates = DeserializeList<ExcludedCandidate>(reader, "excluded_candidates_json");
         var sensitiveExclusions = DeserializeList<string>(reader, "sensitive_exclusions_json");
+        var extractedSymbols = DeserializeList<string>(reader, "extracted_symbols_json");
+        var extractedPaths = DeserializeList<string>(reader, "extracted_paths_json");
+        var parserVersionsJson = GetNullableString(reader, "parser_versions_json");
+        var parserVersions = string.IsNullOrEmpty(parserVersionsJson)
+            ? null
+            : JsonSerializer.Deserialize<Dictionary<string, string>>(parserVersionsJson, _jsonOpts);
+        var parentPackageId = GetNullableString(reader, "parent_package_id");
 
         return new ContextPackageManifest
         {
@@ -130,10 +157,15 @@ public sealed class SqliteContextPackageRepository(SqliteConnectionFactory facto
             SchemaVersion = reader.GetInt32(reader.GetOrdinal("schema_version")),
             WorkspaceId = WorkspaceId.Parse(reader.GetString(reader.GetOrdinal("workspace_id"))),
             IndexSnapshotId = IndexSnapshotId.Parse(reader.GetString(reader.GetOrdinal("index_snapshot_id"))),
+            RepositoryCommit = GetNullableString(reader, "repository_commit"),
+            Branch = GetNullableString(reader, "branch"),
+            DirtyStateHash = GetNullableString(reader, "dirty_state_hash"),
             Task = new TaskInfo
             {
                 OriginalText = reader.GetString(reader.GetOrdinal("task_text")),
                 QueryParserVersion = reader.GetString(reader.GetOrdinal("query_parser_version")),
+                ExtractedSymbols = extractedSymbols.Count > 0 ? extractedSymbols : null,
+                ExtractedPaths = extractedPaths.Count > 0 ? extractedPaths : null,
             },
             Ranking = new RankingInfo
             {
@@ -168,6 +200,9 @@ public sealed class SqliteContextPackageRepository(SqliteConnectionFactory facto
             ChunkingStrategyVersion = reader.GetString(reader.GetOrdinal("chunking_strategy_version")),
             TokenBudgetPolicyVersion = reader.GetString(reader.GetOrdinal("token_budget_policy_version")),
             CreatedAt = DateTimeOffset.Parse(reader.GetString(reader.GetOrdinal("created_at")), CultureInfo.InvariantCulture),
+            ParserVersions = parserVersions,
+            RepoMapVersion = GetNullableString(reader, "repo_map_version"),
+            ParentPackageId = parentPackageId is not null ? ContextPackageId.Parse(parentPackageId) : null,
         };
     }
 
@@ -182,5 +217,11 @@ public sealed class SqliteContextPackageRepository(SqliteConnectionFactory facto
     private static void AddParam(SqliteCommand cmd, string name, object value)
     {
         cmd.Parameters.AddWithValue(name, value is null ? DBNull.Value : value);
+    }
+
+    private static string? GetNullableString(SqliteDataReader reader, string columnName)
+    {
+        var ordinal = reader.GetOrdinal(columnName);
+        return reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);
     }
 }

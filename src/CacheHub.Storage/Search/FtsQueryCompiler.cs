@@ -9,7 +9,7 @@ public static class FtsQueryCompiler
     /// <summary>
     /// FTS5 special characters that must be escaped in tokens.
     /// </summary>
-    private static readonly char[] SpecialChars = ['"', '*', '(', ')', '+', '-', ':', '^', '{', '}'];
+    private static readonly char[] _specialChars = ['"', '*', '(', ')', '+', '-', ':', '^', '{', '}'];
 
     /// <summary>
     /// Compiles a query string into a safe FTS5 MATCH expression.
