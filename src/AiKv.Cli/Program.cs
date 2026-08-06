@@ -23,6 +23,9 @@ if (args.Length == 0)
     Console.WriteLine("  detect <path> [--plan] [--output=json]  Detect project type");
     Console.WriteLine("  gateway start --provider-url=<url> [--provider-key=<key>] [--port=<port>]");
     Console.WriteLine("  gateway status                     Show gateway status");
+    Console.WriteLine("  config show                        Show current configuration");
+    Console.WriteLine("  config init                        Create default config file");
+    Console.WriteLine("  config set <key> <value>           Set a configuration value");
     Console.WriteLine("  integration verify                 Verify installation and integration");
     return 1;
 }
@@ -36,5 +39,6 @@ return args[0] switch
     "integration" => await IntegrationCommands.HandleAsync(args.AsSpan(1).ToArray()),
     "detect" => DetectCommands.Handle(args.AsSpan(1).ToArray()),
     "gateway" => await GatewayCommands.HandleAsync(args.AsSpan(1).ToArray()),
+    "config" => ConfigCommands.Handle(args.AsSpan(1).ToArray()),
     _ => 1,
 };
