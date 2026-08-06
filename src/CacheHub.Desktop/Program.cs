@@ -50,6 +50,7 @@ app.UseStaticFiles();
 // Security: resolve a relative path within a workspace root, rejecting traversal attempts.
 static string? SafeResolvePath(string rootPath, string relativePath)
 {
+    if (string.IsNullOrEmpty(rootPath)) return null;
     if (string.IsNullOrEmpty(relativePath)) return null;
     var cleaned = relativePath.Replace('/', Path.DirectorySeparatorChar);
     if (cleaned.Contains("..")) return null;

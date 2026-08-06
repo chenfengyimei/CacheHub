@@ -280,22 +280,25 @@ public sealed class GatewayServer : IDisposable
     private void EvictStaleCacheLocked()
     {
         var now = DateTimeOffset.UtcNow;
-        // TTL eviction
+
+        // TTL eviction: always check for expired entries (not just when over cap)
+        var expiredKeys = _cache
+            .Where(kvp => now.Subtract(kvp.Value.CreatedAt) > CacheTtl)
+            .Select(kvp => kvp.Key)
+            .ToList();
+        foreach (var key in expiredKeys)
+            _cache.Remove(key);
+
+        // Count cap: if still overflowing, batch-remove oldest entries.
         if (_cache.Count > MaxCacheEntries)
         {
-            foreach (var key in _cache.Keys.ToList())
-            {
-                var age = now.Subtract(_cache[key].CreatedAt);
-                if (age > CacheTtl)
-                    _cache.Remove(key);
-            }
-        }
-
-        // Count cap: if still overflowing, remove oldest entries.
-        while (_cache.Count > MaxCacheEntries && _cache.Count > 0)
-        {
-            var oldestKey = _cache.MinBy(kvp => kvp.Value.CreatedAt).Key;
-            _cache.Remove(oldestKey);
+            var toRemove = _cache
+                .OrderBy(kvp => kvp.Value.CreatedAt)
+                .Take(_cache.Count - MaxCacheEntries)
+                .Select(kvp => kvp.Key)
+                .ToList();
+            foreach (var key in toRemove)
+                _cache.Remove(key);
         }
     }
 

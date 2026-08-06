@@ -74,13 +74,15 @@ public sealed class LruCache : IDisposable
         get { lock (_lock) return _currentSizeBytes; }
     }
 
-    public CacheEntry? Get(string key)
+    public CacheEntry? Get(string key, CacheType? expectedType = null)
     {
         lock (_lock)
         {
             if (!_map.TryGetValue(key, out var node))
             {
-                RecordMiss(node?.Value?.Type);
+                // For absent keys the concrete type isn't known from the key alone;
+                // record a miss when the caller knows the expected cache type.
+                RecordMiss(expectedType ?? node?.Value?.Type);
                 return null;
             }
 
