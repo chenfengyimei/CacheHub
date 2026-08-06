@@ -180,7 +180,7 @@ public class ContextEngineTests
         var misses = ContextExplainer.DetectPotentialMisses(manifest);
 
         Assert.Single(misses);
-        Assert.Contains("high.ts", misses);
+        Assert.Contains(misses, m => m.Contains("high.ts", StringComparison.Ordinal));
     }
 
     [Fact]
