@@ -46,6 +46,7 @@
         <button class="active" onclick="showPage('workspaces')">Workspaces</button>
         <button onclick="showPage('context')">Context</button>
         <button onclick="showPage('history')">History</button>
+        <button onclick="showPage('search')">Search</button>
         <button onclick="showPage('integration')">Integration</button>
         <button onclick="showPage('settings')">Settings</button>
     </nav>
@@ -112,6 +113,19 @@
                     <tbody id="history-table-body"></tbody>
                 </table>
                 <div id="history-empty" class="empty" style="display:none">No context packages found.</div>
+            </div>
+        </div>
+
+        <!-- Search Page -->
+        <div id="page-search" class="page" style="display:none">
+            <div class="card">
+                <h2>Search Files</h2>
+                <div class="row" style="margin-bottom: 0.5rem">
+                    <input type="text" id="search-query" placeholder="Search query..." style="flex:1" onkeydown="if(event.key==='Enter')searchFiles()">
+                    <input type="text" id="search-ws" placeholder="Workspace ID (optional)" style="width:200px">
+                    <button class="btn" onclick="searchFiles()">Search</button>
+                </div>
+                <div id="search-results"></div>
             </div>
         </div>
 
@@ -267,6 +281,21 @@ async function loadHistory() {
         tr.innerHTML = `<td title="${c.id}">${c.id.slice(0,12)}…</td><td>${c.task}</td><td>${c.budget}</td><td>${c.engine}</td><td>${new Date(c.createdAt).toLocaleString()}</td>`;
         tbody.appendChild(tr);
     });
+}
+
+async function searchFiles() {
+    const q = document.getElementById('search-query').value;
+    const ws = document.getElementById('search-ws').value;
+    if (!q) { toast('Search query is required'); return; }
+    const url = `/api/v1/search?q=${encodeURIComponent(q)}` + (ws ? `&workspace=${encodeURIComponent(ws)}` : '');
+    const result = await api(url);
+    const el = document.getElementById('search-results');
+    if (!result.count) { el.innerHTML = '<p style="color:var(--text-dim)">No results found.</p>'; return; }
+    el.innerHTML = `<p>Found ${result.count} matches</p>` + result.results.map(r => `
+        <div style="margin-bottom:0.5rem;padding:0.5rem;border:1px solid var(--border);border-radius:4px">
+            <div><strong>[${r.language}]</strong> ${r.path}</div>
+            <div style="color:var(--text-dim);font-size:0.85rem">${r.snippet}</div>
+        </div>`).join('');
 }
 
 loadWorkspaces();

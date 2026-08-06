@@ -296,6 +296,47 @@ app.MapGet("/api/v1/search", async (string q, string? workspace, int? limit, Sql
     });
 });
 
+// === Outline ===
+app.MapGet("/api/v1/outline", (string path) =>
+{
+    if (string.IsNullOrWhiteSpace(path))
+        return Results.BadRequest(new { error = "Query parameter 'path' is required" });
+
+    if (!File.Exists(path))
+        return Results.NotFound(new { error = $"File not found: {path}" });
+
+    var content = File.ReadAllText(path);
+    var ext = Path.GetExtension(path).ToLowerInvariant();
+
+    AiKv.Core.Parsing.ICodeParser? parser = ext switch
+    {
+        ".cs" => new AiKv.Indexing.Parsing.CSharpRegexParser(),
+        ".ts" or ".tsx" or ".js" or ".jsx" => new AiKv.Indexing.Parsing.TypeScriptRegexParser(),
+        ".py" => new AiKv.Indexing.Parsing.PythonRegexParser(),
+        ".md" or ".markdown" => new AiKv.Indexing.Parsing.MarkdownParser(),
+        _ => new AiKv.Indexing.Parsing.TextParser(),
+    };
+
+    var result = parser.Parse(content, path);
+    var outline = AiKv.Core.Parsing.Outline.DeterministicOutlineGenerator.Generate(result, path);
+
+    return Results.Ok(new
+    {
+        file = outline.FilePath,
+        language = outline.Language,
+        parser = outline.ParserId,
+        symbols = outline.Symbols.Select(s => new
+        {
+            name = s.Name,
+            kind = s.Kind.ToString(),
+            startLine = s.StartLine,
+            endLine = s.EndLine,
+            modifier = s.Modifier,
+        }),
+        imports = outline.Imports.Select(i => new { module = i.Module, name = i.ImportedName, line = i.Line }),
+    });
+});
+
 app.Run();
 
 record ImportRequest(string Path, string? Name);
