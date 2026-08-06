@@ -12,7 +12,16 @@ if (args.Length == 0)
     Console.WriteLine("  workspace list            List all workspaces");
     Console.WriteLine("  workspace status --id=<id> Show workspace status");
     Console.WriteLine("  workspace remove --id=<id> Remove a workspace");
+    Console.WriteLine("  index build --id=<id>      Build a new index snapshot");
+    Console.WriteLine("  index status --id=<id>    Show index status");
+    Console.WriteLine("  index verify --id=<id>    Verify index consistency");
     return 1;
 }
 
-return await WorkspaceCommands.HandleAsync(args);
+return args[0] switch
+{
+    "workspace" => await WorkspaceCommands.HandleAsync(args.AsSpan(1).ToArray()),
+    "index" => await IndexCommands.HandleAsync(args.AsSpan(1).ToArray()),
+    "capabilities" => WorkspaceCommands.HandleAsync(["capabilities"]).Result,
+    _ => 1,
+};
