@@ -57,10 +57,10 @@ app.Use(async (context, next) =>
     var path = context.Request.Path.Value;
     if (path is not null && path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
     {
-    #if DEBUG
+#if DEBUG
         // In debug mode, allow requests without token if no Authorization header is present
         // This is for development convenience — production builds always require the token
-    #endif
+#endif
         var authHeader = context.Request.Headers.Authorization.ToString();
         if (string.IsNullOrEmpty(authHeader) || !authHeader.Equals($"Bearer {accessToken}", StringComparison.OrdinalIgnoreCase))
         {
