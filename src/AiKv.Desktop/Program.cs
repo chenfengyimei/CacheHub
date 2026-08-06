@@ -27,12 +27,15 @@ builder.Services.AddSingleton<SqliteConnectionFactory>(sp =>
     [
         new Migration0001Initial(),
         new Migration0002Fts5(),
+        new Migration0003ContextPackages(),
+        new Migration0004Feedback(),
     ]);
     runner.Migrate();
     return factory;
 });
 builder.Services.AddSingleton<IWorkspaceRepository, SqliteWorkspaceRepository>();
 builder.Services.AddSingleton<IContextPackageRepository, SqliteContextPackageRepository>();
+builder.Services.AddSingleton<IFeedbackRepository, SqliteFeedbackRepository>();
 builder.Services.AddSingleton<ContextEngine>();
 
 var app = builder.Build();
@@ -177,7 +180,7 @@ app.MapPost("/api/v1/context/{id}/expand", async (string id, ExpandApiRequest re
     });
 });
 
-app.MapPost("/api/v1/context/{id}/feedback", (string id, FeedbackApiRequest req) =>
+app.MapPost("/api/v1/context/{id}/feedback", async (string id, FeedbackApiRequest req, IFeedbackRepository fbRepo) =>
 {
     var feedback = new ContextFeedback
     {
@@ -187,7 +190,24 @@ app.MapPost("/api/v1/context/{id}/feedback", (string id, FeedbackApiRequest req)
         TaskCompleted = req.TaskCompleted,
         MissingContextReported = req.MissingContextReported,
     };
-    return Results.Ok(new { received = true, contextId = id, clientId = feedback.ClientId });
+
+    await fbRepo.SaveAsync(feedback);
+
+    return Results.Ok(new { received = true, saved = true, contextId = id, clientId = feedback.ClientId });
+});
+
+// === Context List ===
+app.MapGet("/api/v1/workspaces/{id}/contexts", async (string id, IContextPackageRepository ctxRepo) =>
+{
+    var list = await ctxRepo.ListByWorkspaceAsync(WorkspaceId.Parse(id));
+    return Results.Ok(list.Select(m => new
+    {
+        id = m.Id.Value,
+        task = m.Task.OriginalText,
+        budget = m.Budget.ActualEstimate,
+        engine = m.ContextEngineVersion,
+        createdAt = m.CreatedAt,
+    }));
 });
 
 // === Context Explain ===
