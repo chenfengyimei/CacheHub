@@ -1,0 +1,24 @@
+<Project>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsAsErrors>nullable</WarningsAsErrors>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild>false</ContinuousIntegrationBuild>
+    <CheckForOverflowUnderflow>true</CheckForOverflowUnderflow>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Authors>AI_KV Contributors</Authors>
+    <Product>AI_KV</Product>
+    <Copyright>Copyright (c) 2026 AI_KV Contributors</Copyright>
+    <Version>0.1.0-alpha</Version>
+  </PropertyGroup>
+
+</Project>

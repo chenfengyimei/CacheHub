@@ -1,0 +1,75 @@
+# EditorConfig: https://editorconfig.org
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{md,markdown}]
+trim_trailing_whitespace = false
+
+[*.{json,yaml,yml}]
+indent_size = 2
+
+[*.{csproj,props,targets,ruleset,xml}]
+indent_size = 2
+
+# C# files
+[*.cs]
+# 命名风格
+dotnet_naming_rule.private_fields_underscore.severity = warning
+dotnet_naming_rule.private_fields_underscore.symbols = private_fields
+dotnet_naming_rule.private_fields_underscore.style = underscore_prefix
+dotnet_naming_rule.private_fields_underscore.prefix = _
+
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+
+dotnet_naming_style.underscore_prefix.capitalization = camel_case
+dotnet_naming_style.underscore_prefix.required_prefix = _
+
+# 使用 var
+csharp_style_var_for_built_in_types = true:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = true:suggestion
+
+# 表达式成员
+csharp_style_expression_bodied_methods = true:suggestion
+csharp_style_expression_bodied_properties = true:suggestion
+
+# 模式匹配
+csharp_style_pattern_matching_over_is_with_cast_check = true:suggestion
+csharp_style_pattern_matching_over_as_with_null_check = true:suggestion
+
+# 命名空间
+csharp_style_namespace_declarations = file_scoped:warning
+
+# 可空
+dotnet_style_prefer_conditional_expression_over_assignment = true:suggestion
+dotnet_style_prefer_conditional_expression_over_return = true:suggestion
+
+# 分析器
+dotnet_diagnostic.CA1707.severity = warning
+dotnet_diagnostic.CA2007.severity = warning
+dotnet_diagnostic.SA1101.severity = none
+
+# Result<T> uses static factory methods which is a standard pattern
+[**/Results/Result.cs]
+dotnet_diagnostic.CA1000.severity = none
+
+# StrongId is a record; comparison operators conflict with record synthesis
+[**/Identifiers/StrongId.cs]
+dotnet_diagnostic.CA1036.severity = none
+
+# Test projects use underscore naming convention and xUnit collection naming
+[**/AiKv.Tests/**]
+dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.CA1711.severity = none
+
+# Storage project uses await using and ConfigureAwait is noisy on DisposeAsync
+[**/AiKv.Storage/**]
+dotnet_diagnostic.CA2007.severity = none
