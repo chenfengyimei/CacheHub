@@ -1,10 +1,11 @@
 {
   "schemaVersion": 1,
   "project": "AI_KV",
-  "currentPhase": "P12",
+  "currentPhase": "COMPLETE",
   "currentTask": null,
   "repository": {
     "branch": "main",
+    "head": "",
     "dirty": false,
     "uncommittedFiles": []
   },
@@ -27,19 +28,26 @@
     "Repository Manager: Git 进程封装 + URL 解析 + 安全 Clone",
     "项目检测: 9种生态检测器 + Monorepo + 初始化计划",
     "缓存: LRU/TTL/空间上限/命中统计",
-    "Gateway: loopback绑定 + 缓存安全检查 + SingleFlight + 统计"
+    "Gateway: loopback绑定 + 缓存安全检查 + SingleFlight + 统计",
+    "Provider: 契约/费用/路由/预算/审计",
+    "Semantic: Embedding/向量存储/余弦相似度",
+    "LSP: 契约/能力协商/生命周期/崩溃重启",
+    "Ecosystem: 插件签名/团队/企业策略/自动更新"
   ],
   "risks": [
     "许可证未正式确定（LICENSE 占位）",
     "Tree-sitter 原生库打包策略待后续确定（当前用 Regex 替代）",
     "Tokenizer 为粗略估算（chars/4）",
-    "Local API 仅支持 workspace 管理，context build API 待实现",
     "Benchmark 需要真实任务集和 Ground Truth 标注",
-    "Gateway 尚未实现 HTTP 端点（仅有模型和安全检查器）"
+    "Gateway/Provider/LSP/Semantic 为模型层实现，HTTP 端点和进程管理待后续完善"
   ],
   "blockers": [],
   "nextActions": [
-    "开始 P12-W001: 定义 Provider Contract"
+    "完善 HTTP 端点实现（Gateway/Local API）",
+    "建立真实 Benchmark 任务集",
+    "选择正式开源许可证",
+    "考虑引入 Tree-sitter 替换 Regex 解析器",
+    "引入精确 Tokenizer 替换 chars/4 估算"
   ],
-  "lastUpdated": "2026-08-06T19:30:00Z"
+  "lastUpdated": "2026-08-06T20:00:00Z"
 }
