@@ -84,6 +84,7 @@ dotnet_diagnostic.CA2007.severity = none
 [**/AiKv.Cli/**]
 dotnet_diagnostic.CA2007.severity = none
 dotnet_diagnostic.IDE1006.severity = none
+dotnet_diagnostic.CS1998.severity = none
 
 # Desktop is a web host; ConfigureAwait not needed
 [**/AiKv.Desktop/**]

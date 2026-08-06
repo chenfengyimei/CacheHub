@@ -20,6 +20,9 @@ if (args.Length == 0)
     Console.WriteLine("  context export --id=<ctx-id> [--format=markdown|json]");
     Console.WriteLine("  context expand --id=<ctx-id> --symbol=<name>");
     Console.WriteLine("  context feedback --id=<ctx-id> --file=<path>");
+    Console.WriteLine("  detect <path> [--plan] [--output=json]  Detect project type");
+    Console.WriteLine("  gateway start --provider-url=<url> [--provider-key=<key>] [--port=<port>]");
+    Console.WriteLine("  gateway status                     Show gateway status");
     Console.WriteLine("  integration verify                 Verify installation and integration");
     return 1;
 }
@@ -31,5 +34,7 @@ return args[0] switch
     "context" => await ContextCommands.HandleAsync(args.AsSpan(1).ToArray()),
     "capabilities" => CapabilitiesCommands.Handle(args.AsSpan(1).ToArray()),
     "integration" => await IntegrationCommands.HandleAsync(args.AsSpan(1).ToArray()),
+    "detect" => DetectCommands.Handle(args.AsSpan(1).ToArray()),
+    "gateway" => await GatewayCommands.HandleAsync(args.AsSpan(1).ToArray()),
     _ => 1,
 };
