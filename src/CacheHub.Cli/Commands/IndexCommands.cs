@@ -57,6 +57,7 @@ public static class IndexCommands
             new Migration0003ContextPackages(),
             new Migration0004Feedback(),
         new Migration0005ContextPackageDetails(),
+        new Migration0006SchemaV2(),
         ]);
         runner.Migrate();
 
