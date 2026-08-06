@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "project": "AI_KV",
-  "currentPhase": "P06",
+  "currentPhase": "P07",
   "currentTask": null,
   "repository": {
     "branch": "main",
@@ -20,36 +20,24 @@
     "使用 .NET 9 + C# latest",
     "强类型标识符使用 record + StrongId 基类",
     "Context Package Manifest/Payload 分离，JSON Schema v1 冻结",
-    "CapabilityFlags 序列化为 enabled 列表",
-    "CI 使用 GitHub Actions",
-    "SQLite 连接禁用连接池以支持跨平台文件管理",
-    "Parser 使用 [GeneratedRegex] 源生成器，类需 partial 修饰",
-    "C#/TypeScript/Python 三语言 Regex 解析器 + 启发式关系标记",
-    "Repo Map 预算受限，优先展示 class/interface/function",
-    "ParserCache 按文件哈希+Parser版本缓存",
-    "TaskParser 确定性规则，不调用 LLM",
-    "RecallPipeline 多源召回（路径/符号/关键词/GitDiff/当前文件）",
-    "RankingEngine 9维特征归一化(minmax-per-query)+加权评分",
     "RankingProfile 版本化(deterministic-v1 v3)，权重和=1.0",
-    "ChunkingStrategy v1: 语法块优先、行窗口回退、重叠控制",
-    "TokenBudget: 区分模型窗口/Agent保留/响应保留/目标/硬限制/安全余量",
-    "SelectionEngine: Full/Chunks/Outline/DeterministicSummary/Metadata 五种模式",
+    "ChunkingStrategy v1 + TokenBudget + SelectionEngine 五模式",
     "ContextEngine 集成全流程，输出版本化 Manifest",
-    "ContextPackageCache 严格绑定任务+快照+排序+预算+安全策略",
     "CLI 支持 --output=json，stdout/stderr 分离",
-    "Integration Kit: Universal Skill + CLI Agent 教程 + ContextFeedback 协议"
+    "Integration Kit: Universal Skill + CLI Agent 教程 + ContextFeedback 协议",
+    "Benchmark: Recall@K/Precision/聚合/阶段门/失败归因/JSON报告",
+    "阶段门阈值: Recall≥90% / 遗漏率≤10% / 成功率≥95% / Token减少≥20%"
   ],
   "risks": [
     "许可证未正式确定（LICENSE 占位）",
     "Tree-sitter 原生库打包策略待后续确定（当前用 Regex 替代）",
-    "P02-W012 性能基准尚未建立",
     "Tokenizer 为粗略估算（chars/4），非精确模型 Tokenizer",
     "Local API 尚未实现（仅 CLI）",
-    "Context inspect/export/expand 为骨架实现"
+    "Benchmark 需要真实任务集和 Ground Truth 标注"
   ],
   "blockers": [],
   "nextActions": [
-    "开始 P06: 核心 Benchmark 与阶段门"
+    "开始 P07: 最小 GUI 0.1-beta"
   ],
-  "lastUpdated": "2026-08-06T18:50:00Z"
+  "lastUpdated": "2026-08-06T19:00:00Z"
 }
