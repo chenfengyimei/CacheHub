@@ -66,49 +66,49 @@ dotnet_diagnostic.CA1000.severity = none
 dotnet_diagnostic.CA1036.severity = none
 
 # Core: ConfigureAwait and static method noise
-[**/AiKv.Core/**]
+[**/CacheHub.Core/**]
 dotnet_diagnostic.CA2007.severity = none
 dotnet_diagnostic.CA1822.severity = none
 dotnet_diagnostic.IDE1006.severity = none
 
 # Test projects use underscore naming convention and xUnit collection naming
-[**/AiKv.Tests/**]
+[**/CacheHub.Tests/**]
 dotnet_diagnostic.CA1707.severity = none
 dotnet_diagnostic.CA1711.severity = none
 
 # Storage project uses await using and ConfigureAwait is noisy on DisposeAsync
-[**/AiKv.Storage/**]
+[**/CacheHub.Storage/**]
 dotnet_diagnostic.CA2007.severity = none
 
 # CLI is a top-level application; ConfigureAwait not needed
-[**/AiKv.Cli/**]
+[**/CacheHub.Cli/**]
 dotnet_diagnostic.CA2007.severity = none
 dotnet_diagnostic.IDE1006.severity = none
 dotnet_diagnostic.CS1998.severity = none
 
 # Desktop is a web host; ConfigureAwait not needed
-[**/AiKv.Desktop/**]
+[**/CacheHub.Desktop/**]
 dotnet_diagnostic.CA2007.severity = none
 dotnet_diagnostic.CA1852.severity = none
 dotnet_diagnostic.CA1869.severity = none
 dotnet_diagnostic.CA1861.severity = none
 
 # Indexing uses async streams; ConfigureAwait not needed
-[**/AiKv.Indexing/**]
+[**/CacheHub.Indexing/**]
 dotnet_diagnostic.CA2007.severity = none
 dotnet_diagnostic.IDE1006.severity = none
 dotnet_diagnostic.CA1310.severity = none
 dotnet_diagnostic.CA1822.severity = none
 
 # Context uses [GeneratedRegex]; ConfigureAwait not needed
-[**/AiKv.Context/**]
+[**/CacheHub.Context/**]
 dotnet_diagnostic.CA2007.severity = none
 dotnet_diagnostic.CA1822.severity = none
 dotnet_diagnostic.IDE1006.severity = none
 dotnet_diagnostic.CA1305.severity = none
 
 # Tests don't need ConfigureAwait
-[**/AiKv.Tests/**]
+[**/CacheHub.Tests/**]
 dotnet_diagnostic.CA2007.severity = none
 dotnet_diagnostic.CA1310.severity = none
 dotnet_diagnostic.IDE1006.severity = none

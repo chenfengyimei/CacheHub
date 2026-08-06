@@ -1,0 +1,748 @@
+schema_version: 1
+project: CacheHub
+rule: '功能不删除，只按独立模块和阶段门延后'
+phases:
+  - id: P00
+    name: "协议冻结、研究与仓库初始化"
+    goal: "建立最小可运行工程骨架，冻结核心术语、Schema、状态文件和开发治理规则。"
+    dependencies:
+      []
+    exit_gate: "空仓库可构建、测试、打包；Context Package/错误/能力发现 Schema 有版本；AI 状态文件能驱动后续阶段。"
+    work_items:
+      - id: P00-W001
+        name: "创建仓库治理文件"
+        description: "建立 README、LICENSE 占位、NOTICE、THIRD_PARTY_NOTICES、CONTRIBUTING、SECURITY、CODE_OF_CONDUCT、.editorconfig、.gitignore。"
+        status: planned
+      - id: P00-W002
+        name: "创建最小解决方案"
+        description: "创建 CacheHub.Core、CacheHub.Storage、CacheHub.Indexing、CacheHub.Context、CacheHub.Cli、CacheHub.Tests；禁止提前创建所有长期程序集。"
+        status: planned
+      - id: P00-W003
+        name: "固定 SDK 与构建属性"
+        description: "使用 global.json 固定 SDK；Directory.Build.props 统一可空引用、警告级别、分析器、确定性构建和语言版本。"
+        status: planned
+      - id: P00-W004
+        name: "建立错误与结果模型"
+        description: "实现稳定 ErrorCode、CacheHubException、Result<T> 或等价模式；CLI/API 错误不得依赖异常字符串。"
+        status: planned
+      - id: P00-W005
+        name: "定义强类型标识符"
+        description: "WorkspaceId、FileId、IndexSnapshotId、ContextPackageId、JobId 等不可混用。"
+        status: planned
+      - id: P00-W006
+        name: "冻结 Context Package v1 草案"
+        description: "Manifest 与 Payload 分离；定义必填字段、版本字段、哈希算法和兼容规则。"
+        status: planned
+      - id: P00-W007
+        name: "冻结 Capability Discovery v1"
+        description: "定义 CLI 与 Local API 统一能力返回结构。"
+        status: planned
+      - id: P00-W008
+        name: "建立 AI 开发状态机制"
+        description: "创建 docs/ai/AI_DEV_STATE.json、ROADMAP_STATUS.md、ADR、风险登记和任务日志模板。"
+        status: planned
+      - id: P00-W009
+        name: "建立基础 CI"
+        description: "至少执行 restore、build、test、format check；不发布制品。"
+        status: planned
+      - id: P00-W010
+        name: "完成许可证研究台账"
+        description: "记录计划研究的开源项目、许可证和“只学习/复制代码”状态。"
+        status: planned
+  - id: P01
+    name: "Workspace 与存储基础"
+    goal: "实现本地工作区注册、SQLite 迁移、路径安全和原子快照基础。"
+    dependencies:
+      - P00
+    exit_gate: "可导入本地目录为工作区，数据库可迁移/回滚，路径逃逸和大小写策略有测试。"
+    work_items:
+      - id: P01-W001
+        name: "实现应用数据目录"
+        description: "区分配置、索引、缓存、日志、临时文件；不得写入用户源码目录。"
+        status: planned
+      - id: P01-W002
+        name: "实现 SQLite 连接与迁移"
+        description: "WAL、busy timeout、事务、schema version；迁移失败保留旧库。"
+        status: planned
+      - id: P01-W003
+        name: "实现 Workspace 聚合"
+        description: "名称、根路径指纹、仓库、组件、状态、安全策略引用。"
+        status: planned
+      - id: P01-W004
+        name: "实现路径规范化服务"
+        description: "绝对路径、分隔符、大小写、UNC、符号链接、路径穿越检查。"
+        status: planned
+      - id: P01-W005
+        name: "实现工作区注册 CLI"
+        description: "workspace import/status/list/remove；remove 默认只删除 CacheHub 数据。"
+        status: planned
+      - id: P01-W006
+        name: "实现数据库仓储边界"
+        description: "业务层不写 SQL；避免建立过度通用 Repository<T>。"
+        status: planned
+      - id: P01-W007
+        name: "实现索引快照表"
+        description: "新快照先写临时状态，成功后原子设为 active。"
+        status: planned
+      - id: P01-W008
+        name: "实现后台任务模型"
+        description: "Queued/Running/WaitingForApproval/Completed/Failed/Cancelled。"
+        status: planned
+      - id: P01-W009
+        name: "实现结构化日志脱敏"
+        description: "路径可配置脱敏；禁止记录凭据、Authorization、完整敏感源码。"
+        status: planned
+  - id: P02
+    name: "Indexer 0.1-alpha"
+    goal: "实现确定、可恢复、可增量的文件索引，不依赖模型和 GUI。"
+    dependencies:
+      - P01
+    exit_gate: "10,000 文件工作区可扫描；文件变化只更新必要记录；监听丢失可通过对账恢复。"
+    work_items:
+      - id: P02-W001
+        name: "实现目录枚举器"
+        description: "流式枚举；限制深度/文件数；处理无权限、循环链接、长路径。"
+        status: planned
+      - id: P02-W002
+        name: "实现忽略规则"
+        description: "合并默认规则、.gitignore、.cachehubignore、用户规则；记录 ignore_rules_hash。"
+        status: planned
+      - id: P02-W003
+        name: "实现文件类型与二进制检测"
+        description: "扩展名+内容采样；跳过二进制和超限文件。"
+        status: planned
+      - id: P02-W004
+        name: "实现分层哈希"
+        description: "小文件完整 SHA-256；大文件快速指纹+按需完整哈希。"
+        status: planned
+      - id: P02-W005
+        name: "实现文件状态机"
+        description: "Discovered/Indexed/Ignored/Failed/Deleted/Stale。"
+        status: planned
+      - id: P02-W006
+        name: "实现 FTS5 索引"
+        description: "已入库文本的稳定召回；绑定 IndexSnapshotId。"
+        status: planned
+      - id: P02-W007
+        name: "封装 ripgrep"
+        description: "仅用于实时磁盘搜索、正则、未索引/降级；结果标记来源。"
+        status: planned
+      - id: P02-W008
+        name: "实现文件监听入队"
+        description: "事件去抖、合并、溢出检测；监听不作为最终事实。"
+        status: planned
+      - id: P02-W009
+        name: "实现启动/周期一致性对账"
+        description: "比较路径、大小、时间和哈希；分支切换后强制校验。"
+        status: planned
+      - id: P02-W010
+        name: "实现索引 CLI"
+        description: "index build/refresh/status/verify。"
+        status: planned
+      - id: P02-W011
+        name: "实现故障恢复"
+        description: "单文件失败不终止；任务取消后可恢复；旧快照继续可读。"
+        status: planned
+      - id: P02-W012
+        name: "建立性能基准"
+        description: "1k/10k/100k 文件、大小文件混合、事件风暴。"
+        status: planned
+  - id: P03
+    name: "确定性代码结构"
+    goal: "使用通用文本与 Tree-sitter 提取结构，不把启发式关系冒充精确语义。"
+    dependencies:
+      - P02
+    exit_gate: "C#、TypeScript、Python 可提取 Outline；解析失败自动降级；关系带类型和置信度。"
+    work_items:
+      - id: P03-W001
+        name: "定义 Parser 接口"
+        description: "输入文件快照，输出符号、导入、调用表达式、诊断和 Parser 版本。"
+        status: planned
+      - id: P03-W002
+        name: "实现通用文本解析器"
+        description: "标题、注释、配置键、Markdown 章节、代码块边界。"
+        status: planned
+      - id: P03-W003
+        name: "接入 Tree-sitter 运行时"
+        description: "明确原生库打包策略和平台矩阵。"
+        status: planned
+      - id: P03-W004
+        name: "实现 C# 语法提取"
+        description: "namespace/type/method/property/import；只标记 syntactic。"
+        status: planned
+      - id: P03-W005
+        name: "实现 TypeScript 语法提取"
+        description: "module/import/export/class/function/interface/call expression。"
+        status: planned
+      - id: P03-W006
+        name: "实现 Python 语法提取"
+        description: "module/import/class/function/decorator/call expression。"
+        status: planned
+      - id: P03-W007
+        name: "定义关系置信度"
+        description: "syntactic/heuristic/semantic；confidence 0..1；source parser。"
+        status: planned
+      - id: P03-W008
+        name: "实现 Deterministic Outline"
+        description: "输出稳定排序、行范围、公共符号和导入。"
+        status: planned
+      - id: P03-W009
+        name: "实现基础 Repo Map"
+        description: "按组件、目录、符号重要度压缩；严格受预算限制。"
+        status: planned
+      - id: P03-W010
+        name: "实现 Parser Cache"
+        description: "文件哈希+ParserId+ParserVersion+GrammarVersion。"
+        status: planned
+      - id: P03-W011
+        name: "建立语法夹具测试"
+        description: "完整、错误、生成、超大、Unicode、混合换行文件。"
+        status: planned
+  - id: P04
+    name: "Context Package 与 Context Engine 0.1"
+    goal: "生成版本感知、可解释、可复现且严格受预算约束的最小上下文包。"
+    dependencies:
+      - P03
+    exit_gate: "相同输入/快照/策略得到稳定结果；Manifest 可验证；Payload 可导出；不超过硬限制。"
+    work_items:
+      - id: P04-W001
+        name: "实现任务解析器"
+        description: "显式路径、符号、错误堆栈、关键词、操作类型；第一版不调用 LLM。"
+        status: planned
+      - id: P04-W002
+        name: "实现候选召回管线"
+        description: "路径、文件名、FTS、符号、Repo Map、Git Diff、最近修改、测试/配置关系。"
+        status: planned
+      - id: P04-W003
+        name: "定义特征归一化"
+        description: "每项特征 0..1；缺失值处理；避免大文件/高频词偏置。"
+        status: planned
+      - id: P04-W004
+        name: "实现版本化 Ranking Profile"
+        description: "配置文件可调；profile id/version 写入 Context Package。"
+        status: planned
+      - id: P04-W005
+        name: "实现候选去重和聚合"
+        description: "文件级与区块级分数；同一符号多个来源合并原因。"
+        status: planned
+      - id: P04-W006
+        name: "实现 Chunking Strategy v1"
+        description: "语法块优先、行窗口回退、重叠控制、包装开销计入。"
+        status: planned
+      - id: P04-W007
+        name: "实现 Token 预算器"
+        description: "模型窗口、Agent/响应保留、目标、硬限制、安全余量。"
+        status: planned
+      - id: P04-W008
+        name: "实现选择模式"
+        description: "Full/Chunks/Outline/DeterministicSummary/Metadata。"
+        status: planned
+      - id: P04-W009
+        name: "实现 Manifest"
+        description: "记录版本、策略、文件哈希、范围、原因、排除候选和安全信息。"
+        status: planned
+      - id: P04-W010
+        name: "实现 Payload"
+        description: "Markdown/JSON/plain text；内容与 Manifest 分离。"
+        status: planned
+      - id: P04-W011
+        name: "实现 Context Expand"
+        description: "按文件/符号/查询扩展；记录 parent package 和增量 Token。"
+        status: planned
+      - id: P04-W012
+        name: "实现 Context Explain"
+        description: "解释选择、分数构成、预算淘汰、潜在遗漏。"
+        status: planned
+      - id: P04-W013
+        name: "实现 Context Cache"
+        description: "严格绑定任务、快照、策略、预算、安全策略和版本。"
+        status: planned
+      - id: P04-W014
+        name: "实现 Schema 验证与兼容测试"
+        description: "旧 minor 版本可读；未知字段保留/忽略规则明确。"
+        status: planned
+  - id: P05
+    name: "公共 CLI、Local API 与 Integration Kit"
+    goal: "让任何能执行命令、调用 HTTP 或读取文件的客户端主动接入 CacheHub。"
+    dependencies:
+      - P04
+    exit_gate: "无需 Agent 专用插件即可完成能力发现、工作区定位、上下文构建、扩展和反馈。"
+    work_items:
+      - id: P05-W001
+        name: "稳定 CLI JSON 契约"
+        description: "所有命令支持 --output json；stdout 只输出协议结果，日志走 stderr。"
+        status: planned
+      - id: P05-W002
+        name: "实现 capability discovery"
+        description: "版本、模块、Schema、命令、API、Gateway 和限制。"
+        status: planned
+      - id: P05-W003
+        name: "实现工作区推断"
+        description: "显式 ID > 当前路径 > 唯一匹配；禁止以最近工作区静默猜测。"
+        status: planned
+      - id: P05-W004
+        name: "实现 Local API"
+        description: "只监听 loopback；token 认证；与 CLI 共享应用服务。"
+        status: planned
+      - id: P05-W005
+        name: "实现文件导出"
+        description: "Manifest/Payload/RepoMap；默认写 CacheHub 数据目录。"
+        status: planned
+      - id: P05-W006
+        name: "编写 Universal Skill"
+        description: "Agent 无关；仓库内容视为不可信；优先 context build。"
+        status: planned
+      - id: P05-W007
+        name: "编写自动接入教程"
+        description: "CLI、HTTP、文件、Gateway 四种接入等级。"
+        status: planned
+      - id: P05-W008
+        name: "实现 integration verify"
+        description: "检查安装、权限、工作区、Context Build、回滚能力。"
+        status: planned
+      - id: P05-W009
+        name: "提供配置备份/回滚脚本"
+        description: "修改第三方配置前备份；失败自动恢复。"
+        status: planned
+      - id: P05-W010
+        name: "提供示例而非核心适配"
+        description: "Codex/Claude/Cursor/Cline 仅文档和模板。"
+        status: planned
+      - id: P05-W011
+        name: "实现 Feedback 协议"
+        description: "实际读取、追加文件、补丁、测试和遗漏报告。"
+        status: planned
+  - id: P06
+    name: "核心 Benchmark 与阶段门"
+    goal: "用多客户端、真实任务和受控重复实验验证上下文质量与全生命周期 Token 收益。"
+    dependencies:
+      - P05
+    exit_gate: "至少 20 个任务有 Ground Truth 和多次运行；阶段门结果可复现，失败可归因。"
+    work_items:
+      - id: P06-W001
+        name: "建立任务仓库与固定快照"
+        description: "至少 C#、TypeScript、Python、Unity、Monorepo、陌生仓库。"
+        status: planned
+      - id: P06-W002
+        name: "定义 Ground Truth"
+        description: "Required/Helpful/Distractor；双人或复核标注。"
+        status: planned
+      - id: P06-W003
+        name: "建立 Baseline Runner"
+        description: "固定模型、Agent、工具权限、系统提示、仓库状态。"
+        status: planned
+      - id: P06-W004
+        name: "建立 CacheHub Runner"
+        description: "强制记录 Context Package、expand 和额外读取。"
+        status: planned
+      - id: P06-W005
+        name: "实现环境重置"
+        description: "每次运行从同一 Commit/Dirty State/构建缓存策略开始。"
+        status: planned
+      - id: P06-W006
+        name: "处理模型随机性"
+        description: "每任务多次运行；记录均值、方差、最差结果。"
+        status: planned
+      - id: P06-W007
+        name: "实现指标计算"
+        description: "File/Symbol Recall@K、Precision、总 Token、成功率、轮数、遗漏/陈旧率。"
+        status: planned
+      - id: P06-W008
+        name: "实现失败归因"
+        description: "检索、排序、预算、Agent不遵守、模型随机、环境失败。"
+        status: planned
+      - id: P06-W009
+        name: "生成公开报告"
+        description: "原始结果、配置、版本、限制、置信区间。"
+        status: planned
+      - id: P06-W010
+        name: "执行阶段门"
+        description: "未达标只迭代核心，不删除后续功能，也不提前扩大产品表面。"
+        status: planned
+  - id: P07
+    name: "最小 GUI 0.1-beta"
+    goal: "让技术用户无需读 JSON 即可管理工作区、索引和 Context Package。"
+    dependencies:
+      - P06
+    exit_gate: "GUI 不直接访问数据库；能导入本地目录、查看索引、构建并解释上下文。"
+    work_items:
+      - id: P07-W001
+        name: "确定 UI 宿主"
+        description: "Avalonia 或最小本地 Web；做 ADR，避免双 UI。"
+        status: planned
+      - id: P07-W002
+        name: "实现应用服务客户端"
+        description: "GUI 只调用 Core/Local API；支持取消和进度。"
+        status: planned
+      - id: P07-W003
+        name: "工作区列表与导入"
+        description: "本地目录、状态、错误和最近使用。"
+        status: planned
+      - id: P07-W004
+        name: "索引任务页"
+        description: "阶段、文件数、失败文件、取消、重试和 verify。"
+        status: planned
+      - id: P07-W005
+        name: "Context Build 页"
+        description: "任务、预算、策略、选中文件和范围。"
+        status: planned
+      - id: P07-W006
+        name: "Context Explain 页"
+        description: "分数、原因、排除、安全扫描、版本。"
+        status: planned
+      - id: P07-W007
+        name: "Integration 状态页"
+        description: "能力、教程、verify，不实现 Agent 私有逻辑。"
+        status: planned
+      - id: P07-W008
+        name: "设置与日志"
+        description: "数据目录、忽略规则、日志级别、隐私模式。"
+        status: planned
+      - id: P07-W009
+        name: "无障碍与主题基础"
+        description: "键盘、缩放、深色、错误可读。"
+        status: planned
+  - id: P08
+    name: "Repository Manager 与远程导入"
+    goal: "安全处理普通 Git/GitHub/Gitee 仓库导入和更新，不执行仓库代码。"
+    dependencies:
+      - P07
+    exit_gate: "可克隆公开/授权仓库，安全 status/diff/ff-only pull；有修改或分叉时停止。"
+    work_items:
+      - id: P08-W001
+        name: "封装 Git 进程执行"
+        description: "参数数组、不拼 Shell 字符串；超时、取消、输出限制。"
+        status: planned
+      - id: P08-W002
+        name: "仓库 URL 解析"
+        description: "HTTPS/SSH/GitHub/Gitee/普通 Git；规范化但不泄露凭据。"
+        status: planned
+      - id: P08-W003
+        name: "实现 Clone Plan"
+        description: "目标目录、分支、深度、子模块、LFS；先验证后执行。"
+        status: planned
+      - id: P08-W004
+        name: "实现安全 Clone"
+        description: "空目录、路径限制、Hook 风险说明、进度。"
+        status: planned
+      - id: P08-W005
+        name: "实现 Status/Diff/Log"
+        description: "机器可读解析；处理重命名、二进制和子模块。"
+        status: planned
+      - id: P08-W006
+        name: "实现 ff-only Pull"
+        description: "dirty/diverged 时停止；不自动 merge/rebase/reset。"
+        status: planned
+      - id: P08-W007
+        name: "凭据引用"
+        description: "优先系统 Git/GCM/SSH；CacheHub 不读取明文密钥。"
+        status: planned
+      - id: P08-W008
+        name: "远程导入 GUI"
+        description: "URL、计划、进度、失败恢复。"
+        status: planned
+      - id: P08-W009
+        name: "Git 安全测试"
+        description: "恶意 URL、参数注入、巨大输出、符号链接、非空目录。"
+        status: planned
+  - id: P09
+    name: "通用项目检测与初始化计划"
+    goal: "只读识别语言、框架、构建系统、Monorepo 和缺失工具，并生成计划而非自动执行。"
+    dependencies:
+      - P08
+    exit_gate: "未知项目可降级；多组件可识别；检测不运行任何仓库脚本。"
+    work_items:
+      - id: P09-W001
+        name: "定义 Detector 契约"
+        description: "证据、置信度、组件路径、建议动作和风险。"
+        status: planned
+      - id: P09-W002
+        name: "实现通用语言统计"
+        description: "扩展名、shebang、配置文件和解析结果。"
+        status: planned
+      - id: P09-W003
+        name: "实现 Node/Python/.NET 检测"
+        description: "包管理器、框架和版本文件。"
+        status: planned
+      - id: P09-W004
+        name: "实现 Java/Go/Rust/C++ 检测"
+        description: "构建系统和组件根。"
+        status: planned
+      - id: P09-W005
+        name: "实现 Unity/Unreal/Flutter 检测"
+        description: "只读识别，不启动编辑器。"
+        status: planned
+      - id: P09-W006
+        name: "实现 Docker/Terraform/CI 检测"
+        description: "作为组件能力而非唯一项目类型。"
+        status: planned
+      - id: P09-W007
+        name: "实现 Monorepo 组件图"
+        description: "根、嵌套、共享配置、组件边界。"
+        status: planned
+      - id: P09-W008
+        name: "生成初始化计划"
+        description: "命令、目的、网络、写入、脚本风险、审批级别。"
+        status: planned
+      - id: P09-W009
+        name: "实现工具可用性检查"
+        description: "只执行版本查询白名单；不安装。"
+        status: planned
+  - id: P10
+    name: "缓存与确定性摘要"
+    goal: "增加可解释的解析、搜索、Repo Map、Context 缓存和确定性摘要。"
+    dependencies:
+      - P09
+    exit_gate: "所有缓存有版本、依赖指纹、大小限制和失效测试；不缓存副作用。"
+    work_items:
+      - id: P10-W001
+        name: "实现统一 Cache Metadata"
+        description: "类型、键、版本、依赖、TTL、大小、命中、来源。"
+        status: planned
+      - id: P10-W002
+        name: "完成 Parse Cache"
+        description: "文件+Parser/Grammar 版本。"
+        status: planned
+      - id: P10-W003
+        name: "完成 Search Cache"
+        description: "查询+IndexSnapshot+召回器版本。"
+        status: planned
+      - id: P10-W004
+        name: "完成 Repo Map Cache"
+        description: "范围+预算+排序/解析版本。"
+        status: planned
+      - id: P10-W005
+        name: "完成 Context Cache"
+        description: "严格键；安全策略/Tokenizer/Chunking/Ranking 全绑定。"
+        status: planned
+      - id: P10-W006
+        name: "实现确定性摘要"
+        description: "路径、导入、符号、配置键、注释、Git 状态。"
+        status: planned
+      - id: P10-W007
+        name: "实现 LRU/空间上限"
+        description: "后台清理、锁、引用保护、手动清理。"
+        status: planned
+      - id: P10-W008
+        name: "实现命中解释"
+        description: "用户可看到命中项和失效原因。"
+        status: planned
+      - id: P10-W009
+        name: "缓存破坏/迁移测试"
+        description: "损坏可重建；旧版本不误读。"
+        status: planned
+  - id: P11
+    name: "可选 Gateway Beta"
+    goal: "为任何 API 客户端提供独立、可关闭的模型转发、Raw Exact Cache 和统计。"
+    dependencies:
+      - P10
+    exit_gate: "关闭 Gateway 不影响核心；SSE 稳定；无 Context 元数据时绝不猜工作区。"
+    work_items:
+      - id: P11-W001
+        name: "创建独立 Gateway 进程"
+        description: "最小权限、独立配置、独立日志。"
+        status: planned
+      - id: P11-W002
+        name: "实现 loopback 认证"
+        description: "随机本地 token、端口冲突处理、禁止 0.0.0.0 默认。"
+        status: planned
+      - id: P11-W003
+        name: "实现 OpenAI-compatible models/chat/responses 子集"
+        description: "明确支持矩阵和透传字段。"
+        status: planned
+      - id: P11-W004
+        name: "实现 SSE 透明转发"
+        description: "背压、取消、断线、错误帧和 usage。"
+        status: planned
+      - id: P11-W005
+        name: "实现 Raw Exact Cache"
+        description: "原始语义结构严格一致；工具调用默认禁用。"
+        status: planned
+      - id: P11-W006
+        name: "实现 SingleFlight"
+        description: "只对被证明无副作用的相同请求。"
+        status: planned
+      - id: P11-W007
+        name: "实现 Context Metadata"
+        description: "只接受显式 workspace/context id；验证一致性。"
+        status: planned
+      - id: P11-W008
+        name: "实现统计"
+        description: "实际 Provider usage 与本地估算分开。"
+        status: planned
+      - id: P11-W009
+        name: "实现绕过/回退"
+        description: "客户端可直接恢复原 Provider URL。"
+        status: planned
+      - id: P11-W010
+        name: "Gateway 安全测试"
+        description: "跨用户、本机恶意进程、日志泄密、超大请求、SSE 中断。"
+        status: planned
+  - id: P12
+    name: "Provider、费用与路由"
+    goal: "以插件式 Provider 契约增加模型映射、费用、Fallback 和预算，不污染核心协议。"
+    dependencies:
+      - P11
+    exit_gate: "Provider 可单独安装；密钥只在系统凭据库；路由行为可解释和审计。"
+    work_items:
+      - id: P12-W001
+        name: "定义 Provider Contract"
+        description: "请求转换、流式、错误、模型列表、usage。"
+        status: planned
+      - id: P12-W002
+        name: "实现 OpenAI-compatible Provider"
+        description: "作为基线，不硬编码品牌。"
+        status: planned
+      - id: P12-W003
+        name: "实现凭据引用"
+        description: "系统凭据库；配置只存 credential id。"
+        status: planned
+      - id: P12-W004
+        name: "实现模型别名与能力"
+        description: "上下文窗口、工具、结构化输出、Tokenizer 标识。"
+        status: planned
+      - id: P12-W005
+        name: "实现费用表版本"
+        description: "价格版本和生效日期；未知价格不估算。"
+        status: planned
+      - id: P12-W006
+        name: "实现路由策略"
+        description: "显式路由、健康检查、限额和可选 Fallback。"
+        status: planned
+      - id: P12-W007
+        name: "实现预算与告警"
+        description: "软/硬限制、按工作区/Provider。"
+        status: planned
+      - id: P12-W008
+        name: "实现 Provider 审计"
+        description: "不保存完整敏感 Prompt 默认。"
+        status: planned
+  - id: P13
+    name: "语义历史检索与可选 LLM 摘要"
+    goal: "在确定性核心稳定后增加语义召回，仅作为参考信号，默认不直接复用旧回答。"
+    dependencies:
+      - P12
+    exit_gate: "关闭语义模块结果仍可用；语义结果有来源、版本和阈值；隐私策略生效。"
+    work_items:
+      - id: P13-W001
+        name: "定义 Embedding Provider 接口"
+        description: "本地/远程、模型版本、维度和归一化。"
+        status: planned
+      - id: P13-W002
+        name: "实现本地向量存储"
+        description: "先 SQLite 扩展或简易索引，避免强制外部数据库。"
+        status: planned
+      - id: P13-W003
+        name: "实现文件/区块语义召回"
+        description: "与确定性召回合并，权重可关闭。"
+        status: planned
+      - id: P13-W004
+        name: "实现历史任务召回"
+        description: "Context Package、错误和反馈，不直接返回旧动作。"
+        status: planned
+      - id: P13-W005
+        name: "实现 Balanced 模式"
+        description: "语义结果仅作为参考上下文。"
+        status: planned
+      - id: P13-W006
+        name: "实现 LLM 摘要可选模块"
+        description: "记录模型、Prompt、文件哈希、策略和外发审批。"
+        status: planned
+      - id: P13-W007
+        name: "评测语义增益"
+        description: "必须证明 Recall/成功率收益，不能只看相似度。"
+        status: planned
+      - id: P13-W008
+        name: "实现数据清除和迁移"
+        description: "Embedding 可重建、可禁用、可完全删除。"
+        status: planned
+  - id: P14
+    name: "LSP/专用语义与语言插件"
+    goal: "以独立高风险模块提供精确定义、引用和类型信号。"
+    dependencies:
+      - P13
+    exit_gate: "LSP 默认关闭、按工作区授权；失败不影响核心；结果标记 semantic 和来源。"
+    work_items:
+      - id: P14-W001
+        name: "定义 Language Intelligence Contract"
+        description: "definition/reference/type/diagnostic/call hierarchy。"
+        status: planned
+      - id: P14-W002
+        name: "设计受控子进程"
+        description: "环境变量白名单、工作目录、资源、超时、终止。"
+        status: planned
+      - id: P14-W003
+        name: "实现 LSP 生命周期"
+        description: "初始化、文档同步、崩溃重启、禁用。"
+        status: planned
+      - id: P14-W004
+        name: "实现能力协商"
+        description: "不假定所有服务器支持全部方法。"
+        status: planned
+      - id: P14-W005
+        name: "实现语义关系存储"
+        description: "绑定 Server/Version/WorkspaceSnapshot。"
+        status: planned
+      - id: P14-W006
+        name: "先接一个语言服务"
+        description: "选择一个高价值语言完成端到端。"
+        status: planned
+      - id: P14-W007
+        name: "实现 Roslyn 可选插件"
+        description: "C# 深度能力独立，不进入 Core。"
+        status: planned
+      - id: P14-W008
+        name: "LSP 安全与副作用测试"
+        description: "依赖恢复、外部进程、工作区外读取、网络。"
+        status: planned
+      - id: P14-W009
+        name: "评测语义信号增益"
+        description: "与 Tree-sitter 基线对照。"
+        status: planned
+  - id: P15
+    name: "完整桌面、跨平台与生态"
+    goal: "完成仓库搜索、审批、Provider、插件、跨平台安装和长期团队能力。"
+    dependencies:
+      - P14
+    exit_gate: "1.0 质量门通过；模块可独立启停；安装、升级、回滚、隐私和许可证完整。"
+    work_items:
+      - id: P15-W001
+        name: "完整工作区 GUI"
+        description: "组件、Repo Map、上下文、Git、缓存、反馈和基准。"
+        status: planned
+      - id: P15-W002
+        name: "审批中心"
+        description: "计划、风险、差异、允许一次/项目策略、审计。"
+        status: planned
+      - id: P15-W003
+        name: "GitHub/Gitee 搜索与账户"
+        description: "使用官方/标准认证，失败不影响普通 Git URL。"
+        status: planned
+      - id: P15-W004
+        name: "Provider/Gateway GUI"
+        description: "状态、费用、缓存和回退。"
+        status: planned
+      - id: P15-W005
+        name: "跨平台安装"
+        description: "Windows/macOS/Linux；数据目录和凭据差异。"
+        status: planned
+      - id: P15-W006
+        name: "自动更新与回滚"
+        description: "签名、通道、数据库备份、失败恢复。"
+        status: planned
+      - id: P15-W007
+        name: "插件签名与权限"
+        description: "第三方插件默认禁用；权限清单和隔离。"
+        status: planned
+      - id: P15-W008
+        name: "团队/企业模块"
+        description: "策略、共享索引、内网部署；独立发行。"
+        status: planned
+      - id: P15-W009
+        name: "1.0 文档与迁移"
+        description: "安装、接入、安全、故障、API、Schema、升级。"
+        status: planned
+      - id: P15-W010
+        name: "1.0 全量验收"
+        description: "功能、性能、安全、兼容、许可证、卸载无损。"
+        status: planned

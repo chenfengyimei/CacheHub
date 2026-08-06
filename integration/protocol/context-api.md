@@ -1,23 +1,23 @@
-# AI_KV Context API 协议
+# CacheHub Context API 协议
 
 ## CLI
 
 所有命令支持 `--output=json`。JSON 结果走 stdout，日志走 stderr。
 
 ```
-aikv capabilities --output=json
-aikv workspace import <path> [--name=<name>] [--output=json]
-aikv workspace list [--output=json]
-aikv workspace status --id=<id> [--output=json]
-aikv workspace remove --id=<id>
-aikv index build --id=<workspace-id>
-aikv index status --id=<workspace-id>
-aikv index verify --id=<workspace-id>
-aikv context build --workspace=<id> --task=<text> [--output=json]
-aikv context inspect --id=<context-id>
-aikv context export --id=<context-id> --format=<markdown|json>
-aikv context expand --id=<context-id> --symbol=<name>
-aikv context feedback --id=<context-id> --file=<path>
+cachehub capabilities --output=json
+cachehub workspace import <path> [--name=<name>] [--output=json]
+cachehub workspace list [--output=json]
+cachehub workspace status --id=<id> [--output=json]
+cachehub workspace remove --id=<id>
+cachehub index build --id=<workspace-id>
+cachehub index status --id=<workspace-id>
+cachehub index verify --id=<workspace-id>
+cachehub context build --workspace=<id> --task=<text> [--output=json]
+cachehub context inspect --id=<context-id>
+cachehub context export --id=<context-id> --format=<markdown|json>
+cachehub context expand --id=<context-id> --symbol=<name>
+cachehub context feedback --id=<context-id> --file=<path>
 ```
 
 ## Local API (规划中)
@@ -37,7 +37,7 @@ POST /api/v1/context/{id}/feedback
 ## 文件导出
 
 ```
-.aikv/
+.cachehub/
 ├─ workspace.json
 ├─ latest-context.manifest.json
 ├─ latest-context.md
@@ -52,6 +52,6 @@ POST /api/v1/context/{id}/feedback
   "errorCode": "WORKSPACE_NOT_FOUND",
   "message": "工作区未找到",
   "recoverable": true,
-  "suggestedActions": ["使用 aikv workspace list 查看已注册工作区"]
+  "suggestedActions": ["使用 cachehub workspace list 查看已注册工作区"]
 }
 ```

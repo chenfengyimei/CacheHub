@@ -1,107 +1,329 @@
-# AI_KV
+# CacheHub
 
 > 让任何 AI 编程工具每次只读取真正需要的代码。
 
-AI_KV 是一个通用的本地代码上下文路由器和可选模型 API 网关：它持续维护版本感知的项目索引，根据当前任务生成可解释、受 Token 预算限制的最小 Context Package，并允许任何客户端通过稳定协议使用。
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![.NET 9](https://img.shields.io/badge/.NET-9.0-blue.svg)](https://dotnet.microsoft.com/download/dotnet/9.0)
+[![Tests: 379+](https://img.shields.io/badge/Tests-379+-brightgreen.svg)](#测试覆盖率)
 
-## 核心特性
+---
 
-- **版本感知索引**：增量文件扫描、内容哈希、FTS5 全文检索
-- **Context Package**：可解释、可复现、Token 受限的最小代码上下文，支持持久化
-- **Agent 无关协议**：CLI、Local API、文件导出、可选 Gateway
-- **多语言解析**：C#/TypeScript/Python Regex 解析器 + 可选 LSP 精确语义
-- **安全优先**：默认只读、本地运行、4 级外发模式 + 5 种密钥扫描
-- **精确 Tokenizer**：3 种分词器（char/word/code）+ 模型注册表
-- **Benchmark 框架**：6 个真实任务 + Ground Truth + 阶段门 + JSON 报告
+## CacheHub 是什么？
+
+CacheHub 是一个**本地代码上下文路由器**和**可选模型 API 网关**。它持续维护版本感知的项目索引，根据当前任务生成**可解释、受 Token 预算限制**的最小 Context Package（上下文包），并允许任何 AI Agent 通过稳定协议使用。
+
+**一句话**：给 AI 编程助手装上"眼睛"——让它看到整个代码库的结构，但只把真正需要的那部分代码喂给模型。
+
+### 解决了什么问题？
+
+| 痛点 | CacheHub 方案 |
+|------|---------------|
+| AI Agent 每次都扫全仓库，Token 浪费严重 | 版本感知索引 + 9 维排序引擎，只选真正相关的代码 |
+| 上下文太大导致模型"失忆" | Token 预算管理器，硬上限 + 安全边界 |
+| 选了什么、为什么选，黑盒不可知 | ContextExplainer，每个文件的选择理由和排除原因都可查 |
+| 每个工具的上下文方案各不相同 | Agent 无关协议（CLI / Local API / 文件导出），任何工具可接入 |
+| 密钥泄漏风险 | 4 级外发安全策略 + 5 种密钥扫描，默认本地运行 |
+
+---
+
+## 核心能力
+
+### 1. 版本感知索引引擎
+
+- **增量文件扫描**：异步流式枚举，深度/数量/大小限制 + 符号链接保护
+- **内容哈希**：分层哈希策略（小文件全量 SHA-256，大文件指纹）
+- **FTS5 全文检索**：版本感知的全文搜索，绑定 IndexSnapshotId
+- **文件监视器**：防抖事件队列 + 溢出检测 + 一致性校验器
+- **忽略规则引擎**：系统默认 > `.gitignore` > `.cachehubignore` > 用户规则，四层合并
+
+### 2. 上下文引擎 (Context Engine)
+
+- **任务解析器**：确定性规则解析（不依赖 LLM），从自然语言任务描述中提取关键词、路径、符号
+- **多源召回**：路径匹配 / 符号匹配 / 关键词搜索 / Git Diff / 当前文件，五路召回
+- **9 维排序引擎**：minmax 归一化 + 加权评分，权重可版本化 (deterministic-v1 v3)
+- **智能分块**：语法块优先 + 行窗口回退 + 重叠控制
+- **Token 预算管理**：模型窗口 / Agent 预留 / 响应预留 / 目标 / 硬上限 / 安全边界
+- **5 种选择模式**：Full / Chunks / Outline / DeterministicSummary / Metadata
+- **上下文扩展**：按文件/按符号扩展，追踪父上下文 + 增量 Token
+- **可解释性**：选择理由 / 预算驱逐原因 / 潜在遗漏检测
+
+### 3. 多语言代码解析
+
+| 语言 | 解析器 | 提取内容 |
+|------|--------|----------|
+| C# | CSharpRegexParser | namespace/class/method/property/import + 启发式调用 |
+| TypeScript/JavaScript | TypeScriptRegexParser | export class/interface/function/import + 调用 |
+| Python | PythonRegexParser | class/def/import/decorator + 调用 |
+| Markdown | MarkdownParser | 标题、代码块、配置键 |
+| 纯文本 | TextParser | 通用结构提取 |
+
+- **代码关系**：语法 / 启发式 / 语义三级置信度 (0..1)
+- **确定性大纲**：按行号 + 名称稳定排序
+- **Repo Map**：预算受限的代码树 + 关键符号摘要
+- **解析器缓存**：哈希 + ParserId + 版本键控
+
+### 4. 安全策略
+
+- **4 级外发模式**：Standard / Restricted / PreviewRequired / Offline
+- **密钥扫描**：API Key / 密码 / 私钥 / 连接字符串 / Bearer Token
+- **敏感文件检测**：`.env`、`.pem`、`.key`、`id_rsa`、`credentials.json` 等
+- **发送前检查**：路径 + 内容 + 模式三重检查
+
+### 5. 可选模型 API 网关
+
+- **OpenAI 兼容**：HttpListener 回环转发
+- **安全缓存**：仅缓存安全请求（低温度、无工具、无流式）
+- **SingleFlight**：并发请求去重
+- **SSE 流式解析**：OpenAI 兼容的流式响应解析
+- **用量统计**：请求数 / 缓存命中率 / Token 节省 / 平均延迟
+
+### 6. Agent 无关协议
+
+CacheHub 提供 4 种接入方式，任何 AI 编程工具均可使用：
+
+```
+┌─────────────────────────────────────────────────┐
+│              AI Agent (任何工具)                  │
+│  Codex / Claude Code / Cursor / 自定义 Agent     │
+└──────────┬──────────┬──────────┬────────────────┘
+           │          │          │
+      CLI 命令    Local API   文件导出
+      cachehub    :5000/api   .cachehub/
+           │          │          │
+           └──────────┴──────────┘
+                      │
+              ┌───────┴───────┐
+              │   CacheHub    │
+              │  上下文引擎    │
+              └───────────────┘
+```
+
+---
 
 ## 技术栈
 
-| 区域 | 技术 |
-| --- | --- |
-| 主语言 | C# / .NET 9 |
-| 数据库 | SQLite + FTS5 |
-| 语法解析 | Regex + [GeneratedRegex]（后续替换为 Tree-sitter） |
-| 桌面 UI | ASP.NET Core 最小 Web（后续迁移 Avalonia） |
-| Gateway | HttpListener + OpenAI-compatible |
-| 测试 | xUnit，355+ 个单元测试 |
+| 区域 | 技术选型 |
+|------|----------|
+| 主语言 | C# / .NET 9 (LTS) |
+| SDK | 9.0.313 (global.json 锁定) |
+| 数据库 | SQLite + FTS5 (Microsoft.Data.Sqlite) |
+| 语法解析 | Regex + [GeneratedRegex] 源生成器 |
+| Web UI | ASP.NET Core 最小 API + 静态文件 |
+| Gateway | HttpListener + OpenAI 兼容协议 |
+| 发布 | 单文件自包含 (PublishSingleFile + SelfContained) |
+| 测试 | xUnit + coverlet 覆盖率 |
+| 代码质量 | TreatWarningsAsErrors + Nullable + AnalysisLevel latest-recommended |
+| CI/CD | GitHub Actions |
+| 许可证 | MIT |
 
-## 快速开始
-
-```bash
-# 构建
-dotnet build AI_KV.sln -c Release
-dotnet test AI_KV.sln
-
-# CLI 使用
-aikv capabilities --output=json
-aikv workspace import /path/to/project
-aikv index build --id=<workspace-id>
-aikv context build --workspace=<id> --task="Fix login bug" --output=json
-aikv context inspect --id=<context-id>
-aikv context export --id=<context-id> --format=markdown
-aikv context expand --id=<context-id> --file=src/auth.ts
-aikv integration verify
-
-# 项目检测
-aikv detect /path/to/project --plan
-
-# Gateway（可选）
-aikv gateway start --provider-url=https://api.openai.com --provider-key=sk-xxx
-
-# Web UI
-dotnet run --project src/AiKv.Desktop
-# 浏览器访问 http://localhost:5000
-```
-
-## CLI 命令集
-
-| 命令 | 功能 |
-|---|---|
-| `capabilities` | 能力发现 |
-| `workspace import/list/status/remove` | 工作区管理 |
-| `index build/status/verify` | 索引构建/状态/一致性校验 |
-| `context build/inspect/export/expand/feedback` | 上下文管理（持久化） |
-| `detect <path> --plan` | 项目检测 + 初始化计划 |
-| `gateway start/status/stop` | Gateway 服务器 |
-| `integration verify` | 安装验证（5 步检查） |
-
-## Local API
-
-| 路由 | 方法 | 功能 |
-|---|---|---|
-| `/api/v1/capabilities` | GET | 能力发现 |
-| `/api/v1/workspaces` | GET/POST | 工作区列表/导入 |
-| `/api/v1/workspaces/{id}` | GET/DELETE | 状态/删除 |
-| `/api/v1/workspaces/{id}/export` | POST | 文件导出 |
-| `/api/v1/context/build` | POST | 构建上下文（持久化） |
-| `/api/v1/context/{id}` | GET | 检查上下文包 |
-| `/api/v1/context/{id}/expand` | POST | 扩展上下文（实际文件） |
-| `/api/v1/context/{id}/feedback` | POST | 提交反馈 |
-| `/api/v1/context/{id}/explain` | GET | 解释选择/潜在遗漏/预算 |
+---
 
 ## 项目结构
 
 ```
-src/
-  AiKv.Core/         — 领域模型、错误、标识符、上下文、安全、Tokenizer、Gateway、Provider、Semantic、LSP、Ecosystem
-  AiKv.Storage/      — SQLite、4 个迁移、Workspace/ContextPackage 仓储、FTS5 搜索
-  AiKv.Indexing/     — 目录扫描、忽略规则、文件检测、3 语言解析器、Repo Map、缓存
-  AiKv.Context/      — 任务解析器、召回、排序、分块、预算、选择、引擎、扩展、解释、缓存
-  AiKv.Cli/          — CLI 命令（8 个命令组）
-  AiKv.Desktop/      — ASP.NET Core Web UI + Local API（11 个路由）
-tests/
-  AiKv.Tests/        — 355+ 单元测试 + 8 个 E2E 集成测试
-integration/         — Universal Skill、3 个 Agent 示例、系统提示词片段、协议文档
-docs/                — Specs、4 个 ADR、AI 状态、路线图、研究台账
+CacheHub/
+├── CacheHub.sln                    # 解决方案文件
+├── Directory.Build.props           # 全局构建属性
+├── global.json                     # .NET SDK 版本锁定
+├── install.ps1 / install.sh        # 安装脚本
+│
+├── src/                            # 源代码
+│   ├── CacheHub.Core/              # 领域核心：模型、错误、标识符、上下文、安全、Tokenizer、Gateway、Provider、Semantic、LSP、Ecosystem
+│   ├── CacheHub.Storage/           # 存储层：SQLite、5 个迁移、Workspace/ContextPackage 仓储、FTS5 搜索
+│   ├── CacheHub.Indexing/          # 索引层：目录扫描、忽略规则、文件检测、4 语言解析器、RepoMap、缓存
+│   ├── CacheHub.Context/           # 上下文层：任务解析、召回、排序、分块、预算、选择、引擎、扩展、解释
+│   ├── CacheHub.Cli/               # CLI 入口：21 个命令组、55 个子命令、单文件发布
+│   └── CacheHub.Desktop/           # Web UI：ASP.NET Core 最小 API + 17 个 Local API 路由 + 6 个页面
+│
+├── tests/
+│   └── CacheHub.Tests/             # 379+ 单元测试 + 8 个 E2E 集成测试 + 5 个真实场景测试
+│
+├── integration/                    # Agent 集成套件
+│   ├── skills/universal/           # Universal Skill（通用技能）
+│   ├── protocol/                   # 协议文档
+│   ├── tutorials/                  # 教程
+│   ├── examples/                   # 3 个 Agent 示例（Codex / Claude Code / Shell）
+│   └── templates/                  # 系统提示词模板
+│
+├── Docs/                           # 项目文档
+│   ├── INSTALL.md                  # 安装手册（AI Agent 可读）
+│   ├── USAGE.md                    # 使用教程
+│   ├── ARCHITECTURE.md             # 架构设计
+│   ├── adr/                        # 架构决策记录 (ADR-0001~0004)
+│   ├── specs/                      # Context Package Manifest Schema v1
+│   ├── ai/                         # AI 开发状态、路线图、风险登记
+│   ├── architecture/               # 架构文档
+│   ├── benchmarks/                  # 基准测试
+│   ├── security/                   # 安全文档
+│   └── research/                   # 研究台账
+│
+├── AGENTS.md                       # Agent 接入指南
+├── CHANGELOG.md                    # 变更日志
+├── CONTRIBUTING.md                 # 贡献指南
+├── .cachehubignore.example          # 忽略规则示例
+└── LICENSE                         # MIT 许可证
 ```
 
-## 文档
+---
 
-- [完整项目开发总策划案 V3.0](Docs/项目开发策划案/AI_KV完整项目开发总策划案_V3.0.md)
-- [AI 开发执行手册 V1.0](Docs/AI开发执行手册_开发包/AI_KV_AI开发执行手册_V1.0_开发包/AI_KV_AI开发执行手册_V1.0.md)
-- [开发路线图状态](docs/ai/ROADMAP_STATUS.md)
-- [AGENTS.md — Agent 接入指南](AGENTS.md)
+## 快速开始
+
+### 安装
+
+详细安装步骤请参阅 **[安装手册](Docs/INSTALL.md)**，AI Agent 可直接阅读该文件完成全自动安装。
+
+最简流程：
+
+```bash
+# 1. 克隆仓库
+git clone https://github.com/chenfengyimei/CacheHub.git
+cd CacheHub
+
+# 2. 一键安装（会自动构建 + 测试 + 发布单文件可执行文件）
+# Windows:
+./install.ps1
+# Linux/macOS:
+./install.sh
+
+# 3. 验证
+cachehub version
+cachehub capabilities
+cachehub integration verify
+```
+
+### 基本使用
+
+```bash
+# 1. 导入项目作为工作区
+cachehub workspace import /path/to/your/project
+
+# 2. 构建索引
+cachehub index build --id=<workspace-id>
+
+# 3. 根据任务构建上下文
+cachehub context build --workspace=<id> --task="Fix login bug" --output=json
+
+# 4. 检查上下文包
+cachehub context inspect --id=<context-id>
+
+# 5. 导出为 Markdown（直接喂给 AI）
+cachehub context export --id=<context-id> --format=markdown
+
+# 6. 如需补充文件
+cachehub context expand --id=<context-id> --file=src/auth.ts --reason="Missing auth implementation"
+```
+
+### Web UI
+
+```bash
+dotnet run --project src/CacheHub.Desktop
+# 浏览器访问 http://localhost:5000
+```
+
+---
+
+## CLI 命令参考
+
+| 命令 | 子命令 | 功能 |
+|------|--------|------|
+| `capabilities` | — | 能力发现（版本、协议、已启用功能） |
+| `workspace` | `import` / `list` / `status` / `remove` | 工作区管理 |
+| `index` | `build` / `status` / `verify` | 索引构建/状态/一致性校验 |
+| `context` | `build` / `inspect` / `list` / `export` / `expand` / `feedback` | 上下文包全生命周期 |
+| `detect` | — | 项目类型检测 + 初始化计划 |
+| `gateway` | `start` / `status` / `stop` | 可选模型 API 网关 |
+| `config` | `show` / `init` / `set` | 配置管理 |
+| `stats` | — | 使用统计 |
+| `repo` | `inspect` / `clone` / `status` / `diff` / `pull` | Git 仓库操作（安全模式） |
+| `integration` | `verify` | 安装验证（5 步检查） |
+| `version` | — | 版本信息 |
+| `help` | `[command]` | 帮助 |
+
+**全局选项**：`--output=json` / `--json`（大多数命令支持 JSON 输出）
+
+---
+
+## Local API
+
+Web UI 启动后提供 17 个 REST API 路由：
+
+| 路由 | 方法 | 功能 |
+|------|------|------|
+| `/api/v1/capabilities` | GET | 能力发现 |
+| `/api/v1/workspaces` | GET / POST | 工作区列表 / 导入 |
+| `/api/v1/workspaces/{id}` | GET / DELETE | 状态 / 删除 |
+| `/api/v1/workspaces/{id}/contexts` | GET | 上下文包列表 |
+| `/api/v1/workspaces/{id}/export` | POST | 文件导出 |
+| `/api/v1/context/build` | POST | 构建上下文包 |
+| `/api/v1/context/{id}` | GET | 检查上下文包 |
+| `/api/v1/context/{id}/expand` | POST | 扩展上下文 |
+| `/api/v1/context/{id}/feedback` | POST | 提交反馈 |
+| `/api/v1/context/{id}/explain` | GET | 解释选择 / 遗漏 / 预算 |
+| `/api/v1/context/{id}/payload` | GET | 获取完整 Payload |
+| `/api/v1/search` | GET | FTS5 全文搜索 |
+| `/api/v1/outline` | GET | 代码大纲 |
+| `/api/v1/stats` | GET | 使用统计 |
+
+---
+
+## Agent 集成
+
+CacheHub 支持 3 种 AI Agent 集成方式，详见 [AGENTS.md](AGENTS.md) 和 [集成教程](Docs/USAGE.md#agent-集成)：
+
+### 方式一：CLI 调用（最简单）
+
+```bash
+# Agent 直接调用 CLI
+cachehub context build --workspace=<id> --task="当前任务" --output=json | jq '.id'
+cachehub context export --id=<ctx-id> --format=markdown
+```
+
+### 方式二：Local API（程序化集成）
+
+```bash
+# 通过 HTTP API 集成
+curl -X POST http://localhost:5000/api/v1/context/build \
+  -H "Content-Type: application/json" \
+  -d '{"workspaceId":"<id>","task":"Fix login bug"}'
+```
+
+### 方式三：文件导出（离线场景）
+
+```bash
+# 导出到 .cachehub/ 目录
+cachehub context export --id=<ctx-id> --format=file
+# 生成: .cachehub/workspace.json, latest-context.manifest.json, latest-context.md, repomap.md
+```
+
+---
+
+## 测试覆盖率
+
+| 类别 | 数量 |
+|------|------|
+| 单元测试 | 379 通过 |
+| 跳过（需真实 Git 环境） | 2 |
+| 端到端集成测试 | 8 |
+| 真实场景测试 | 5 |
+| **总计** | **381** |
+
+---
+
+## 文档导航
+
+| 文档 | 说明 |
+|------|------|
+| [安装手册](Docs/INSTALL.md) | 完整安装步骤，AI Agent 可读 |
+| [使用教程](Docs/USAGE.md) | CLI / Web UI / Agent 集成详细教程 |
+| [架构设计](Docs/ARCHITECTURE.md) | 系统架构、模块设计、数据流 |
+| [Agent 接入指南](AGENTS.md) | AI Agent 快速接入 |
+| [变更日志](CHANGELOG.md) | 版本历史 |
+| [贡献指南](CONTRIBUTING.md) | 如何参与开发 |
+| [Context Package Schema](Docs/specs/context-package.manifest.v1.json) | 上下文包 JSON Schema v1 |
+| [ADR 记录](Docs/adr/) | 架构决策记录 |
+
+---
 
 ## 许可证
 
-MIT License — 见 [LICENSE](LICENSE)
+[MIT License](LICENSE) — Copyright (c) 2026 CacheHub Contributors

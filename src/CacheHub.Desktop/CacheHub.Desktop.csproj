@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\CacheHub.Core\CacheHub.Core.csproj" />
+    <ProjectReference Include="..\CacheHub.Storage\CacheHub.Storage.csproj" />
+    <ProjectReference Include="..\CacheHub.Context\CacheHub.Context.csproj" />
+    <ProjectReference Include="..\CacheHub.Indexing\CacheHub.Indexing.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>

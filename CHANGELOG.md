@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to AI_KV will be documented in this file.
+All notable changes to CacheHub will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -22,11 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ContextExplainer: selection reasons / budget eviction / potential misses
 - ContextPackageCache: strict binding (task + snapshot + profile + budget + security)
 - PayloadGenerator: generates Payload from Manifest + content
-- FileExporter: .aikv/ directory export protocol (workspace.json + manifest + markdown + repomap)
+- FileExporter: .cachehub/ directory export protocol (workspace.json + manifest + markdown + repomap)
 
 #### Indexing
 - DirectoryEnumerator: async streaming with depth/count/size limits + symlink protection
-- IgnoreRuleEngine: default + .gitignore + .aikvignore + user rules + SHA-256 hash
+- IgnoreRuleEngine: default + .gitignore + .cachehubignore + user rules + SHA-256 hash
 - FileTypeDetector: 30+ extension mapping + content sampling + certificate/archive detection
 - FileHasher: layered hashing (full SHA-256 for small, fingerprint for large)
 - FileEntry state machine: Discovered/Indexed/Ignored/Failed/Deleted/Stale
@@ -73,7 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - InMemoryVectorStore: cosine similarity search + workspace-scoped deletion
 - LSP: ILanguageServer contract, LspLifecycle with auto-restart, JSON-RPC 2.0 serializer
 - LruCache: thread-safe LRU + TTL + size limit + per-type stats
-- ConfigManager: .aikv-config.json load/save
+- ConfigManager: .cachehub-config.json load/save
 - GitDiffProvider: changed file detection + HEAD commit hash
 - GitProcessWrapper: parameter-array execution, clone/status/diff/ff-only-pull
 - Ecosystem: PluginManifest, EnterprisePolicy, TeamConfig, UpdateConfig
@@ -105,7 +105,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Single-file self-contained publish + install scripts (PowerShell/Bash)
 - AGENTS.md, system-prompt-snippet.md, 3 Agent examples (Codex/Claude Code/Shell)
 - 4 ADRs, Integration Kit protocol docs
-- .aikv-config.json configuration system
+- .cachehub-config.json configuration system
 
 ### Test Coverage
 - 379 unit tests + 2 skipped (require git environment) = 381 total

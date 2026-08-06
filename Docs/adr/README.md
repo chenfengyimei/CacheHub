@@ -1,4 +1,4 @@
-# AI_KV 架构决策记录 (ADR)
+# CacheHub 架构决策记录 (ADR)
 
 本目录记录所有架构决策。每个 ADR 遵循 `docs/execution-kit/ADR_TEMPLATE.md` 模板。
 

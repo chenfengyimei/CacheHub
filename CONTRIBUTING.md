@@ -1,13 +1,13 @@
 # 贡献指南
 
-感谢你对 AI_KV 项目的兴趣！
+感谢你对 CacheHub 项目的兴趣！
 
 ## 开发流程
 
 1. Fork 仓库并创建特性分支
-2. 遵循 [AI 开发执行手册](Docs/AI开发执行手册_开发包/AI_KV_AI开发执行手册_V1.0_开发包/AI_KV_AI开发执行手册_V1.0.md) 的工程规范
-3. 确保所有测试通过：`dotnet test AI_KV.sln`
-4. 确保格式检查通过：`dotnet format AI_KV.sln --verify-no-changes`
+2. 遵循 [AI 开发执行手册](Docs/AI开发执行手册_开发包/CacheHub_AI开发执行手册_V1.0_开发包/CacheHub_AI开发执行手册_V1.0.md) 的工程规范
+3. 确保所有测试通过：`dotnet test CacheHub.sln`
+4. 确保格式检查通过：`dotnet format CacheHub.sln --verify-no-changes`
 5. 提交 Pull Request
 
 ## 代码规范

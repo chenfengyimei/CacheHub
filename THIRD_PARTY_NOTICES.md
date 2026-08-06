@@ -1,6 +1,6 @@
 # Third Party Notices
 
-This file will track third-party software used by AI_KV.
+This file will track third-party software used by CacheHub.
 
 ## Planned Dependencies
 
@@ -11,4 +11,4 @@ This file will track third-party software used by AI_KV.
 | ripgrep | MIT/Unlicense | 实时磁盘搜索 | 否 |
 | Avalonia UI | MIT | 桌面 UI | 否 |
 
-详细许可证研究记录见 `docs/research/license-register.md`。
+详细许可证研究记录见 `Docs/research/license-register.md`。

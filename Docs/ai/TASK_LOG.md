@@ -11,7 +11,7 @@
 ## P00-W002 创建最小解决方案
 - 状态：完成
 - 日期：2026-08-06
-- 修改：AI_KV.sln, src/AiKv.Core, src/AiKv.Storage, src/AiKv.Indexing, src/AiKv.Context, src/AiKv.Cli, tests/AiKv.Tests
+- 修改：CacheHub.sln, src/CacheHub.Core, src/CacheHub.Storage, src/CacheHub.Indexing, src/CacheHub.Context, src/CacheHub.Cli, tests/CacheHub.Tests
 - 验证：dotnet build + dotnet test 通过（1 个冒烟测试）
 
 ## P00-W003 固定 SDK 与构建属性
@@ -23,23 +23,23 @@
 ## P00-W004 建立错误与结果模型
 - 状态：完成
 - 日期：2026-08-06
-- 修改：src/AiKv.Core/Errors/ErrorCode.cs, AiKvException.cs, src/AiKv.Core/Results/Result.cs, tests/AiKv.Tests/ErrorModelTests.cs
+- 修改：src/CacheHub.Core/Errors/ErrorCode.cs, CacheHubException.cs, src/CacheHub.Core/Results/Result.cs, tests/CacheHub.Tests/ErrorModelTests.cs
 - 验证：8 个测试全部通过
 
 ## P00-W005 定义强类型标识符
 - 状态：完成
 - 日期：2026-08-06
-- 修改：src/AiKv.Core/Identifiers/StrongId.cs, Identifiers.cs, tests/AiKv.Tests/StrongIdTests.cs
+- 修改：src/CacheHub.Core/Identifiers/StrongId.cs, Identifiers.cs, tests/CacheHub.Tests/StrongIdTests.cs
 - 验证：8 个测试全部通过
 
 ## P00-W006 冻结 Context Package v1 草案
 - 状态：完成
 - 日期：2026-08-06
-- 修改：docs/specs/context-package.manifest.v1.json, src/AiKv.Core/Context/ContextPackageManifest.cs, ContextPackagePayload.cs, tests/AiKv.Tests/ContextPackageTests.cs
+- 修改：docs/specs/context-package.manifest.v1.json, src/CacheHub.Core/Context/ContextPackageManifest.cs, ContextPackagePayload.cs, tests/CacheHub.Tests/ContextPackageTests.cs
 - 验证：4 个测试全部通过
 
 ## P00-W007 冻结 Capability Discovery v1
 - 状态：完成
 - 日期：2026-08-06
-- 修改：src/AiKv.Core/Capabilities/CapabilityDiscovery.cs, tests/AiKv.Tests/CapabilityDiscoveryTests.cs
+- 修改：src/CacheHub.Core/Capabilities/CapabilityDiscovery.cs, tests/CacheHub.Tests/CapabilityDiscoveryTests.cs
 - 验证：4 个测试全部通过

@@ -1,6 +1,6 @@
-# AI_KV 安装脚本 (PowerShell)
+# CacheHub 安装脚本 (PowerShell)
 
-Write-Host "AI_KV Installation" -ForegroundColor Cyan
+Write-Host "CacheHub Installation" -ForegroundColor Cyan
 Write-Host "===================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -14,8 +14,8 @@ if (!$dotnetVersion) {
 Write-Host "[1/4] .NET SDK: $dotnetVersion" -ForegroundColor Green
 
 # Build
-Write-Host "[2/4] Building AI_KV..." -ForegroundColor Yellow
-dotnet build AI_KV.sln -c Release --nologo 2>&1 | Out-Null
+Write-Host "[2/4] Building CacheHub..." -ForegroundColor Yellow
+dotnet build CacheHub.sln -c Release --nologo 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Error: Build failed." -ForegroundColor Red
     exit 1
@@ -24,7 +24,7 @@ Write-Host "  Build successful." -ForegroundColor Green
 
 # Test
 Write-Host "[3/4] Running tests..." -ForegroundColor Yellow
-dotnet test AI_KV.sln -c Release --no-build --nologo --verbosity quiet 2>&1 | Out-Null
+dotnet test CacheHub.sln -c Release --no-build --nologo --verbosity quiet 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Warning: Some tests failed. Continuing anyway." -ForegroundColor Yellow
 } else {
@@ -34,27 +34,27 @@ if ($LASTEXITCODE -ne 0) {
 # Publish single-file
 Write-Host "[4/4] Publishing single-file executable..." -ForegroundColor Yellow
 $publishDir = "$PSScriptRoot\publish"
-dotnet publish src/AiKv.Cli/AiKv.Cli.csproj -c Release -o $publishDir --nologo 2>&1 | Out-Null
+dotnet publish src/CacheHub.Cli/CacheHub.Cli.csproj -c Release -o $publishDir --nologo 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Error: Publish failed." -ForegroundColor Red
     exit 1
 }
 
-$exePath = Join-Path $publishDir "aikv.exe"
+$exePath = Join-Path $publishDir "cachehub.exe"
 if (Test-Path $exePath) {
     Write-Host "  Published: $exePath" -ForegroundColor Green
     Write-Host ""
-    Write-Host "To use AI_KV, add the publish directory to your PATH:" -ForegroundColor Cyan
+    Write-Host "To use CacheHub, add the publish directory to your PATH:" -ForegroundColor Cyan
     Write-Host "  `$env:PATH += ';$publishDir'" -ForegroundColor White
     Write-Host ""
-    Write-Host "Or copy aikv.exe to a directory already in your PATH." -ForegroundColor Cyan
+    Write-Host "Or copy cachehub.exe to a directory already in your PATH." -ForegroundColor Cyan
     Write-Host ""
     Write-Host "Verify installation:" -ForegroundColor Cyan
-    Write-Host "  aikv version" -ForegroundColor White
-    Write-Host "  aikv capabilities" -ForegroundColor White
-    Write-Host "  aikv integration verify" -ForegroundColor White
+    Write-Host "  cachehub version" -ForegroundColor White
+    Write-Host "  cachehub capabilities" -ForegroundColor White
+    Write-Host "  cachehub integration verify" -ForegroundColor White
 } else {
-    Write-Host "Error: aikv.exe not found in publish directory." -ForegroundColor Red
+    Write-Host "Error: cachehub.exe not found in publish directory." -ForegroundColor Red
     exit 1
 }
 

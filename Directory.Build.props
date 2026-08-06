@@ -15,9 +15,9 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Authors>AI_KV Contributors</Authors>
-    <Product>AI_KV</Product>
-    <Copyright>Copyright (c) 2026 AI_KV Contributors</Copyright>
+    <Authors>CacheHub Contributors</Authors>
+    <Product>CacheHub</Product>
+    <Copyright>Copyright (c) 2026 CacheHub Contributors</Copyright>
     <Version>0.1.0-alpha</Version>
   </PropertyGroup>
 

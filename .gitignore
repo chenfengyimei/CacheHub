@@ -47,8 +47,8 @@ Thumbs.db
 Desktop.ini
 .DS_Store
 
-# AI_KV data directories (never track runtime data)
-.aikv/
+# CacheHub data directories (never track runtime data)
+.cachehub/
 data/
 logs/
 *.db

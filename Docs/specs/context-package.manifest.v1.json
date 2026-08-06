@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://aikv.dev/schemas/context-package.manifest.v1.json",
-  "title": "AI_KV Context Package Manifest v1",
+  "$id": "https://cachehub.dev/schemas/context-package.manifest.v1.json",
+  "title": "CacheHub Context Package Manifest v1",
   "description": "Manifest of a Context Package: metadata, selected files, reasons, budget, and security info. Separated from payload.",
   "type": "object",
   "required": [

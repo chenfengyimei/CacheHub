@@ -16,13 +16,13 @@ jobs:
           global-json-file: global.json
 
       - name: Restore
-        run: dotnet restore AI_KV.sln
+        run: dotnet restore CacheHub.sln
 
       - name: Build
-        run: dotnet build AI_KV.sln -c Release --no-restore
+        run: dotnet build CacheHub.sln -c Release --no-restore
 
       - name: Test
-        run: dotnet test AI_KV.sln -c Release --no-build --verbosity normal
+        run: dotnet test CacheHub.sln -c Release --no-build --verbosity normal
 
       - name: Format check
-        run: dotnet format AI_KV.sln --verify-no-changes --no-restore
+        run: dotnet format CacheHub.sln --verify-no-changes --no-restore
