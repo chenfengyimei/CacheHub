@@ -5,29 +5,52 @@ All notable changes to CacheHub will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] — 2026-08-06
+## [0.2.0-prealpha] — 2026-08-07
 
-### Added
+### Security Fixes (R0)
+- Local API: loopback-only binding + random access token + Host header validation
+- SafePathResolver: workspace-scoped path resolution, symlink escape detection
+- Frontend XSS: removed all innerHTML, added CSP, esc() helper for all dynamic content
+- Gateway: bearer token auth, real upstream status codes (no fixed 200), only cache 2xx
+- Gateway: SingleFlight uses ConcurrentDictionary<string, Lazy<T>> (atomic), body size limit
+- SecurityPolicyEnforcer: PolicyDecision (Allow/Deny/ApprovalRequired) at Payload exit
+- Snapshot activation: fixed cross-workspace SQL (added workspace_id filter + transaction)
+- Context Build: binds real Active Snapshot, reads real file hash (not "pending")
+- Benchmark: marked as DEMO, cannot produce phase gate passed
 
-#### Core Engine
-- ContextEngine 0.2.0: integrated TokenizerRegistry + SecurityPolicyEnforcer
-- TaskParser: deterministic rule-based task parsing (no LLM)
-- RecallPipeline: multi-source recall (path/symbol/keyword/GitDiff/current file)
-- RankingEngine: 9-feature normalization (minmax-per-query) + weighted scoring
-- RankingProfile: versioned weights (deterministic-v1 v3), sum = 1.0
-- ChunkingStrategy v1: syntax-block-first, line-window fallback, overlap control
-- TokenBudget: model window / agent / response / target / hard limit / safety margin
-- SelectionEngine: Full/Chunks/Outline/DeterministicSummary/Metadata modes
-- ContextExpander: expand by file/symbol, tracks parent + incremental tokens
-- ContextExplainer: selection reasons / budget eviction / potential misses
-- ContextPackageCache: strict binding (task + snapshot + profile + budget + security)
-- PayloadGenerator: generates Payload from Manifest + content
-- FileExporter: .cachehub/ directory export protocol (workspace.json + manifest + markdown + repomap)
+### Indexing & Persistence (R1)
+- PhysicalPath/VirtualPath/PathComparer: platform-aware path model
+- Migration0006: files mtime/hash_kind/parser_version + file_symbols/file_imports/file_relations tables
+- Migration0007: context_packages repository_commit/branch/dirty_state_hash/extracted_symbols_json/parser_versions_json/parent_package_id
+- Index build: single-connection batch transaction, parser results persisted
+- Index refresh: incremental update (add/modify/delete)
+- gitignore matcher: !, **, root anchor, last-rule-wins
+- Reconcile: VirtualPath + size+mtime comparison, same-size mutation detection
+- FTS QueryCompiler: safe escaping + prefix matching
+- RecallPipeline: FTS and symbol search callbacks
+- Context Repository: complete round-trip (all Manifest fields persisted)
 
-#### Indexing
-- DirectoryEnumerator: async streaming with depth/count/size limits + symlink protection
-- IgnoreRuleEngine: default + .gitignore + .cachehubignore + user rules + SHA-256 hash
-- FileTypeDetector: 30+ extension mapping + content sampling + certificate/archive detection
+### Context Engine (R2)
+- TaskParser v2: Unicode/Chinese support, bigram keywords, 4 identifier styles (PascalCase/camelCase/snake_case/kebab-case)
+- Ranking v2: only implemented features (7), removed zero-dimension, added SizeEfficiency
+- TokenBudget v2: AgentReserved + ResponseReserved in formula (MaxAvailable = window - all reserved)
+- Chunking v2: anchor-based (LineAnchor), only relevant chunks
+- PayloadPlan: immutable, Manifest/Payload share same plan
+- RepoMap v2: real directory tree, importance scoring, budget pruning
+- Context Expand: symbol support via file_symbols table query
+- Context Explain: complete FeatureBreakdown with weighted contributions
+
+### Protocol & GUI (R3)
+- ErrorEnvelope: unified across CLI and Desktop API
+- Git clone: --no-lfs replaced with GIT_LFS_SKIP_SMUDGE, credential redaction, output limit
+- File Export: Plan/Apply separation, backup, atomic .gitignore update
+- Feedback: validates Context/Workspace, --id must match JSON ContextPackageId
+- Project Detection: .csproj SDK-based framework detection (no guessing)
+- Desktop API: index build endpoint for GUI closed loop
+- Selection: ghost file (0-token) exclusion
+- Workspace: CreateValidated for real imports (directory existence check)
+- FileWatcher: Renamed saves old+new path, queue max 10000
+- Gateway: API key only from environment variable (not CLI args)
 - FileHasher: layered hashing (full SHA-256 for small, fingerprint for large)
 - FileEntry state machine: Discovered/Indexed/Ignored/Failed/Deleted/Stale
 - FTS5 index: version-aware full-text search bound to IndexSnapshotId
