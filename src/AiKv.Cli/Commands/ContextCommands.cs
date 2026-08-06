@@ -1,5 +1,7 @@
 using System.Text.Json;
 using AiKv.Context.Engine;
+using AiKv.Context.Export;
+using AiKv.Context.Payload;
 using AiKv.Context.Recall;
 using AiKv.Core.Context;
 using AiKv.Core.Feedback;
@@ -170,69 +172,31 @@ public static class ContextCommands
         {
             Console.WriteLine(JsonSerializer.Serialize(manifest, _jsonOpts));
         }
+        else if (format == "file")
+        {
+            // Export to .aikv/ directory using FileExporter
+            if (ws is null)
+            {
+                Console.Error.WriteLine("Workspace not found for file export");
+                return 1;
+            }
+
+            var exportAppData = new AppDataDirectory();
+            var exporter = new FileExporter(exportAppData);
+            var exportDir = await exporter.ExportAsync(
+                manifest,
+                path => ResolveFileContent(ws.RootPath, path),
+                manifest.WorkspaceId.Value);
+
+            Console.Error.WriteLine($"Exported to: {exportDir}");
+            Console.WriteLine($"{{ \"exportDir\": \"{exportDir.Replace('\\', '/')}\", \"files\": [\"workspace.json\", \"latest-context.manifest.json\", \"latest-context.md\", \"repomap.md\"] }}");
+        }
         else
         {
-            // Markdown export
-            Console.WriteLine($"# Context Package: {manifest.Id.Value}");
-            Console.WriteLine();
-            Console.WriteLine($"- **Task:** {manifest.Task.OriginalText}");
-            Console.WriteLine($"- **Schema Version:** {manifest.SchemaVersion}");
-            Console.WriteLine($"- **Ranking:** {manifest.Ranking.ProfileId} v{manifest.Ranking.ProfileVersion}");
-            Console.WriteLine($"- **Budget:** {manifest.Budget.ActualEstimate} / {manifest.Budget.ContextTarget} (hard: {manifest.Budget.ContextHardLimit})");
-            Console.WriteLine($"- **Engine:** {manifest.ContextEngineVersion}");
-            Console.WriteLine($"- **Created:** {manifest.CreatedAt:O}");
-            Console.WriteLine($"- **CloudSend:** {manifest.Safety.CloudSendAllowed}");
-            Console.WriteLine($"- **SecretsScan:** {manifest.Safety.SecretsScanPassed}");
-            Console.WriteLine();
-
-            if (manifest.SelectedFiles.Count > 0)
-            {
-                Console.WriteLine("## Selected Files");
-                Console.WriteLine();
-                Console.WriteLine("| Path | Mode | Score | Reasons |");
-                Console.WriteLine("|------|------|-------|---------|");
-                foreach (var f in manifest.SelectedFiles)
-                {
-                    var reasons = string.Join(", ", f.Reasons);
-                    Console.WriteLine($"| {f.Path} | {f.Mode} | {f.Score:F2} | {reasons} |");
-                }
-                Console.WriteLine();
-            }
-
-            if (manifest.ExcludedCandidates.Count > 0)
-            {
-                Console.WriteLine("## Excluded Candidates");
-                Console.WriteLine();
-                Console.WriteLine("| Path | Score | Reason |");
-                Console.WriteLine("|------|-------|--------|");
-                foreach (var e in manifest.ExcludedCandidates)
-                {
-                    Console.WriteLine($"| {e.Path} | {e.Score:F2} | {e.Reason} |");
-                }
-                Console.WriteLine();
-            }
-
-            // Include file contents if workspace root is available
-            if (ws is not null)
-            {
-                Console.WriteLine("## File Contents");
-                Console.WriteLine();
-                foreach (var f in manifest.SelectedFiles)
-                {
-                    var fullPath = Path.Combine(ws.RootPath, f.Path.Replace('/', Path.DirectorySeparatorChar));
-                    if (File.Exists(fullPath))
-                    {
-                        var content = await File.ReadAllTextAsync(fullPath);
-                        var ext = Path.GetExtension(f.Path).TrimStart('.');
-                        Console.WriteLine($"### {f.Path}");
-                        Console.WriteLine();
-                        Console.WriteLine($"```{ext}");
-                        Console.WriteLine(content);
-                        Console.WriteLine("```");
-                        Console.WriteLine();
-                    }
-                }
-            }
+            // Markdown to stdout using PayloadGenerator
+            var generator = new PayloadGenerator();
+            var markdown = generator.GenerateMarkdown(manifest, path => ResolveFileContent(ws?.RootPath ?? "", path));
+            Console.WriteLine(markdown);
         }
 
         return 0;
