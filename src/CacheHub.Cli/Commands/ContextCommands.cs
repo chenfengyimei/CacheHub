@@ -277,8 +277,13 @@ public static class ContextCommands
         else
         {
             // Markdown to stdout using PayloadGenerator
+            if (ws is null)
+            {
+                Console.Error.WriteLine("Workspace not found for markdown export");
+                return 1;
+            }
             var generator = new PayloadGenerator();
-            var markdown = generator.GenerateMarkdown(manifest, path => ResolveFileContent(ws?.RootPath ?? "", path));
+            var markdown = generator.GenerateMarkdown(manifest, path => ResolveFileContent(ws.RootPath, path));
             Console.WriteLine(markdown);
         }
 
@@ -327,11 +332,22 @@ public static class ContextCommands
 
         var expander = new Context.Expand.ContextExpander();
         var targetFile = file ?? symbol!;
-        var fullPath = ResolveFileContent(ws.RootPath, targetFile) != ""
-            ? Path.GetFullPath(Path.Combine(ws.RootPath, targetFile.Replace('/', Path.DirectorySeparatorChar)))
-            : null;
 
-        if (fullPath is null || !File.Exists(fullPath))
+        // Resolve path safely without reading file content
+        if (targetFile.Contains(".."))
+        {
+            Console.Error.WriteLine($"Error: Invalid file path: {targetFile}");
+            return 1;
+        }
+        var fullPath = Path.GetFullPath(Path.Combine(ws.RootPath, targetFile.Replace('/', Path.DirectorySeparatorChar)));
+        var normalizedRoot = Path.GetFullPath(ws.RootPath);
+        if (!fullPath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            Console.Error.WriteLine($"Error: Path outside workspace root: {targetFile}");
+            return 1;
+        }
+
+        if (!File.Exists(fullPath))
         {
             Console.Error.WriteLine($"File not found: {targetFile}");
             return 1;

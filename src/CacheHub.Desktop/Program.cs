@@ -92,7 +92,8 @@ app.MapGet("/api/v1/capabilities", () => Results.Ok(new CapabilityDiscovery
     Capabilities = CapabilityFlags.With(
         Capability.WorkspaceImport, Capability.ContextBuild,
         Capability.ContextExpand, Capability.ContextExplain,
-        Capability.FileExport, Capability.Cache),
+        Capability.ContextFeedback, Capability.FileExport,
+        Capability.Cache, Capability.Gateway),
     SchemaVersions = new Dictionary<string, int>
     {
         ["contextPackage"] = 1,
