@@ -123,4 +123,54 @@ public class IgnoreRuleEngineTests
         Assert.True(engine.IsIgnored("coverage/lcov.info"));
         Assert.False(engine.IsIgnored("src/app.ts"));
     }
+
+    [Fact]
+    public void IsIgnored_NegationRule_UnIgnores()
+    {
+        var engine = new IgnoreRuleEngine().WithUserRules(["*.log", "!important.log"]);
+
+        Assert.True(engine.IsIgnored("debug.log"));
+        Assert.False(engine.IsIgnored("important.log"));
+    }
+
+    [Fact]
+    public void IsIgnored_DoubleStar_MatchesAnyDepth()
+    {
+        var engine = new IgnoreRuleEngine().WithUserRules(["**/temp/"]);
+
+        Assert.True(engine.IsIgnored("temp/file.txt"));
+        Assert.True(engine.IsIgnored("src/temp/file.txt"));
+        Assert.True(engine.IsIgnored("a/b/c/temp/file.txt"));
+        Assert.False(engine.IsIgnored("src/app.ts"));
+    }
+
+    [Fact]
+    public void IsIgnored_RootAnchored_OnlyMatchesFromRoot()
+    {
+        var engine = new IgnoreRuleEngine().WithUserRules(["/build"]);
+
+        Assert.True(engine.IsIgnored("build/output.txt"));
+        Assert.False(engine.IsIgnored("src/build/output.txt"));
+    }
+
+    [Fact]
+    public void IsIgnored_LastRuleWins()
+    {
+        // If *.ts is ignored but app.ts is negated, app.ts should not be ignored
+        var engine = new IgnoreRuleEngine().WithUserRules(["*.ts", "!app.ts"]);
+
+        Assert.False(engine.IsIgnored("app.ts"));
+        Assert.True(engine.IsIgnored("other.ts"));
+    }
+
+    [Fact]
+    public void IsIgnored_DoubleStarInName()
+    {
+        var engine = new IgnoreRuleEngine().WithUserRules(["src/**/test/*.cs"]);
+
+        Assert.True(engine.IsIgnored("src/test/UnitTest.cs"));
+        Assert.True(engine.IsIgnored("src/a/test/UnitTest.cs"));
+        Assert.True(engine.IsIgnored("src/a/b/c/test/UnitTest.cs"));
+        Assert.False(engine.IsIgnored("src/a/b/UnitTest.cs"));
+    }
 }

@@ -101,17 +101,29 @@ public sealed class IgnoreRuleEngine
 
     /// <summary>
     /// Checks if a path should be ignored.
+    /// Rules are evaluated in order; last matching rule wins.
+    /// Negation rules (starting with !) un-ignore a previously ignored path.
     /// </summary>
     public bool IsIgnored(string path)
     {
-        var normalizedPath = path.Replace('\\', '/');
+        var normalizedPath = path.Replace('\\', '/').TrimStart('/');
 
+        var ignored = false;
         foreach (var rule in _rules)
         {
-            if (Matches(normalizedPath, rule.Pattern))
-                return true;
+            var pattern = rule.Pattern;
+
+            // Handle negation: !pattern un-ignores
+            var negate = pattern.StartsWith('!');
+            if (negate)
+                pattern = pattern[1..];
+
+            if (Matches(normalizedPath, pattern))
+            {
+                ignored = !negate;
+            }
         }
-        return false;
+        return ignored;
     }
 
     /// <summary>
@@ -148,20 +160,113 @@ public sealed class IgnoreRuleEngine
 
     private static bool Matches(string path, string pattern)
     {
-        // Simple glob matching: *, directory names, and exact patterns.
+        pattern = pattern.Trim();
+
+        // Root-anchored pattern (leading /): matches only from repo root
+        var rootAnchored = pattern.StartsWith('/');
+        if (rootAnchored)
+            pattern = pattern[1..];
+
+        // Directory-only pattern (trailing /)
         if (pattern.EndsWith('/'))
         {
-            var dirName = pattern.TrimEnd('/');
-            return path.Split('/').Any(seg => string.Equals(seg, dirName, StringComparison.OrdinalIgnoreCase));
+            var dirPattern = pattern.TrimEnd('/');
+            // **/dir matches "dir" at any depth
+            if (dirPattern.StartsWith("**/"))
+            {
+                var target = dirPattern[3..];
+                return path.Split('/').Any(seg => string.Equals(seg, target, StringComparison.OrdinalIgnoreCase));
+            }
+            // If the directory pattern contains wildcards, use glob matching
+            if (dirPattern.Contains('*') || dirPattern.Contains('?'))
+            {
+                return GlobMatchRecursive(path, dirPattern, rootAnchored);
+            }
+            return MatchSegments(path, dirPattern, rootAnchored);
         }
 
-        if (pattern.Contains('*'))
+        // Pattern contains ** (any number of directories)
+        if (pattern.Contains("**"))
         {
-            // Check against full path and against filename only.
+            return GlobMatchRecursive(path, pattern, rootAnchored);
+        }
+
+        // Pattern contains wildcard
+        if (pattern.Contains('*') || pattern.Contains('?'))
+        {
+            if (rootAnchored)
+                return GlobMatch(path, pattern);
             return GlobMatch(path, pattern) || GlobMatch(GetFileName(path), pattern);
         }
 
+        // Exact pattern with no wildcard: match against each path segment
+        return MatchSegments(path, pattern, rootAnchored);
+    }
+
+    private static bool MatchSegments(string path, string pattern, bool rootAnchored)
+    {
+        if (rootAnchored)
+            return string.Equals(path, pattern, StringComparison.OrdinalIgnoreCase)
+                   || path.StartsWith(pattern + "/", StringComparison.OrdinalIgnoreCase);
+
+        // Direct match or if pattern matches any file in path
+        if (string.Equals(GetFileName(path), pattern, StringComparison.OrdinalIgnoreCase))
+            return true;
+
         return path.Split('/').Any(seg => string.Equals(seg, pattern, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Recursive glob matching supporting ** (any directory depth).
+    /// </summary>
+    private static bool GlobMatchRecursive(string path, string pattern, bool rootAnchored)
+    {
+        // Split pattern into segments; convert ** to a regex that matches any directory depth
+        var regexPattern = "^" + BuildRegexFromPattern(pattern, recursive: true) + "$";
+
+        return System.Text.RegularExpressions.Regex.IsMatch(path, regexPattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+               || (!rootAnchored && System.Text.RegularExpressions.Regex.IsMatch(GetFileName(path), "^" + BuildRegexFromPattern(pattern, recursive: true) + "$", System.Text.RegularExpressions.RegexOptions.IgnoreCase));
+    }
+
+    private static string BuildRegexFromPattern(string pattern, bool recursive)
+    {
+        var sb = new StringBuilder();
+        var i = 0;
+        while (i < pattern.Length)
+        {
+            var c = pattern[i];
+
+            if (c == '*')
+            {
+                // Check for ** (recursive)
+                if (i + 1 < pattern.Length && pattern[i + 1] == '*')
+                {
+                    // **/ matches any number of directories (including zero)
+                    if (i + 2 < pattern.Length && pattern[i + 2] == '/')
+                    {
+                        sb.Append("(?:.*/)?");
+                        i += 3;
+                    }
+                    else
+                    {
+                        sb.Append(".*");
+                        i += 2;
+                    }
+                    continue;
+                }
+                sb.Append("[^/]*");
+            }
+            else if (c == '?')
+            {
+                sb.Append("[^/]");
+            }
+            else
+            {
+                sb.Append(System.Text.RegularExpressions.Regex.Escape(c.ToString()));
+            }
+            i++;
+        }
+        return sb.ToString();
     }
 
     private static string GetFileName(string path)
