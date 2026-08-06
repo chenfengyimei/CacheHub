@@ -43,6 +43,8 @@ public static class ContextCommands
         var wsId = GetOpt(args, "--workspace");
         var task = GetOpt(args, "--task");
         var outputJson = HasFlag(args, "--output=json") || HasFlag(args, "--json");
+        var useGitDiff = HasFlag(args, "--git-diff");
+        var modelId = GetOpt(args, "--model");
 
         if (string.IsNullOrEmpty(wsId) || string.IsNullOrEmpty(task))
         {
@@ -56,7 +58,38 @@ public static class ContextCommands
         Console.Error.WriteLine($"Building context for: {workspace.Name}");
         Console.Error.WriteLine($"  Task: {task}");
 
-        var engine = new ContextEngine();
+        // Load config for default model
+        var config = new Core.Configuration.ConfigManager().Load();
+        var effectiveModel = modelId ?? config.DefaultModel;
+
+        // Git diff integration
+        List<string>? gitDiffFiles = null;
+        if (useGitDiff)
+        {
+            var gitDiff = new Context.Integration.GitDiffProvider();
+            gitDiffFiles = (await gitDiff.GetChangedFilesAsync(workspace.RootPath)).ToList();
+            Console.Error.WriteLine($"  Git diff files: {gitDiffFiles.Count}");
+        }
+
+        // Build security policy from config
+        Core.Security.SecurityPolicy? secPolicy = null;
+        if (config.Security is not null)
+        {
+            secPolicy = new Core.Security.SecurityPolicy
+            {
+                Version = "config-v1",
+                Mode = config.Security.Mode,
+                EnableSecretScan = config.Security.EnableSecretScan,
+                BlockedExtensions = config.Security.BlockedExtensions is not null
+                    ? new HashSet<string>(config.Security.BlockedExtensions, StringComparer.OrdinalIgnoreCase)
+                    : new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            };
+        }
+
+        // Build tokenizer registry
+        var tokenizers = new Core.Tokens.TokenizerRegistry();
+
+        var engine = new ContextEngine(tokenizers, secPolicy);
         var snapshotId = IndexSnapshotId.New();
         var indexedFiles = await GetIndexedFilesAsync(factory, wsId);
 
@@ -66,6 +99,8 @@ public static class ContextCommands
                 WorkspaceId = workspace.Id,
                 IndexSnapshotId = snapshotId,
                 Task = task,
+                GitDiffFiles = gitDiffFiles,
+                ModelId = effectiveModel,
             },
             () => indexedFiles,
             path => ResolveFileContent(workspace.RootPath, path),
