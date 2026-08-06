@@ -22,7 +22,7 @@ public static class ContextCommands
     {
         if (args.Length == 0)
         {
-            Console.Error.WriteLine("Usage: aikv context <build|inspect|export|expand|feedback> [options]");
+            Console.Error.WriteLine("Usage: aikv context <build|inspect|list|export|expand|feedback> [options]");
             return 1;
         }
 
@@ -30,6 +30,7 @@ public static class ContextCommands
         {
             "build" => await BuildAsync(args.AsSpan(1).ToArray()),
             "inspect" => await InspectAsync(args.AsSpan(1).ToArray()),
+            "list" => await ListAsync(args.AsSpan(1).ToArray()),
             "export" => await ExportAsync(args.AsSpan(1).ToArray()),
             "expand" => await ExpandAsync(args.AsSpan(1).ToArray()),
             "feedback" => await FeedbackAsync(args.AsSpan(1).ToArray()),
@@ -137,6 +138,53 @@ public static class ContextCommands
             Console.WriteLine($"  Created: {manifest.CreatedAt:O}");
             Console.WriteLine($"  CloudSend: {manifest.Safety.CloudSendAllowed}");
             Console.WriteLine($"  SecretsScan: {manifest.Safety.SecretsScanPassed}");
+        }
+
+        return 0;
+    }
+
+    private static async Task<int> ListAsync(string[] args)
+    {
+        var wsId = GetOpt(args, "--workspace");
+        var outputJson = HasFlag(args, "--output=json") || HasFlag(args, "--json");
+        if (string.IsNullOrEmpty(wsId))
+        {
+            Console.Error.WriteLine("Error: --workspace=<id> is required");
+            return 1;
+        }
+
+        var appData = new AppDataDirectory();
+        var dbPath = appData.GetWorkspaceDatabasePath("main");
+        var factory = new SqliteConnectionFactory(dbPath);
+        var repo = new SqliteContextPackageRepository(factory);
+        var list = await repo.ListByWorkspaceAsync(WorkspaceId.Parse(wsId));
+
+        if (outputJson)
+        {
+            var json = JsonSerializer.Serialize(list.Select(m => new
+            {
+                id = m.Id.Value,
+                task = m.Task.OriginalText,
+                budget = m.Budget.ActualEstimate,
+                engine = m.ContextEngineVersion,
+                createdAt = m.CreatedAt,
+            }), _jsonOpts);
+            Console.WriteLine(json);
+        }
+        else
+        {
+            if (list.Count == 0)
+            {
+                Console.WriteLine("No context packages found.");
+                return 0;
+            }
+
+            Console.WriteLine($"{"ID",-36}  {"Tokens",-8}  {"Engine",-10}  {"Created"}");
+            Console.WriteLine(new string('-', 90));
+            foreach (var m in list)
+            {
+                Console.WriteLine($"{m.Id.Value,-36}  {m.Budget.ActualEstimate,-8}  {m.ContextEngineVersion,-10}  {m.CreatedAt:yyyy-MM-dd HH:mm}");
+            }
         }
 
         return 0;
@@ -295,7 +343,14 @@ public static class ContextCommands
             return 1;
         }
 
-        Console.Error.WriteLine($"Feedback received for context: {ctxId}");
+        // Persist feedback
+        var appData = new AppDataDirectory();
+        var dbPath = appData.GetWorkspaceDatabasePath("main");
+        var factory = new SqliteConnectionFactory(dbPath);
+        var feedbackRepo = new SqliteFeedbackRepository(factory);
+        await feedbackRepo.SaveAsync(feedback);
+
+        Console.Error.WriteLine($"Feedback saved for context: {ctxId}");
         Console.Error.WriteLine($"  Client: {feedback.ClientId ?? "unknown"}");
         Console.Error.WriteLine($"  Files read: {feedback.FilesActuallyRead.Count}");
         Console.Error.WriteLine($"  Task completed: {feedback.TaskCompleted}");
