@@ -68,6 +68,11 @@ public static class ContextCommands
             path => ResolveFileContent(workspace.RootPath, path),
             path => "sha256:pending");
 
+        // Persist manifest
+        var ctxRepo = new SqliteContextPackageRepository(factory);
+        await ctxRepo.SaveAsync(manifest);
+        Console.Error.WriteLine($"  Saved: {manifest.Id.Value}");
+
         if (outputJson)
         {
             Console.WriteLine(JsonSerializer.Serialize(manifest, _jsonOpts));
@@ -93,17 +98,46 @@ public static class ContextCommands
         return 0;
     }
 
-    private static Task<int> InspectAsync(string[] args)
+    private static async Task<int> InspectAsync(string[] args)
     {
         var ctxId = GetOpt(args, "--id");
+        var outputJson = HasFlag(args, "--output=json") || HasFlag(args, "--json");
         if (string.IsNullOrEmpty(ctxId))
         {
             Console.Error.WriteLine("Error: --id=<context-id> is required");
-            return Task.FromResult(1);
+            return 1;
         }
 
-        Console.WriteLine($"{{ \"id\": \"{ctxId}\", \"status\": \"not_persisted\" }}");
-        return Task.FromResult(0);
+        var appData = new AppDataDirectory();
+        var dbPath = appData.GetWorkspaceDatabasePath("main");
+        var factory = new SqliteConnectionFactory(dbPath);
+        var repo = new SqliteContextPackageRepository(factory);
+        var manifest = await repo.FindByIdAsync(ContextPackageId.Parse(ctxId));
+
+        if (manifest is null)
+        {
+            Console.Error.WriteLine($"Context package not found: {ctxId}");
+            return 1;
+        }
+
+        if (outputJson)
+        {
+            Console.WriteLine(JsonSerializer.Serialize(manifest, _jsonOpts));
+        }
+        else
+        {
+            Console.WriteLine($"Context Package: {manifest.Id.Value}");
+            Console.WriteLine($"  Schema: v{manifest.SchemaVersion}");
+            Console.WriteLine($"  Task: {manifest.Task.OriginalText}");
+            Console.WriteLine($"  Ranking: {manifest.Ranking.ProfileId} v{manifest.Ranking.ProfileVersion}");
+            Console.WriteLine($"  Budget: {manifest.Budget.ActualEstimate} / {manifest.Budget.ContextTarget}");
+            Console.WriteLine($"  Engine: {manifest.ContextEngineVersion}");
+            Console.WriteLine($"  Created: {manifest.CreatedAt:O}");
+            Console.WriteLine($"  CloudSend: {manifest.Safety.CloudSendAllowed}");
+            Console.WriteLine($"  SecretsScan: {manifest.Safety.SecretsScanPassed}");
+        }
+
+        return 0;
     }
 
     private static Task<int> ExportAsync(string[] args)
