@@ -3,6 +3,7 @@ using AiKv.Context.Engine;
 using AiKv.Context.Explain;
 using AiKv.Context.Parsing;
 using AiKv.Context.Recall;
+using AiKv.Context.Expand;
 using AiKv.Core.Capabilities;
 using AiKv.Core.Context;
 using AiKv.Core.Feedback;
@@ -149,9 +150,31 @@ app.MapGet("/api/v1/context/{id}", async (string id, IContextPackageRepository c
     return Results.Ok(manifest);
 });
 
-app.MapPost("/api/v1/context/{id}/expand", (string id, ExpandApiRequest req) =>
+app.MapPost("/api/v1/context/{id}/expand", async (string id, ExpandApiRequest req, IContextPackageRepository ctxRepo, IWorkspaceRepository wsRepo) =>
 {
-    return Results.Ok(new { contextId = id, expandedSymbol = req.Symbol, status = "not_persisted" });
+    var manifest = await ctxRepo.FindByIdAsync(ContextPackageId.Parse(id));
+    if (manifest is null) return Results.NotFound(new { error = "Context package not found" });
+
+    var ws = await wsRepo.FindByIdAsync(manifest.WorkspaceId);
+    if (ws is null) return Results.NotFound(new { error = "Workspace not found" });
+
+    var targetPath = req.File ?? req.Symbol ?? "";
+    var fullPath = Path.Combine(ws.RootPath, targetPath.Replace('/', Path.DirectorySeparatorChar));
+
+    if (!File.Exists(fullPath))
+        return Results.NotFound(new { error = $"File not found: {targetPath}" });
+
+    var content = await File.ReadAllTextAsync(fullPath);
+    var expander = new ContextExpander();
+    var result = expander.ExpandByFile(id, targetPath, content, req.Reason ?? "API expand");
+
+    return Results.Ok(new
+    {
+        contextId = id,
+        addedItems = result.AddedItems.Select(i => new { path = i.Path, mode = i.Mode.ToString(), content = i.Content.Length }),
+        additionalTokens = result.AdditionalTokens,
+        reason = result.Reason,
+    });
 });
 
 app.MapPost("/api/v1/context/{id}/feedback", (string id, FeedbackApiRequest req) =>
@@ -222,5 +245,5 @@ app.Run();
 
 record ImportRequest(string Path, string? Name);
 record ContextBuildApiRequest(string WorkspaceId, string Task);
-record ExpandApiRequest(string? Symbol, string? File);
+record ExpandApiRequest(string? Symbol, string? File, string? Reason);
 record FeedbackApiRequest(string? ClientId, bool TaskCompleted, bool MissingContextReported, IReadOnlyList<string>? FilesActuallyRead);
