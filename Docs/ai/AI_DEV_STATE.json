@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "project": "CacheHub",
-  "currentPhase": "R1-COMPLETE",
-  "currentTask": "R1 all tasks complete. Next: R2 Context Engine 正确性 0.2",
+  "currentPhase": "R2-IN-PROGRESS",
+  "currentTask": "R2-W001/W003/W006 complete. Remaining: R2-W005 (anchor chunking), R2-W007 (PayloadPlan), R2-W008 (RepoMap), R2-W009 (Expand), R2-W010 (Explain)",
   "repository": {
     "branch": "main",
     "dirty": false,
@@ -10,38 +10,24 @@
   },
   "qualityGates": {
     "build": "pass",
-    "unitTests": "pass (423/425, 2 skipped)",
+    "unitTests": "pass (434/436, 2 skipped)",
     "integrationTests": "pass",
     "securityTests": "pass",
     "format": "pass"
   },
   "r0CompletedTasks": "10/10 (all P0 issues resolved)",
-  "r1CompletedTasks": [
-    "R1-W001: PhysicalPath/VirtualPath/PathComparer",
-    "R1-W002: Schema v2 migration (symbols/imports/relations tables)",
-    "R1-W003: index build batch transaction + real hash",
-    "R1-W004: index refresh incremental update",
-    "R1-W006: gitignore matcher (!, **, root anchor, last-rule-wins)",
-    "R1-W007: reconcile VirtualPath + size+mtime comparison",
-    "R1-W008: Parser results persisted to index",
-    "R1-W009: FTS QueryCompiler + Recall integration",
-    "R1-W009b: Fts5Index.SearchAsync uses FtsQueryCompiler",
-    "R1-W010: Context Repository complete round-trip (Migration0007)"
+  "r1CompletedTasks": "10/10 (indexing & persistence trustworthy)",
+  "r2CompletedTasks": [
+    "R2-W001: Unicode/Chinese task parsing (deterministic-query-v2)",
+    "R2-W003: Ranking only implements actual features (deterministic-v2 v4, SizeEfficiency added)",
+    "R2-W006: Token Budget reserves participate in formula (budget-v2)"
   ],
-  "risks": [
-    "R2: Task parser only supports English",
-    "R2: Tokenizer not used in budget calculation",
-    "R2: Chunking returns all chunks not relevant ones",
-    "R2: Context Expand --symbol treated as file path",
-    "R2: Ranking dimensions mostly zero"
+  "r2RemainingTasks": [
+    "R2-W005: Grammar/hit-anchor Chunking (only relevant chunks)",
+    "R2-W007: Selection produces immutable PayloadPlan",
+    "R2-W008: RepoMap real directory tree + importance scoring",
+    "R2-W009: Context Expand symbol support",
+    "R2-W010: Context Explain feature breakdown"
   ],
-  "blockers": [],
-  "nextActions": [
-    "R2-W001: Unicode/Chinese task parsing",
-    "R2-W002: Recall implement FTS/Symbol/Git hunk/RepoMap",
-    "R2-W005: Grammar/hit-anchor Chunking",
-    "R2-W006: Token Budget with real ITokenizer",
-    "R2-W007: Selection produces immutable PayloadPlan"
-  ],
-  "lastUpdated": "2026-08-07T01:45:00Z"
+  "lastUpdated": "2026-08-07T02:00:00Z"
 }
