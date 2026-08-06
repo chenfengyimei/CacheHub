@@ -140,5 +140,6 @@ public sealed record IndexedFileInfo
     public required string NormalizedPath { get; init; }
     public required string Language { get; init; }
     public required long Size { get; init; }
+    public string? ContentHash { get; init; }
     public IReadOnlyList<string> Symbols { get; init; } = [];
 }

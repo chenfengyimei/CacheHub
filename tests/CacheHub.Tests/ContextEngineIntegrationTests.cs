@@ -133,6 +133,6 @@ public class ContextEngineIntegrationTests
             path => "",
             path => "sha256:abc");
 
-        Assert.Equal("0.2.0", manifest.ContextEngineVersion);
+        Assert.Equal("0.2.0-prealpha", manifest.ContextEngineVersion);
     }
 }

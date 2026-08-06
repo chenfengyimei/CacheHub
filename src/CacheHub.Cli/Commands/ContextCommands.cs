@@ -90,8 +90,17 @@ public static class ContextCommands
         var tokenizers = new Core.Tokens.TokenizerRegistry();
 
         var engine = new ContextEngine(tokenizers, secPolicy);
-        var snapshotId = IndexSnapshotId.New();
-        var indexedFiles = await GetIndexedFilesAsync(factory, wsId);
+
+        // Query the real Active Snapshot from the database (not a random ID)
+        var activeSnapshot = await GetActiveSnapshotAsync(factory, workspace.Id.Value);
+        if (activeSnapshot is null)
+        {
+            Console.Error.WriteLine("Error: No active index snapshot found. Run 'cachehub index build --id=<workspace-id>' first.");
+            return 1;
+        }
+
+        var snapshotId = activeSnapshot.Value.SnapshotId;
+        var indexedFiles = await GetIndexedFilesAsync(factory, wsId, snapshotId);
 
         var manifest = engine.Build(
             new ContextBuildRequest
@@ -104,7 +113,7 @@ public static class ContextCommands
             },
             () => indexedFiles,
             path => ResolveFileContent(workspace.RootPath, path),
-            path => "sha256:pending");
+            path => ResolveFileHash(factory, snapshotId, path));
 
         // Persist manifest
         var ctxRepo = new SqliteContextPackageRepository(factory);
@@ -435,18 +444,17 @@ public static class ContextCommands
         return (factory, ws);
     }
 
-    private static async Task<List<IndexedFileInfo>> GetIndexedFilesAsync(SqliteConnectionFactory factory, string workspaceId)
+    private static async Task<List<IndexedFileInfo>> GetIndexedFilesAsync(SqliteConnectionFactory factory, string workspaceId, IndexSnapshotId snapshotId)
     {
         var result = new List<IndexedFileInfo>();
         await using var conn = factory.CreateOpenConnection();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            SELECT f.normalized_path, f.size, f.language
+            SELECT f.normalized_path, f.size, f.language, f.content_hash
             FROM files f
-            INNER JOIN index_snapshots s ON f.snapshot_id = s.id
-            WHERE s.workspace_id = $ws AND s.status = 'Active';
+            WHERE f.snapshot_id = $snap;
             """;
-        cmd.Parameters.AddWithValue("$ws", workspaceId);
+        cmd.Parameters.AddWithValue("$snap", snapshotId.Value);
         await using var reader = await cmd.ExecuteReaderAsync();
         while (await reader.ReadAsync())
         {
@@ -457,9 +465,36 @@ public static class ContextCommands
                 Language = reader.IsDBNull(2) ? "unknown" : reader.GetString(2),
                 Size = reader.IsDBNull(1) ? 0 : reader.GetInt64(1),
                 Symbols = [],
+                ContentHash = reader.IsDBNull(3) ? null : reader.GetString(3),
             });
         }
         return result;
+    }
+
+    private static async Task<(IndexSnapshotId SnapshotId, int FileCount)?> GetActiveSnapshotAsync(SqliteConnectionFactory factory, string workspaceId)
+    {
+        await using var conn = factory.CreateOpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT id, file_count FROM index_snapshots WHERE workspace_id = $ws AND status = 'Active' LIMIT 1;";
+        cmd.Parameters.AddWithValue("$ws", workspaceId);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        if (await reader.ReadAsync())
+            return (IndexSnapshotId.Parse(reader.GetString(0)), reader.GetInt32(1));
+        return null;
+    }
+
+    private static string ResolveFileHash(SqliteConnectionFactory factory, IndexSnapshotId snapshotId, string path)
+    {
+        // Try to read the hash from the files table first
+        using var conn = factory.CreateOpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT content_hash FROM files WHERE snapshot_id = $snap AND normalized_path = $path LIMIT 1;";
+        cmd.Parameters.AddWithValue("$snap", snapshotId.Value);
+        cmd.Parameters.AddWithValue("$path", path);
+        var result = cmd.ExecuteScalar();
+        if (result is string hash && !string.IsNullOrEmpty(hash) && hash != "pending")
+            return hash;
+        return "sha256:pending";
     }
 
     private static string ResolveFileContent(string rootPath, string relativePath)

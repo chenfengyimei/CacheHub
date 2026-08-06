@@ -65,7 +65,7 @@ static async Task<List<IndexedFileInfo>> GetIndexedFilesAsync(SqliteConnectionFa
     await using var conn = factory.CreateOpenConnection();
     using var cmd = conn.CreateCommand();
     cmd.CommandText = """
-        SELECT f.normalized_path, f.size, f.language
+        SELECT f.normalized_path, f.size, f.language, f.content_hash
         FROM files f
         INNER JOIN index_snapshots s ON f.snapshot_id = s.id
         WHERE s.workspace_id = $ws AND s.status = 'Active';
@@ -80,10 +80,34 @@ static async Task<List<IndexedFileInfo>> GetIndexedFilesAsync(SqliteConnectionFa
             NormalizedPath = reader.GetString(0),
             Size = reader.IsDBNull(1) ? 0 : reader.GetInt64(1),
             Language = reader.IsDBNull(2) ? "unknown" : reader.GetString(2),
+            ContentHash = reader.IsDBNull(3) ? null : reader.GetString(3),
             Symbols = [],
         });
     }
     return result;
+}
+
+static async Task<IndexSnapshotId?> GetActiveSnapshotIdAsync(SqliteConnectionFactory factory, string workspaceId)
+{
+    await using var conn = factory.CreateOpenConnection();
+    using var cmd = conn.CreateCommand();
+    cmd.CommandText = "SELECT id FROM index_snapshots WHERE workspace_id = $ws AND status = 'Active' LIMIT 1;";
+    cmd.Parameters.AddWithValue("$ws", workspaceId);
+    var result = await cmd.ExecuteScalarAsync();
+    return result is string id ? IndexSnapshotId.Parse(id) : null;
+}
+
+static string ResolveFileHashFromDb(SqliteConnectionFactory factory, IndexSnapshotId snapshotId, string path)
+{
+    using var conn = factory.CreateOpenConnection();
+    using var cmd = conn.CreateCommand();
+    cmd.CommandText = "SELECT content_hash FROM files WHERE snapshot_id = $snap AND normalized_path = $path LIMIT 1;";
+    cmd.Parameters.AddWithValue("$snap", snapshotId.Value);
+    cmd.Parameters.AddWithValue("$path", path);
+    var result = cmd.ExecuteScalar();
+    if (result is string hash && !string.IsNullOrEmpty(hash) && hash != "pending")
+        return hash;
+    return "sha256:pending";
 }
 
 // === Capabilities ===
@@ -147,14 +171,17 @@ app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextE
     var ws = await repo.FindByIdAsync(WorkspaceId.Parse(req.WorkspaceId));
     if (ws is null) return Results.NotFound(new { error = "Workspace not found" });
 
+    var activeSnapshotId = await GetActiveSnapshotIdAsync(factory, req.WorkspaceId);
+    if (activeSnapshotId is null)
+        return Results.BadRequest(new { error = "No active index snapshot. Run 'cachehub index build' first.", code = "INDEX_NOT_READY" });
+
     var indexedFiles = await GetIndexedFilesAsync(factory, req.WorkspaceId);
-    var snapshotId = IndexSnapshotId.New();
 
     var manifest = engine.Build(
         new ContextBuildRequest
         {
             WorkspaceId = ws.Id,
-            IndexSnapshotId = snapshotId,
+            IndexSnapshotId = activeSnapshotId,
             Task = req.Task,
         },
         () => indexedFiles,
@@ -163,7 +190,7 @@ app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextE
             var fullPath = SafeResolvePath(ws.RootPath, path);
             return fullPath is not null && File.Exists(fullPath) ? File.ReadAllText(fullPath) : "";
         },
-        path => "sha256:pending");
+        path => ResolveFileHashFromDb(factory, activeSnapshotId, path));
 
     await ctxRepo.SaveAsync(manifest);
 
