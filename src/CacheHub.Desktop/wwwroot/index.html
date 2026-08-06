@@ -233,8 +233,12 @@ async function loadWorkspaces() {
         tdStatus.appendChild(badge);
         const tdCreated = document.createElement('td'); tdCreated.textContent = new Date(w.createdAt).toLocaleDateString();
         const tdAction = document.createElement('td');
+        const indexBtn = document.createElement('button'); indexBtn.className = 'btn'; indexBtn.textContent = 'Build Index';
+        indexBtn.style.marginRight = '0.5rem';
+        indexBtn.onclick = () => buildIndex(w.id);
         const btn = document.createElement('button'); btn.className = 'btn btn-secondary'; btn.textContent = 'Remove';
         btn.onclick = () => removeWorkspace(w.id);
+        tdAction.appendChild(indexBtn);
         tdAction.appendChild(btn);
         tr.append(tdId, tdName, tdPath, tdStatus, tdCreated, tdAction);
         tbody.appendChild(tr);
@@ -259,6 +263,18 @@ async function removeWorkspace(id) {
     await api('/api/v1/workspaces/' + id, { method: 'DELETE' });
     toast('Workspace removed');
     loadWorkspaces();
+}
+
+async function buildIndex(id) {
+    toast('Building index...');
+    try {
+        const result = await api('/api/v1/workspaces/' + id + '/index', { method: 'POST' });
+        toast('Index build started: ' + esc(result.snapshotId));
+        // Poll for completion after a delay
+        setTimeout(() => { loadWorkspaces(); toast('Refresh workspace status'); }, 5000);
+    } catch (e) {
+        toast('Index build failed');
+    }
 }
 
 async function buildContext() {
