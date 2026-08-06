@@ -85,6 +85,17 @@
             <div class="card" id="ctx-result" style="display:none">
                 <h2>Context Package</h2>
                 <div id="ctx-manifest"></div>
+                <div class="row" style="margin-top:1rem">
+                    <button class="btn btn-secondary" onclick="explainContext()">Explain</button>
+                    <button class="btn btn-secondary" onclick="showExpandDialog()">Expand</button>
+                </div>
+                <div id="ctx-explain" style="margin-top:1rem;display:none"></div>
+                <div id="ctx-expand" style="margin-top:1rem;display:none">
+                    <div class="row" style="margin-bottom:0.5rem">
+                        <input type="text" id="expand-file" placeholder="File path (e.g. src/auth.ts)" style="flex:1">
+                        <button class="btn" onclick="expandContext()">Expand</button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -187,6 +198,7 @@ async function buildContext() {
     });
     document.getElementById('ctx-result').style.display = '';
     const el = document.getElementById('ctx-manifest');
+    el.dataset.ctxId = manifest.id;
     el.innerHTML = `
         <p><strong>ID:</strong> ${manifest.id}</p>
         <p><strong>Budget:</strong> ${manifest.budget.actualEstimate} / ${manifest.budget.contextTarget} (hard: ${manifest.budget.contextHardLimit})</p>
@@ -197,6 +209,37 @@ async function buildContext() {
         ${manifest.excludedCandidates.length ? `<h3>Excluded (${manifest.excludedCandidates.length})</h3><table><thead><tr><th>Path</th><th>Score</th><th>Reason</th></tr></thead><tbody>${manifest.excludedCandidates.map(e => `<tr><td>${e.path}</td><td>${e.score.toFixed(2)}</td><td>${e.reason}</td></tr>`).join('')}</tbody></table>` : ''}
     `;
     toast('Context built');
+}
+
+async function explainContext() {
+    const id = document.getElementById('ctx-manifest').dataset.ctxId;
+    if (!id) return;
+    const result = await api(`/api/v1/context/${id}/explain`);
+    const el = document.getElementById('ctx-explain');
+    el.style.display = '';
+    el.innerHTML = `
+        <h3>Budget: ${result.budgetSummary}</h3>
+        ${result.potentialMisses && result.potentialMisses.length ? `<h3 style="color:var(--warning)">⚠ Potential Misses</h3><ul>${result.potentialMisses.map(m => `<li>${m}</li>`).join('')}</ul>` : ''}
+        <h3>File Explanations</h3>
+        <table><thead><tr><th>Status</th><th>Path</th><th>Score</th><th>Reasons</th></tr></thead><tbody>
+        ${result.explanations.map(e => `<tr><td>${e.selected ? '✓' : '✗'}</td><td>${e.path}</td><td>${e.score.toFixed(2)}</td><td>${e.reasons ? e.reasons.join(', ') : e.exclusionReason || ''}</td></tr>`).join('')}
+        </tbody></table>
+    `;
+}
+
+function showExpandDialog() {
+    document.getElementById('ctx-expand').style.display = '';
+}
+
+async function expandContext() {
+    const id = document.getElementById('ctx-manifest').dataset.ctxId;
+    const file = document.getElementById('expand-file').value;
+    if (!id || !file) { toast('Context ID and file path are required'); return; }
+    const result = await api(`/api/v1/context/${id}/expand`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ file })
+    });
+    toast(`Expanded: ${result.additionalTokens} tokens added`);
 }
 
 async function loadIntegration() {
