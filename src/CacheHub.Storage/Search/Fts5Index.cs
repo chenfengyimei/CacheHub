@@ -67,6 +67,7 @@ public sealed class Fts5Index(SqliteConnectionFactory factory)
 
     /// <summary>
     /// Searches file contents using FTS5 full-text search.
+    /// Query is compiled via FtsQueryCompiler for safe escaping and prefix matching.
     /// </summary>
     public async Task<IReadOnlyList<FtsSearchResult>> SearchAsync(
         IndexSnapshotId snapshotId,
@@ -74,6 +75,7 @@ public sealed class Fts5Index(SqliteConnectionFactory factory)
         int limit = 50,
         CancellationToken ct = default)
     {
+        var compiledQuery = FtsQueryCompiler.Compile(query);
         await using var connection = factory.CreateOpenConnection();
         using var cmd = connection.CreateCommand();
         cmd.CommandText =
@@ -84,7 +86,7 @@ public sealed class Fts5Index(SqliteConnectionFactory factory)
             ORDER BY rank
             LIMIT $limit;
             """;
-        cmd.Parameters.AddWithValue("$query", query);
+        cmd.Parameters.AddWithValue("$query", compiledQuery);
         cmd.Parameters.AddWithValue("$snapshot", snapshotId.Value);
         cmd.Parameters.AddWithValue("$limit", limit);
 
