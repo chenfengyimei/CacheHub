@@ -78,14 +78,37 @@ public sealed class FileExporter
         var cachehubDir = Path.Combine(repositoryRoot, ".cachehub");
         Directory.CreateDirectory(cachehubDir);
 
-        // Write files
-        var exportDir = await ExportAsync(manifest, contentProvider, manifest.WorkspaceId.Value);
-
-        // Copy to .cachehub/
-        foreach (var file in Directory.GetFiles(exportDir))
+        // Write files directly into .cachehub/ (avoids duplicate in shared exports dir)
+        // 1. workspace.json
+        var workspaceJson = new
         {
-            File.Copy(file, Path.Combine(cachehubDir, Path.GetFileName(file)), overwrite: true);
-        }
+            workspaceId = manifest.WorkspaceId.Value,
+            indexSnapshotId = manifest.IndexSnapshotId.Value,
+            schemaVersion = manifest.SchemaVersion,
+            engineVersion = manifest.ContextEngineVersion,
+        };
+        await File.WriteAllTextAsync(
+            Path.Combine(cachehubDir, "workspace.json"),
+            System.Text.Json.JsonSerializer.Serialize(workspaceJson, _jsonOpts));
+
+        // 2. latest-context.manifest.json
+        var manifestJson = System.Text.Json.JsonSerializer.Serialize(manifest, _jsonOpts);
+        await File.WriteAllTextAsync(
+            Path.Combine(cachehubDir, "latest-context.manifest.json"),
+            manifestJson);
+
+        // 3. latest-context.md
+        var generator = new PayloadGenerator();
+        var markdown = generator.GenerateMarkdown(manifest, contentProvider);
+        await File.WriteAllTextAsync(
+            Path.Combine(cachehubDir, "latest-context.md"),
+            markdown);
+
+        // 4. repomap.md
+        var repomap = GenerateRepoMap(manifest);
+        await File.WriteAllTextAsync(
+            Path.Combine(cachehubDir, "repomap.md"),
+            repomap);
 
         // Suggest .gitignore entry
         var gitignorePath = Path.Combine(repositoryRoot, ".gitignore");

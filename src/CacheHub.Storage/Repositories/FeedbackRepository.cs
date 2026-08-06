@@ -74,11 +74,48 @@ public sealed class SqliteFeedbackRepository(SqliteConnectionFactory factory) : 
         cmd.Parameters.AddWithValue("$ws", workspaceId);
         cmd.Parameters.AddWithValue("$limit", limit);
         var results = new List<ContextFeedback>();
+        var pending = new List<(string feedbackId, ContextFeedback stub)>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
-            results.Add(MapFeedback(reader, conn));
+        {
+            var feedbackId = reader.GetString(reader.GetOrdinal("id"));
+            pending.Add((feedbackId, ReadScalarFields(reader)));
+        }
+        // Reader is now closed (end of while / disposed). Load file lists safely.
+        foreach (var (fid, stub) in pending)
+            results.Add(LoadFileLists(conn, fid, stub));
         return results;
     }
+
+    private static ContextFeedback ReadScalarFields(SqliteDataReader reader) => new()
+    {
+        ContextPackageId = reader.GetString(reader.GetOrdinal("context_package_id")),
+        ClientId = reader.IsDBNull(reader.GetOrdinal("client_id")) ? null : reader.GetString(reader.GetOrdinal("client_id")),
+        ClientVersion = reader.IsDBNull(reader.GetOrdinal("client_version")) ? null : reader.GetString(reader.GetOrdinal("client_version")),
+        Model = reader.IsDBNull(reader.GetOrdinal("model")) ? null : reader.GetString(reader.GetOrdinal("model")),
+        TaskCompleted = reader.GetInt32(reader.GetOrdinal("task_completed")) == 1,
+        MissingContextReported = reader.GetInt32(reader.GetOrdinal("missing_context_reported")) == 1,
+        UserInterventionCount = reader.GetInt32(reader.GetOrdinal("user_intervention_count")),
+        TotalWorkflowInputTokens = reader.IsDBNull(reader.GetOrdinal("total_workflow_input_tokens")) ? null : reader.GetInt32(reader.GetOrdinal("total_workflow_input_tokens")),
+        TotalWorkflowOutputTokens = reader.IsDBNull(reader.GetOrdinal("total_workflow_output_tokens")) ? null : reader.GetInt32(reader.GetOrdinal("total_workflow_output_tokens")),
+        TestsPassed = reader.IsDBNull(reader.GetOrdinal("tests_passed")) ? null : reader.GetInt32(reader.GetOrdinal("tests_passed")) == 1,
+        FilesActuallyRead = [],
+        AdditionalFilesRequested = [],
+        SelectedFilesUsed = [],
+        SelectedFilesIgnored = [],
+        PatchFiles = [],
+        TestsRun = [],
+    };
+
+    private static ContextFeedback LoadFileLists(SqliteConnection conn, string feedbackId, ContextFeedback stub) => stub with
+    {
+        FilesActuallyRead = LoadFileList(conn, feedbackId, "actually_read"),
+        AdditionalFilesRequested = LoadFileList(conn, feedbackId, "additional_requested"),
+        SelectedFilesUsed = LoadFileList(conn, feedbackId, "selected_used"),
+        SelectedFilesIgnored = LoadFileList(conn, feedbackId, "selected_ignored"),
+        PatchFiles = LoadFileList(conn, feedbackId, "patch_files"),
+        TestsRun = LoadFileList(conn, feedbackId, "tests_run"),
+    };
 
     private static async Task SaveFileListAsync(SqliteConnection conn, string feedbackId, string fileType, IReadOnlyList<string> files, CancellationToken ct)
     {

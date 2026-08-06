@@ -22,13 +22,16 @@ public sealed class PayloadGenerator
     {
         var items = new List<PayloadItem>();
         var totalTokens = 0;
+        // Use the manifest's context target as the per-file chunk budget, with a
+        // sensible floor so very small budgets don't zero out every file.
+        var chunkBudget = Math.Max(manifest.Budget.ContextTarget, 1000);
 
         foreach (var file in manifest.SelectedFiles)
         {
             var content = contentProvider(file.Path);
             if (string.IsNullOrEmpty(content)) continue;
 
-            var chunks = _chunker.Chunk(file.Path, content, file.Mode, 10000);
+            var chunks = _chunker.Chunk(file.Path, content, file.Mode, chunkBudget);
 
             foreach (var chunk in chunks)
             {
