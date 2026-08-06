@@ -2,6 +2,9 @@ namespace CacheHub.Context.Ranking;
 
 /// <summary>
 /// Feature scores for a candidate file, each normalized to 0..1.
+/// Only includes features that are actually implemented and populated.
+/// Unimplemented features (dependency graph, test mapping, config relations)
+/// are intentionally excluded to avoid false claims.
 /// </summary>
 public sealed record FeatureScores
 {
@@ -9,11 +12,14 @@ public sealed record FeatureScores
     public double TextMatch { get; init; }
     public double PathMatch { get; init; }
     public double GitDiff { get; init; }
-    public double DependencyRelation { get; init; }
     public double CurrentFileRelation { get; init; }
     public double RecentChange { get; init; }
-    public double TestRelation { get; init; }
-    public double ConfigRelation { get; init; }
+
+    /// <summary>
+    /// Size efficiency signal: 0..1. Larger files score lower (prefer compact files).
+    /// Computed from candidate size relative to the largest candidate.
+    /// </summary>
+    public double SizeEfficiency { get; init; }
 }
 
 /// <summary>
@@ -31,33 +37,32 @@ public sealed record RankingProfile
 
 /// <summary>
 /// Feature weights for the ranking profile.
+/// Weights sum to 1.0 and only include implemented features.
 /// </summary>
 public sealed record FeatureWeights
 {
-    public double SymbolMatch { get; init; } = 0.22;
-    public double TextMatch { get; init; } = 0.18;
-    public double PathMatch { get; init; } = 0.12;
-    public double GitDiff { get; init; } = 0.12;
-    public double DependencyRelation { get; init; } = 0.10;
+    public double SymbolMatch { get; init; } = 0.30;
+    public double TextMatch { get; init; } = 0.22;
+    public double PathMatch { get; init; } = 0.15;
+    public double GitDiff { get; init; } = 0.13;
     public double CurrentFileRelation { get; init; } = 0.08;
     public double RecentChange { get; init; } = 0.07;
-    public double TestRelation { get; init; } = 0.06;
-    public double ConfigRelation { get; init; } = 0.05;
+    public double SizeEfficiency { get; init; } = 0.05;
 
     public double Sum => SymbolMatch + TextMatch + PathMatch + GitDiff +
-        DependencyRelation + CurrentFileRelation + RecentChange +
-        TestRelation + ConfigRelation;
+        CurrentFileRelation + RecentChange + SizeEfficiency;
 }
 
 /// <summary>
-/// Default ranking profile (deterministic-v1, version 3).
+/// Default ranking profile (deterministic-v2, version 4).
+/// Redistributes weight from unimplemented features to implemented ones.
 /// </summary>
 public static class DefaultRankingProfile
 {
     public static RankingProfile Create() => new()
     {
-        Id = "deterministic-v1",
-        Version = 3,
+        Id = "deterministic-v2",
+        Version = 4,
         Weights = new FeatureWeights(),
     };
 }
@@ -68,7 +73,7 @@ public static class DefaultRankingProfile
 public sealed class RankingEngine
 {
     /// <summary>
-    /// Normalizes feature scores to 0..1 using min-max per query.
+    /// Normalizes feature scores to 0..1 using true min-max scaling.
     /// </summary>
     public List<RankedCandidate> Rank(
         IReadOnlyList<Recall.CandidateFile> candidates,
@@ -78,10 +83,10 @@ public sealed class RankingEngine
     {
         if (candidates.Count == 0) return [];
 
-        // Compute raw features
+        // Compute raw features (including size efficiency which uses min-max)
         var rawFeatures = candidates.Select(c => ComputeFeatures(c, task, currentFile)).ToList();
 
-        // Normalize
+        // True min-max normalization per feature
         var normalized = NormalizeFeatures(rawFeatures);
 
         // Compute final score
@@ -110,30 +115,42 @@ public sealed class RankingEngine
             .ToList();
     }
 
+    /// <summary>
+    /// Computes raw feature scores for a candidate.
+    /// </summary>
     private static FeatureScores ComputeFeatures(
         Recall.CandidateFile candidate,
         Parsing.ParsedTask task,
         string? currentFile)
     {
         var symbolMatch = 0.0;
-        foreach (var sym in task.ExtractedSymbols)
+        if (task.ExtractedSymbols.Count > 0)
         {
-            if (candidate.MatchedSymbols.Any(m => m.Contains(sym, StringComparison.OrdinalIgnoreCase)))
-                symbolMatch += 1.0 / task.ExtractedSymbols.Count;
+            foreach (var sym in task.ExtractedSymbols)
+            {
+                if (candidate.MatchedSymbols.Any(m => m.Contains(sym, StringComparison.OrdinalIgnoreCase)))
+                    symbolMatch += 1.0 / task.ExtractedSymbols.Count;
+            }
         }
 
         var textMatch = 0.0;
-        foreach (var kw in task.ExtractedKeywords)
+        if (task.ExtractedKeywords.Count > 0)
         {
-            if (candidate.NormalizedPath.Contains(kw, StringComparison.OrdinalIgnoreCase))
-                textMatch += 1.0 / Math.Max(task.ExtractedKeywords.Count, 1);
+            foreach (var kw in task.ExtractedKeywords)
+            {
+                if (candidate.NormalizedPath.Contains(kw, StringComparison.OrdinalIgnoreCase))
+                    textMatch += 1.0 / task.ExtractedKeywords.Count;
+            }
         }
 
         var pathMatch = 0.0;
         foreach (var path in task.ExtractedPaths)
         {
             if (candidate.NormalizedPath.Contains(path, StringComparison.OrdinalIgnoreCase))
+            {
                 pathMatch = 1.0;
+                break;
+            }
         }
 
         var gitDiff = candidate.Sources.Contains(Recall.RecallSource.GitDiff) ? 1.0 : 0.0;
@@ -147,34 +164,44 @@ public sealed class RankingEngine
             TextMatch = Math.Min(textMatch, 1.0),
             PathMatch = pathMatch,
             GitDiff = gitDiff,
-            DependencyRelation = 0.0, // Requires import graph (later phase)
             CurrentFileRelation = currentFileRelation,
             RecentChange = recentChange,
-            TestRelation = 0.0,
-            ConfigRelation = 0.0,
+            // Absolute size in bytes; normalized later to 0..1 (larger = less efficient)
+            SizeEfficiency = candidate.Size,
         };
     }
 
+    /// <summary>
+    /// True min-max normalization per feature. SizeEfficiency is inverted:
+    /// the largest file gets 0, smallest gets 1.
+    /// </summary>
     private static List<FeatureScores> NormalizeFeatures(List<FeatureScores> raw)
     {
         if (raw.Count == 0) return [];
 
+        // Min-max for each feature
         var maxSymbol = raw.Max(f => f.SymbolMatch);
-        if (maxSymbol == 0) maxSymbol = 1;
         var maxText = raw.Max(f => f.TextMatch);
-        if (maxText == 0) maxText = 1;
+        var maxSize = raw.Max(f => f.SizeEfficiency);
+        var minSize = raw.Min(f => f.SizeEfficiency);
 
-        return raw.Select(f => new FeatureScores
+        double MinMax(double value, double max) => max > 0 ? value / max : 0;
+
+        return raw.Select(f =>
         {
-            SymbolMatch = maxSymbol > 0 ? f.SymbolMatch / maxSymbol : 0,
-            TextMatch = maxText > 0 ? f.TextMatch / maxText : 0,
-            PathMatch = f.PathMatch,
-            GitDiff = f.GitDiff,
-            DependencyRelation = f.DependencyRelation,
-            CurrentFileRelation = f.CurrentFileRelation,
-            RecentChange = f.RecentChange,
-            TestRelation = f.TestRelation,
-            ConfigRelation = f.ConfigRelation,
+            // Inverted size efficiency: smaller files get higher scores
+            var sizeEfficiency = maxSize > minSize ? 1.0 - ((f.SizeEfficiency - minSize) / (maxSize - minSize)) : 1.0;
+
+            return new FeatureScores
+            {
+                SymbolMatch = MinMax(f.SymbolMatch, maxSymbol),
+                TextMatch = MinMax(f.TextMatch, maxText),
+                PathMatch = f.PathMatch,
+                GitDiff = f.GitDiff,
+                CurrentFileRelation = f.CurrentFileRelation,
+                RecentChange = f.RecentChange,
+                SizeEfficiency = sizeEfficiency,
+            };
         }).ToList();
     }
 
@@ -185,11 +212,9 @@ public sealed class RankingEngine
             + features.TextMatch * w.TextMatch
             + features.PathMatch * w.PathMatch
             + Math.Min(features.GitDiff * w.GitDiff, profile.GitDiffMaxBonus)
-            + features.DependencyRelation * w.DependencyRelation
             + features.CurrentFileRelation * w.CurrentFileRelation
             + features.RecentChange * w.RecentChange
-            + features.TestRelation * w.TestRelation
-            + features.ConfigRelation * w.ConfigRelation;
+            + features.SizeEfficiency * w.SizeEfficiency;
 
         return Math.Round(Math.Min(score, 1.0), 4);
     }
@@ -208,6 +233,7 @@ public sealed class RankingEngine
         if (features.GitDiff > 0) reasons.Add($"Git Diff ({features.GitDiff:F2}×{w.GitDiff})");
         if (features.CurrentFileRelation > 0) reasons.Add("当前文件");
         if (features.RecentChange > 0) reasons.Add("最近修改");
+        if (features.SizeEfficiency > 0.5) reasons.Add($"体积小 ({candidate.Size} bytes)");
 
         return reasons.Count > 0 ? reasons : ["低相关"];
     }

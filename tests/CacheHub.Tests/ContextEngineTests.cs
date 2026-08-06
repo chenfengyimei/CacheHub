@@ -41,7 +41,7 @@ public class ContextEngineTests
         Assert.NotEmpty(manifest.SelectedFiles);
         Assert.NotEmpty(manifest.Task.OriginalText);
         Assert.Equal("deterministic-query-v2", manifest.Task.QueryParserVersion);
-        Assert.Equal("deterministic-v1", manifest.Ranking.ProfileId);
+        Assert.Equal("deterministic-v2", manifest.Ranking.ProfileId);
         Assert.True(manifest.Budget.ActualEstimate > 0);
     }
 

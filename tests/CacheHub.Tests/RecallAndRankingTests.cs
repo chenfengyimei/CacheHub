@@ -168,12 +168,12 @@ public class RecallAndRankingTests
     }
 
     [Fact]
-    public void DefaultRankingProfile_ShouldHaveVersion3()
+    public void DefaultRankingProfile_ShouldHaveVersion4()
     {
         var profile = DefaultRankingProfile.Create();
 
-        Assert.Equal("deterministic-v1", profile.Id);
-        Assert.Equal(3, profile.Version);
+        Assert.Equal("deterministic-v2", profile.Id);
+        Assert.Equal(4, profile.Version);
         Assert.True(profile.Weights.SymbolMatch > 0);
     }
 
