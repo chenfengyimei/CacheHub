@@ -79,6 +79,11 @@ dotnet_diagnostic.CA2007.severity = none
 dotnet_diagnostic.CA2007.severity = none
 dotnet_diagnostic.IDE1006.severity = none
 
+# Desktop is a web host; ConfigureAwait not needed
+[**/AiKv.Desktop/**]
+dotnet_diagnostic.CA2007.severity = none
+dotnet_diagnostic.CA1852.severity = none
+
 # Indexing uses async streams; ConfigureAwait not needed
 [**/AiKv.Indexing/**]
 dotnet_diagnostic.CA2007.severity = none
