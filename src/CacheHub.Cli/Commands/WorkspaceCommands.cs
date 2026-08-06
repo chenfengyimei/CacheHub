@@ -49,6 +49,7 @@ public static class WorkspaceCommands
             new Migration0002Fts5(),
             new Migration0003ContextPackages(),
             new Migration0004Feedback(),
+        new Migration0005ContextPackageDetails(),
         ]);
         runner.Migrate();
         var repo = new SqliteWorkspaceRepository(factory);
