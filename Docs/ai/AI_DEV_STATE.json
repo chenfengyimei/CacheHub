@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "project": "AI_KV",
-  "currentPhase": "P01",
+  "currentPhase": "P02",
   "currentTask": null,
   "repository": {
     "branch": "main",
@@ -22,7 +22,8 @@
     "Context Package Manifest/Payload 分离，JSON Schema v1 冻结",
     "CapabilityFlags 序列化为 enabled 列表",
     "CI 使用 GitHub Actions",
-    "许可证选择 MIT 或 Apache-2.0（待定）"
+    "SQLite 连接禁用连接池以支持跨平台文件管理",
+    "应用数据目录全部位于 AI_KV 数据目录，不写入用户源码"
   ],
   "risks": [
     "许可证未正式确定（LICENSE 占位）",
@@ -30,8 +31,8 @@
   ],
   "blockers": [],
   "nextActions": [
-    "开始 P01-W001: 实现应用数据目录",
-    "开始 P01-W002: 实现 SQLite 连接与迁移"
+    "开始 P02-W001: 实现目录枚举器",
+    "开始 P02-W002: 实现忽略规则"
   ],
-  "lastUpdated": "2026-08-06T08:32:30Z"
+  "lastUpdated": "2026-08-06T16:56:00Z"
 }

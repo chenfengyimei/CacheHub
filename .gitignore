@@ -58,6 +58,9 @@ logs/
 *.sqlite-shm
 *.sqlite-wal
 
+# Codely CLI temp files
+.codely-cli/commit-msg.txt
+
 # Docs build
 Docs/**/*.docx~
 
