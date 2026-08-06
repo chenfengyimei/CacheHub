@@ -139,7 +139,7 @@ public class PayloadAndExportTests
     }
 
     [Fact]
-    public async Task FileExporter_ExportToRepositoryAsync_ShouldCreateCachehubDir()
+    public async Task FileExporter_PlanAndApplyRepositoryExport_ShouldCreateCachehubDir()
     {
         using var tempDir = new TempDir();
         using var repoDir = new TempDir();
@@ -147,7 +147,12 @@ public class PayloadAndExportTests
         var exporter = new FileExporter(appData);
         var manifest = CreateManifest();
 
-        var cachehubDir = await exporter.ExportToRepositoryAsync(repoDir.Path, manifest, path => "content");
+        // Plan first (no files written yet)
+        var plan = exporter.PlanRepositoryExport(repoDir.Path, manifest);
+        Assert.NotEmpty(plan.FilesToWrite);
+
+        // Apply the plan
+        var cachehubDir = await exporter.ApplyRepositoryExportAsync(plan, repoDir.Path, manifest, path => "content");
 
         Assert.True(Directory.Exists(cachehubDir));
         Assert.True(File.Exists(Path.Combine(cachehubDir, "workspace.json")));
@@ -159,7 +164,7 @@ public class PayloadAndExportTests
     }
 
     [Fact]
-    public async Task FileExporter_ExportToRepositoryAsync_ShouldNotDuplicateGitignoreEntry()
+    public async Task FileExporter_PlanRepositoryExport_ShouldNotDuplicateGitignoreEntry()
     {
         using var tempDir = new TempDir();
         using var repoDir = new TempDir();
@@ -169,11 +174,9 @@ public class PayloadAndExportTests
         var exporter = new FileExporter(appData);
         var manifest = CreateManifest();
 
-        await exporter.ExportToRepositoryAsync(repoDir.Path, manifest, path => "content");
-
-        var gitignore = await File.ReadAllTextAsync(Path.Combine(repoDir.Path, ".gitignore"));
-        var count = gitignore.Split(".cachehub/").Length - 1;
-        Assert.Equal(1, count); // Only one occurrence
+        // Plan: should detect existing .gitignore entry
+        var plan = exporter.PlanRepositoryExport(repoDir.Path, manifest);
+        Assert.Null(plan.GitignoreAddition); // No addition needed
     }
 
     [Fact]

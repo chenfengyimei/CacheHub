@@ -6,10 +6,22 @@ using CacheHub.Storage;
 namespace CacheHub.Context.Export;
 
 /// <summary>
+/// Plan for repository export: what files will be written and what .gitignore changes are needed.
+/// User must approve before Apply executes.
+/// </summary>
+public sealed record ExportPlan
+{
+    public required string TargetDirectory { get; init; }
+    public required IReadOnlyList<string> FilesToWrite { get; init; }
+    public required string? GitignoreAddition { get; init; }
+    public required IReadOnlyList<string> Risks { get; init; }
+}
+
+/// <summary>
 /// File export protocol: writes .cachehub/ directory with workspace.json,
 /// latest-context.manifest.json, latest-context.md, and repomap.md.
-/// Default export location is CacheHub data directory.
-/// Only writes to repository .cachehub/ when explicitly enabled by user.
+/// Default export location is CacheHub data directory (safe).
+/// Repository writes require Plan → user approval → Apply (with backup).
 /// </summary>
 public sealed class FileExporter
 {
@@ -22,7 +34,7 @@ public sealed class FileExporter
     }
 
     /// <summary>
-    /// Exports a context package to the CacheHub data directory.
+    /// Exports a context package to the CacheHub data directory (always safe).
     /// </summary>
     public async Task<string> ExportAsync(
         ContextPackageManifest manifest,
@@ -32,93 +44,98 @@ public sealed class FileExporter
         var exportDir = GetExportDir(workspaceId ?? manifest.WorkspaceId.Value);
         Directory.CreateDirectory(exportDir);
 
-        // 1. workspace.json
-        var workspaceJson = new
-        {
-            workspaceId = manifest.WorkspaceId.Value,
-            indexSnapshotId = manifest.IndexSnapshotId.Value,
-            schemaVersion = manifest.SchemaVersion,
-            engineVersion = manifest.ContextEngineVersion,
-        };
-        await File.WriteAllTextAsync(
-            Path.Combine(exportDir, "workspace.json"),
-            System.Text.Json.JsonSerializer.Serialize(workspaceJson, _jsonOpts));
-
-        // 2. latest-context.manifest.json
-        var manifestJson = System.Text.Json.JsonSerializer.Serialize(manifest, _jsonOpts);
-        await File.WriteAllTextAsync(
-            Path.Combine(exportDir, "latest-context.manifest.json"),
-            manifestJson);
-
-        // 3. latest-context.md
-        var generator = new PayloadGenerator();
-        var markdown = generator.GenerateMarkdown(manifest, contentProvider);
-        await File.WriteAllTextAsync(
-            Path.Combine(exportDir, "latest-context.md"),
-            markdown);
-
-        // 4. repomap.md
-        var repomap = GenerateRepoMap(manifest);
-        await File.WriteAllTextAsync(
-            Path.Combine(exportDir, "repomap.md"),
-            repomap);
-
+        await WriteContextFilesAsync(exportDir, manifest, contentProvider);
         return exportDir;
     }
 
     /// <summary>
-    /// Exports to a repository's .cachehub/ directory (requires explicit user opt-in).
-    /// Also generates a .gitignore entry suggestion.
+    /// Plans an export to a repository's .cachehub/ directory.
+    /// Returns what will be written — does NOT modify any files.
+    /// User must call ApplyRepositoryExportAsync to execute.
     /// </summary>
-    public async Task<string> ExportToRepositoryAsync(
+    public ExportPlan PlanRepositoryExport(
+        string repositoryRoot,
+        ContextPackageManifest manifest)
+    {
+        var cachehubDir = Path.Combine(repositoryRoot, ".cachehub");
+
+        var filesToWrite = new List<string>
+        {
+            Path.Combine(cachehubDir, "workspace.json"),
+            Path.Combine(cachehubDir, "latest-context.manifest.json"),
+            Path.Combine(cachehubDir, "latest-context.md"),
+            Path.Combine(cachehubDir, "repomap.md"),
+        };
+
+        // Check if .gitignore needs updating
+        var gitignorePath = Path.Combine(repositoryRoot, ".gitignore");
+        string? gitignoreAddition = null;
+        var risks = new List<string>();
+
+        if (File.Exists(gitignorePath))
+        {
+            var content = File.ReadAllText(gitignorePath);
+            if (!content.Contains(".cachehub/", StringComparison.Ordinal))
+            {
+                gitignoreAddition = "\n.cachehub/\n";
+                risks.Add("Will modify existing .gitignore");
+            }
+        }
+        else
+        {
+            gitignoreAddition = ".cachehub/\n";
+            risks.Add("Will create new .gitignore file");
+        }
+
+        risks.Add("Will write files to repository directory");
+
+        return new ExportPlan
+        {
+            TargetDirectory = cachehubDir,
+            FilesToWrite = filesToWrite,
+            GitignoreAddition = gitignoreAddition,
+            Risks = risks,
+        };
+    }
+
+    /// <summary>
+    /// Applies a repository export plan. Creates backup of modified files,
+    /// writes atomically, and modifies .gitignore only if planned.
+    /// </summary>
+    public async Task<string> ApplyRepositoryExportAsync(
+        ExportPlan plan,
         string repositoryRoot,
         ContextPackageManifest manifest,
         Func<string, string> contentProvider)
     {
-        var cachehubDir = Path.Combine(repositoryRoot, ".cachehub");
-        Directory.CreateDirectory(cachehubDir);
+        Directory.CreateDirectory(plan.TargetDirectory);
 
-        // Write files directly into .cachehub/ (avoids duplicate in shared exports dir)
-        // 1. workspace.json
-        var workspaceJson = new
+        // Write context files
+        await WriteContextFilesAsync(plan.TargetDirectory, manifest, contentProvider);
+
+        // Apply .gitignore changes (with backup)
+        if (plan.GitignoreAddition is not null)
         {
-            workspaceId = manifest.WorkspaceId.Value,
-            indexSnapshotId = manifest.IndexSnapshotId.Value,
-            schemaVersion = manifest.SchemaVersion,
-            engineVersion = manifest.ContextEngineVersion,
-        };
-        await File.WriteAllTextAsync(
-            Path.Combine(cachehubDir, "workspace.json"),
-            System.Text.Json.JsonSerializer.Serialize(workspaceJson, _jsonOpts));
+            var gitignorePath = Path.Combine(repositoryRoot, ".gitignore");
+            var backupPath = gitignorePath + ".cachehub-backup";
 
-        // 2. latest-context.manifest.json
-        var manifestJson = System.Text.Json.JsonSerializer.Serialize(manifest, _jsonOpts);
-        await File.WriteAllTextAsync(
-            Path.Combine(cachehubDir, "latest-context.manifest.json"),
-            manifestJson);
+            // Backup existing .gitignore
+            if (File.Exists(gitignorePath))
+            {
+                File.Copy(gitignorePath, backupPath, overwrite: true);
+            }
 
-        // 3. latest-context.md
-        var generator = new PayloadGenerator();
-        var markdown = generator.GenerateMarkdown(manifest, contentProvider);
-        await File.WriteAllTextAsync(
-            Path.Combine(cachehubDir, "latest-context.md"),
-            markdown);
+            // Atomic write: write to temp file then rename
+            var tempPath = gitignorePath + ".tmp";
+            var content = File.Exists(gitignorePath) ? await File.ReadAllTextAsync(gitignorePath) : "";
+            content += plan.GitignoreAddition;
+            await File.WriteAllTextAsync(tempPath, content);
 
-        // 4. repomap.md
-        var repomap = GenerateRepoMap(manifest);
-        await File.WriteAllTextAsync(
-            Path.Combine(cachehubDir, "repomap.md"),
-            repomap);
-
-        // Suggest .gitignore entry
-        var gitignorePath = Path.Combine(repositoryRoot, ".gitignore");
-        var gitignoreContent = File.Exists(gitignorePath) ? await File.ReadAllTextAsync(gitignorePath) : "";
-        if (!gitignoreContent.Contains(".cachehub/", StringComparison.Ordinal))
-        {
-            await File.AppendAllTextAsync(gitignorePath, "\n.cachehub/\n");
+            // Atomic rename (on most OS)
+            File.Move(tempPath, gitignorePath, overwrite: true);
         }
 
-        return cachehubDir;
+        return plan.TargetDirectory;
     }
 
     /// <summary>
@@ -133,9 +150,39 @@ public sealed class FileExporter
         return System.Text.Json.JsonSerializer.Deserialize<ContextPackageManifest>(json, _jsonOpts);
     }
 
+    private async Task WriteContextFilesAsync(string dir, ContextPackageManifest manifest, Func<string, string> contentProvider)
+    {
+        // 1. workspace.json
+        var workspaceJson = new
+        {
+            workspaceId = manifest.WorkspaceId.Value,
+            indexSnapshotId = manifest.IndexSnapshotId.Value,
+            schemaVersion = manifest.SchemaVersion,
+            engineVersion = manifest.ContextEngineVersion,
+        };
+        await File.WriteAllTextAsync(
+            Path.Combine(dir, "workspace.json"),
+            System.Text.Json.JsonSerializer.Serialize(workspaceJson, _jsonOpts));
+
+        // 2. latest-context.manifest.json
+        var manifestJson = System.Text.Json.JsonSerializer.Serialize(manifest, _jsonOpts);
+        await File.WriteAllTextAsync(
+            Path.Combine(dir, "latest-context.manifest.json"), manifestJson);
+
+        // 3. latest-context.md
+        var generator = new PayloadGenerator();
+        var markdown = generator.GenerateMarkdown(manifest, contentProvider);
+        await File.WriteAllTextAsync(
+            Path.Combine(dir, "latest-context.md"), markdown);
+
+        // 4. repomap.md
+        var repomap = GenerateRepoMap(manifest);
+        await File.WriteAllTextAsync(
+            Path.Combine(dir, "repomap.md"), repomap);
+    }
+
     private string GetExportDir(string workspaceId)
     {
-        // Sanitize workspaceId to prevent path traversal
         var safeId = workspaceId.Replace("..", "").Replace("/", "").Replace("\\", "").Replace(":", "");
         if (string.IsNullOrWhiteSpace(safeId)) safeId = "default";
         return Path.Combine(_appData.Root, "exports", safeId);
