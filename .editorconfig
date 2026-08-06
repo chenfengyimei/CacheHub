@@ -69,6 +69,7 @@ dotnet_diagnostic.CA1036.severity = none
 [**/AiKv.Core/**]
 dotnet_diagnostic.CA2007.severity = none
 dotnet_diagnostic.CA1822.severity = none
+dotnet_diagnostic.IDE1006.severity = none
 
 # Test projects use underscore naming convention and xUnit collection naming
 [**/AiKv.Tests/**]
