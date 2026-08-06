@@ -31,7 +31,7 @@ public static class GatewayCommands
         if (string.IsNullOrEmpty(baseUrl))
         {
             Console.Error.WriteLine("Error: --provider-url=<url> is required");
-            Console.Error.WriteLine("Example: cachehub gateway start --provider-url=https://api.openai.com --provider-key=sk-xxx");
+            Console.Error.WriteLine("Example: cachehub gateway start --provider-url=https://api.openai.com --provider-key=$OPENAI_API_KEY");
             return 1;
         }
 
@@ -53,7 +53,7 @@ public static class GatewayCommands
             Port = portNum,
         };
 
-        Console.Error.WriteLine($"Starting CacheHub Gateway on http://{config.Host}:{config.Port}");
+        Console.Error.WriteLine($"Starting CacheHub Gateway on http://127.0.0.1:{config.Port}");
         Console.Error.WriteLine($"  Provider: {config.ProviderBaseUrl}");
         Console.Error.WriteLine($"  Cache: {config.EnableCache}");
         Console.Error.WriteLine($"  SingleFlight: {config.EnableSingleFlight}");
@@ -65,6 +65,8 @@ public static class GatewayCommands
         try
         {
             using var server = new GatewayServer(config);
+            Console.Error.WriteLine($"  Access Token: {server.AccessToken}");
+            Console.Error.WriteLine("  All API requests require: Authorization: Bearer <token>");
             var statsTask = Task.Run(async () =>
             {
                 while (!cts.Token.IsCancellationRequested)

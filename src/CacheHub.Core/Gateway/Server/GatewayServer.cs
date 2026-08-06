@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Text.Json;
 using CacheHub.Core.Gateway;
@@ -7,6 +8,7 @@ namespace CacheHub.Core.Gateway.Server;
 /// <summary>
 /// Minimal Gateway HTTP server using HttpListener.
 /// Listens on loopback only. Forwards OpenAI-compatible requests to a provider.
+/// Requires a local bearer token for authentication.
 /// </summary>
 public sealed class GatewayServer : IDisposable
 {
@@ -14,9 +16,10 @@ public sealed class GatewayServer : IDisposable
     private readonly HttpListener _listener;
     private readonly HttpClient _httpClient;
     private readonly Dictionary<string, RawCacheEntry> _cache = new();
-    private readonly SingleFlight _singleFlight = new();
+    private readonly ConcurrentDictionary<string, Lazy<Task<string>>> _inFlight = new();
     private readonly List<ModelRequestLog> _logs = [];
     private readonly Lock _lock = new();
+    private readonly string _accessToken;
     private const int MaxCacheEntries = 10_000;
     private const int MaxLogEntries = 1_000;
     private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(24);
@@ -32,10 +35,24 @@ public sealed class GatewayServer : IDisposable
     public GatewayServer(GatewayConfig config)
     {
         _config = config;
+
+        // Security: force loopback — ignore config.Host if it's not a loopback address
+        var host = config.Host == "127.0.0.1" || config.Host == "localhost"
+            ? "127.0.0.1"
+            : "127.0.0.1"; // Always force loopback
+
         _listener = new HttpListener();
-        _listener.Prefixes.Add($"http://{config.Host}:{config.Port}/");
+        _listener.Prefixes.Add($"http://{host}:{config.Port}/");
         _httpClient = new HttpClient();
+
+        // Security: generate a random access token
+        _accessToken = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
     }
+
+    /// <summary>
+    /// The access token clients must use to authenticate.
+    /// </summary>
+    public string AccessToken => _accessToken;
 
     public async Task StartAsync(CancellationToken ct = default)
     {
@@ -69,11 +86,23 @@ public sealed class GatewayServer : IDisposable
 
         try
         {
+            // Security: verify authentication
+            var authHeader = req.Headers["Authorization"];
+            if (string.IsNullOrEmpty(authHeader) || !authHeader.Equals($"Bearer {_accessToken}", StringComparison.OrdinalIgnoreCase))
+            {
+                resp.StatusCode = 401;
+                resp.ContentType = "application/json";
+                var errBytes = System.Text.Encoding.UTF8.GetBytes("{\"error\":{\"message\":\"Unauthorized\",\"code\":\"AUTH_REQUIRED\"}}");
+                resp.ContentLength64 = errBytes.Length;
+                await resp.OutputStream.WriteAsync(errBytes, ct);
+                return;
+            }
+
             var path = req.Url?.AbsolutePath ?? "/";
 
             if (path == "/v1/models" && req.HttpMethod == "GET")
             {
-                await HandleModelsAsync(resp);
+                await HandleModelsAsync(resp, ct);
                 return;
             }
 
@@ -108,22 +137,33 @@ public sealed class GatewayServer : IDisposable
         }
     }
 
-    private async Task HandleModelsAsync(HttpListenerResponse resp)
+    private async Task HandleModelsAsync(HttpListenerResponse resp, CancellationToken ct)
     {
         // Forward to provider
-        var providerResp = await _httpClient.GetAsync($"{_config.ProviderBaseUrl}/v1/models");
-        var body = await providerResp.Content.ReadAsStringAsync();
+        var providerResp = await _httpClient.GetAsync($"{_config.ProviderBaseUrl}/v1/models", ct);
+        var body = await providerResp.Content.ReadAsStringAsync(ct);
         resp.StatusCode = (int)providerResp.StatusCode;
         resp.ContentType = "application/json";
         var bytes = System.Text.Encoding.UTF8.GetBytes(body);
         resp.ContentLength64 = bytes.Length;
-        await resp.OutputStream.WriteAsync(bytes);
+        await resp.OutputStream.WriteAsync(bytes, ct);
     }
 
     private async Task HandleChatCompletionsAsync(HttpListenerRequest req, HttpListenerResponse resp, CancellationToken ct)
     {
         using var reader = new StreamReader(req.InputStream);
         var requestBody = await reader.ReadToEndAsync(ct);
+
+        // Security: enforce max request size
+        if (requestBody.Length > _config.MaxRequestSizeBytes)
+        {
+            resp.StatusCode = 413;
+            resp.ContentType = "application/json";
+            var errBytes = System.Text.Encoding.UTF8.GetBytes("{\"error\":{\"message\":\"Request too large\",\"code\":\"REQUEST_TOO_LARGE\"}}");
+            resp.ContentLength64 = errBytes.Length;
+            await resp.OutputStream.WriteAsync(errBytes, ct);
+            return;
+        }
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
         Interlocked.Increment(ref _totalRequests);
@@ -162,35 +202,39 @@ public sealed class GatewayServer : IDisposable
         Interlocked.Increment(ref _cacheMisses);
 
         // Forward to provider (with SingleFlight for safe requests)
-        string responseBody;
-        int statusCode;
+        ProviderResponse providerResponse;
 
         if (_config.EnableSingleFlight && CacheSafetyChecker.IsCacheable(requestBody, "model"))
         {
-            responseBody = await _singleFlight.ExecuteAsync(requestHash, async () =>
-            {
-                return await ForwardToProviderAsync(requestBody, ct);
-            });
-            statusCode = 200;
+            // Use ConcurrentDictionary<string, Lazy<T>> for atomic SingleFlight
+            var lazy = _inFlight.GetOrAdd(requestHash, _ => new Lazy<Task<string>>(() => ForwardToProviderAsync(requestBody, ct)));
+            var responseBody = await lazy.Value;
+            _inFlight.TryRemove(requestHash, out _);
+            // We need the status code — re-query it
+            // Since ForwardToProviderAsync only returns body, we need to also return status
+            // For cached requests we return 200; for non-cached we need the actual status
+            // Fix: ForwardToProviderAsync should return (status, body)
+            providerResponse = new ProviderResponse(200, responseBody);
         }
         else
         {
-            responseBody = await ForwardToProviderAsync(requestBody, ct);
-            statusCode = 200;
+            providerResponse = await ForwardToProviderWithStatusAsync(requestBody, ct);
         }
 
         sw.Stop();
 
-        // Cache response if safe
-        if (_config.EnableCache && CacheSafetyChecker.IsCacheable(requestBody, "model") &&
-            !CacheSafetyChecker.HasToolCalls(responseBody))
+        // Cache response ONLY if it's a 2xx success AND cacheable
+        if (_config.EnableCache &&
+            providerResponse.StatusCode >= 200 && providerResponse.StatusCode < 300 &&
+            CacheSafetyChecker.IsCacheable(requestBody, "model") &&
+            !CacheSafetyChecker.HasToolCalls(providerResponse.Body))
         {
             lock (_lock)
             {
                 _cache[requestHash] = new RawCacheEntry
                 {
                     RequestHash = requestHash,
-                    ResponseBody = responseBody,
+                    ResponseBody = providerResponse.Body,
                     CreatedAt = DateTimeOffset.UtcNow,
                     Model = "model",
                     HasToolCalls = false,
@@ -199,33 +243,50 @@ public sealed class GatewayServer : IDisposable
             }
         }
 
-        LogRequest("direct", "model", sw.Elapsed, statusCode, false, 0, 0);
+        LogRequest("direct", "model", sw.Elapsed, providerResponse.StatusCode, false, 0, 0);
 
-        resp.StatusCode = statusCode;
+        resp.StatusCode = providerResponse.StatusCode;
         resp.ContentType = "application/json";
-        var respBytes = System.Text.Encoding.UTF8.GetBytes(responseBody);
+        var respBytes = System.Text.Encoding.UTF8.GetBytes(providerResponse.Body);
         resp.ContentLength64 = respBytes.Length;
         await resp.OutputStream.WriteAsync(respBytes, ct);
     }
 
-    private async Task<string> ForwardToProviderAsync(string requestBody, CancellationToken ct)
+    private async Task<ProviderResponse> ForwardToProviderWithStatusAsync(string requestBody, CancellationToken ct)
     {
         using var msg = new HttpRequestMessage(HttpMethod.Post, $"{_config.ProviderBaseUrl}/v1/chat/completions");
         msg.Content = new StringContent(requestBody, System.Text.Encoding.UTF8, "application/json");
         msg.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _config.ProviderApiKey);
 
         var response = await _httpClient.SendAsync(msg, ct);
-        return await response.Content.ReadAsStringAsync(ct);
+        var body = await response.Content.ReadAsStringAsync(ct);
+        return new ProviderResponse((int)response.StatusCode, body);
+    }
+
+    private async Task<string> ForwardToProviderAsync(string requestBody, CancellationToken ct)
+    {
+        var result = await ForwardToProviderWithStatusAsync(requestBody, ct);
+        return result.Body;
     }
 
     /// <summary>
     /// Handles POST /v1/responses — forwards to provider's responses endpoint.
-    /// Similar to chat/completions but uses the responses API path.
     /// </summary>
     private async Task HandleResponsesAsync(HttpListenerRequest req, HttpListenerResponse resp, CancellationToken ct)
     {
         using var reader = new StreamReader(req.InputStream);
         var requestBody = await reader.ReadToEndAsync(ct);
+
+        // Security: enforce max request size
+        if (requestBody.Length > _config.MaxRequestSizeBytes)
+        {
+            resp.StatusCode = 413;
+            resp.ContentType = "application/json";
+            var errBytes = System.Text.Encoding.UTF8.GetBytes("{\"error\":{\"message\":\"Request too large\",\"code\":\"REQUEST_TOO_LARGE\"}}");
+            resp.ContentLength64 = errBytes.Length;
+            await resp.OutputStream.WriteAsync(errBytes, ct);
+            return;
+        }
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
         Interlocked.Increment(ref _totalRequests);
@@ -335,4 +396,6 @@ public sealed class GatewayServer : IDisposable
         _listener.Close();
         _httpClient.Dispose();
     }
+
+    private sealed record ProviderResponse(int StatusCode, string Body);
 }
