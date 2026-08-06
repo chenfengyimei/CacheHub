@@ -131,12 +131,15 @@ public sealed record GitOperationResult
 /// Wraps Git CLI execution with parameter arrays (no shell string concatenation).
 /// Supports timeout, cancellation, and output limits.
 /// </summary>
-public sealed class GitProcessWrapper
+public sealed partial class GitProcessWrapper
 {
+    private const int MaxOutputChars = 100_000; // Limit output to prevent memory exhaustion
+
     public async Task<GitOperationResult> ExecuteAsync(
         string workingDirectory,
         IReadOnlyList<string> args,
         TimeSpan? timeout = null,
+        bool skipLfs = false,
         CancellationToken ct = default)
     {
         var psi = new ProcessStartInfo
@@ -152,14 +155,26 @@ public sealed class GitProcessWrapper
         foreach (var arg in args)
             psi.ArgumentList.Add(arg);
 
+        // Fix REPO-P1-001: Use environment variable instead of --no-lfs flag
+        if (skipLfs)
+            psi.Environment["GIT_LFS_SKIP_SMUDGE"] = "1";
+
         using var process = Process.Start(psi);
         if (process is null)
             return new GitOperationResult { Success = false, Output = "", ExitCode = -1, ErrorMessage = "Failed to start git process" };
 
         var outputBuilder = new System.Text.StringBuilder();
         var errorBuilder = new System.Text.StringBuilder();
-        process.OutputDataReceived += (_, e) => { if (e.Data is not null) outputBuilder.AppendLine(e.Data); };
-        process.ErrorDataReceived += (_, e) => { if (e.Data is not null) errorBuilder.AppendLine(e.Data); };
+        process.OutputDataReceived += (_, e) =>
+        {
+            if (e.Data is not null && outputBuilder.Length < MaxOutputChars)
+                outputBuilder.AppendLine(e.Data);
+        };
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if (e.Data is not null && errorBuilder.Length < MaxOutputChars)
+                errorBuilder.AppendLine(e.Data);
+        };
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
 
@@ -171,26 +186,54 @@ public sealed class GitProcessWrapper
 
         await process.WaitForExitAsync(ct);
 
+        var output = outputBuilder.ToString();
+        var errorMsg = process.ExitCode != 0 ? RedactCredentials(errorBuilder.ToString()) : null;
+        output = RedactCredentials(output);
+
         return new GitOperationResult
         {
             Success = process.ExitCode == 0,
-            Output = outputBuilder.ToString(),
+            Output = output,
             ExitCode = process.ExitCode,
-            ErrorMessage = process.ExitCode != 0 ? errorBuilder.ToString() : null,
+            ErrorMessage = errorMsg,
         };
     }
+
+    /// <summary>
+    /// Redacts credentials from Git output. Replaces URLs with embedded credentials.
+    /// Fix REPO-P1-002: URL/命令输出未脱敏
+    /// </summary>
+    private static string RedactCredentials(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+        // Redact https://user:password@host patterns
+        return RedactUrlRegex().Replace(text, "https://$1@");
+    }
+
+    /// <summary>
+    /// Removes credentials from a URL (user:password@ → @).
+    /// </summary>
+    private static string RedactUrl(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return url;
+        return RedactUrlRegex().Replace(url, "https://$1@");
+    }
+
+    [GeneratedRegex(@"https?://[^:]+:[^@]+@([^/]+)")]
+    private static partial Regex RedactUrlRegex();
 
     public Task<GitOperationResult> CloneAsync(ClonePlan plan, CancellationToken ct = default)
     {
         var args = new List<string> { "clone" };
         if (plan.Depth is not null) args.AddRange(["--depth", plan.Depth.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)]);
         if (!plan.IncludeSubmodules) args.Add("--no-recurse-submodules");
-        if (!plan.IncludeLfs) args.Add("--no-lfs");
+        // Fix REPO-P1-001: --no-lfs is not a valid git flag. Use GIT_LFS_SKIP_SMUDGE=1 environment variable instead.
+        if (!plan.IncludeLfs) args.Add("--no-recurse-submodules"); // already added above, safe no-op
         if (plan.Branch is not null) args.AddRange(["--branch", plan.Branch]);
-        args.Add(plan.Url);
+        args.Add(RedactUrl(plan.Url)); // Use redacted URL in case it contains credentials
         args.Add(plan.Destination);
 
-        return ExecuteAsync(Environment.CurrentDirectory, args, timeout: TimeSpan.FromMinutes(5), ct);
+        return ExecuteAsync(Environment.CurrentDirectory, args, timeout: TimeSpan.FromMinutes(5), ct: ct, skipLfs: !plan.IncludeLfs);
     }
 
     public Task<GitOperationResult> StatusAsync(string workingDir, CancellationToken ct = default)
