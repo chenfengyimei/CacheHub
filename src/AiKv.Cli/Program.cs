@@ -26,6 +26,7 @@ if (args.Length == 0)
     Console.WriteLine("  config show                        Show current configuration");
     Console.WriteLine("  config init                        Create default config file");
     Console.WriteLine("  config set <key> <value>           Set a configuration value");
+    Console.WriteLine("  stats [--output=json]              Show usage statistics");
     Console.WriteLine("  integration verify                 Verify installation and integration");
     return 1;
 }
@@ -40,5 +41,6 @@ return args[0] switch
     "detect" => DetectCommands.Handle(args.AsSpan(1).ToArray()),
     "gateway" => await GatewayCommands.HandleAsync(args.AsSpan(1).ToArray()),
     "config" => ConfigCommands.Handle(args.AsSpan(1).ToArray()),
+    "stats" => await StatsCommands.HandleAsync(args.AsSpan(1).ToArray()),
     _ => 1,
 };
