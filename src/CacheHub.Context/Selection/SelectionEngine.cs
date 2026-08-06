@@ -72,6 +72,26 @@ public sealed class SelectionEngine
 
             var (actualTokens, ranges) = ApplyMode(candidate.Path, content, mode, effectiveBudget - totalTokens);
 
+            // CTX-P1-004: Reject ghost files — 0-token files with empty content
+            if (actualTokens == 0 && mode != SelectionMode.Metadata)
+            {
+                // Try falling back to Metadata mode (path + size only)
+                mode = SelectionMode.Metadata;
+                (actualTokens, ranges) = ApplyMode(candidate.Path, content, mode, effectiveBudget - totalTokens);
+            }
+
+            // If still 0 tokens, exclude as ghost file
+            if (actualTokens == 0)
+            {
+                excluded.Add(new ExcludedFileItem
+                {
+                    Path = candidate.Path,
+                    Score = candidate.Score,
+                    Reason = "幽灵文件（0 token 内容）",
+                });
+                continue;
+            }
+
             if (totalTokens + actualTokens > effectiveBudget)
             {
                 // Try to fit as chunks
