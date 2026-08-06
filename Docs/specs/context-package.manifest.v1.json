@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aikv.dev/schemas/context-package.manifest.v1.json",
+  "title": "AI_KV Context Package Manifest v1",
+  "description": "Manifest of a Context Package: metadata, selected files, reasons, budget, and security info. Separated from payload.",
+  "type": "object",
+  "required": [
+    "id",
+    "schemaVersion",
+    "workspaceId",
+    "indexSnapshotId",
+    "task",
+    "ranking",
+    "budget",
+    "selectedFiles",
+    "excludedCandidates",
+    "safety",
+    "createdAt"
+  ],
+  "properties": {
+    "id": { "type": "string", "pattern": "^ctx_[a-zA-Z0-9]+$" },
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "workspaceId": { "type": "string" },
+    "indexSnapshotId": { "type": "string" },
+    "repositoryCommit": { "type": ["string", "null"] },
+    "branch": { "type": ["string", "null"] },
+    "dirtyStateHash": { "type": ["string", "null"] },
+    "task": {
+      "type": "object",
+      "required": ["originalText", "queryParserVersion"],
+      "properties": {
+        "originalText": { "type": "string" },
+        "queryParserVersion": { "type": "string" },
+        "extractedSymbols": { "type": "array", "items": { "type": "string" } },
+        "extractedPaths": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "ranking": {
+      "type": "object",
+      "required": ["profileId", "profileVersion"],
+      "properties": {
+        "profileId": { "type": "string" },
+        "profileVersion": { "type": "integer" }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "required": [
+        "modelContextWindow",
+        "agentReservedTokens",
+        "responseReservedTokens",
+        "contextTarget",
+        "contextHardLimit",
+        "safetyMargin",
+        "actualEstimate"
+      ],
+      "properties": {
+        "modelContextWindow": { "type": "integer", "minimum": 1 },
+        "agentReservedTokens": { "type": "integer", "minimum": 0 },
+        "responseReservedTokens": { "type": "integer", "minimum": 0 },
+        "contextTarget": { "type": "integer", "minimum": 1 },
+        "contextHardLimit": { "type": "integer", "minimum": 1 },
+        "safetyMargin": { "type": "integer", "minimum": 0 },
+        "actualEstimate": { "type": "integer", "minimum": 0 },
+        "tokenizer": { "type": "string" },
+        "tokenizerVersion": { "type": "string" }
+      }
+    },
+    "selectedFiles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "contentHash", "mode", "score", "reasons"],
+        "properties": {
+          "path": { "type": "string" },
+          "contentHash": { "type": "string" },
+          "mode": {
+            "type": "string",
+            "enum": ["full", "chunks", "outline", "deterministicSummary", "metadata"]
+          },
+          "score": { "type": "number", "minimum": 0, "maximum": 1 },
+          "reasons": { "type": "array", "items": { "type": "string" } },
+          "ranges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["startLine", "endLine"],
+              "properties": {
+                "startLine": { "type": "integer", "minimum": 1 },
+                "endLine": { "type": "integer", "minimum": 1 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "excludedCandidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "score", "reason"],
+        "properties": {
+          "path": { "type": "string" },
+          "score": { "type": "number", "minimum": 0, "maximum": 1 },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "safety": {
+      "type": "object",
+      "required": ["cloudSendAllowed", "secretsScanPassed"],
+      "properties": {
+        "cloudSendAllowed": { "type": "boolean" },
+        "secretsScanPassed": { "type": "boolean" },
+        "ignoreRulesHash": { "type": "string" },
+        "securityPolicyVersion": { "type": "string" },
+        "secretScannerVersion": { "type": "string" },
+        "approvalId": { "type": ["string", "null"] },
+        "sensitiveExclusions": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "parserVersions": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "repoMapVersion": { "type": ["string", "null"] },
+    "contextEngineVersion": { "type": "string" },
+    "chunkingStrategyVersion": { "type": "string" },
+    "tokenBudgetPolicyVersion": { "type": "string" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "parentPackageId": { "type": ["string", "null"] }
+  },
+  "additionalProperties": false
+}

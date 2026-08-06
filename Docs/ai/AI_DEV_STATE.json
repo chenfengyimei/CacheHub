@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "project": "AI_KV",
+  "currentPhase": "P01",
+  "currentTask": null,
+  "repository": {
+    "branch": "main",
+    "head": "",
+    "dirty": false,
+    "uncommittedFiles": []
+  },
+  "qualityGates": {
+    "build": "pass",
+    "unitTests": "pass",
+    "integrationTests": "unknown",
+    "securityTests": "unknown",
+    "format": "pass"
+  },
+  "decisions": [
+    "使用 .NET 9 + C# latest",
+    "强类型标识符使用 record + StrongId 基类",
+    "Context Package Manifest/Payload 分离，JSON Schema v1 冻结",
+    "CapabilityFlags 序列化为 enabled 列表",
+    "CI 使用 GitHub Actions",
+    "许可证选择 MIT 或 Apache-2.0（待定）"
+  ],
+  "risks": [
+    "许可证未正式确定（LICENSE 占位）",
+    "Tree-sitter 原生库打包策略待 P03 确定"
+  ],
+  "blockers": [],
+  "nextActions": [
+    "开始 P01-W001: 实现应用数据目录",
+    "开始 P01-W002: 实现 SQLite 连接与迁移"
+  ],
+  "lastUpdated": "2026-08-06T08:32:30Z"
+}
