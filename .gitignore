@@ -19,6 +19,7 @@ x86/
 [Aa][Rr][Mm]64/
 artifacts/
 bld/
+publish/
 
 # NuGet
 *.nupkg

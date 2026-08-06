@@ -31,6 +31,8 @@ public sealed record ExpansionResult
 /// </summary>
 public sealed class ContextExpander
 {
+    private const int DefaultMaxAdditionalTokens = 4000;
+
     /// <summary>
     /// Expands by file path.
     /// </summary>
@@ -38,31 +40,47 @@ public sealed class ContextExpander
         string contextPackageId,
         string filePath,
         string content,
-        string reason)
+        string reason,
+        int maxAdditionalTokens = DefaultMaxAdditionalTokens)
     {
-        var globalVoid = new GlobalUsings();
-        _ = globalVoid;
         var tokens = ChunkingStrategy.EstimateTokens(content);
 
-        // single placeholder for analysis
+        // If content exceeds budget, chunk it
+        IReadOnlyList<PayloadItem> items;
+        if (tokens <= maxAdditionalTokens)
+        {
+            items = [new PayloadItem
+            {
+                Path = filePath,
+                Mode = SelectionMode.Chunks,
+                Content = content,
+                StartLine = 1,
+            }];
+        }
+        else
+        {
+            // Truncate to fit budget — include only the portion that fits
+            var estimatedChars = maxAdditionalTokens * 4;
+            var truncatedContent = content.Length > estimatedChars
+                ? content[..estimatedChars] + "\n... (truncated to fit token budget)"
+                : content;
+            tokens = ChunkingStrategy.EstimateTokens(truncatedContent);
+
+            items = [new PayloadItem
+            {
+                Path = filePath,
+                Mode = SelectionMode.Chunks,
+                Content = truncatedContent,
+                StartLine = 1,
+            }];
+        }
+
         return new ExpansionResult
         {
             ContextPackageId = contextPackageId,
-            AddedItems =
-            [
-                new PayloadItem
-                {
-                    Path = filePath,
-                    Mode = SelectionMode.Chunks,
-                    Content = content,
-                    StartLine = 1,
-                },
-            ],
+            AddedItems = items,
             AdditionalTokens = tokens,
-            Reason = $"缺少: {reason}",
+            Reason = $"Expanded: {reason}",
         };
     }
 }
-
-// placeholder to keep file scoped namespace consistent
-internal sealed class GlobalUsings;

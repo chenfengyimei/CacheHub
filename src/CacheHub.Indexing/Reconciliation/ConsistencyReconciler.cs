@@ -82,10 +82,10 @@ public sealed class ConsistencyReconciler
 
     /// <summary>
     /// Forces a full re-check (e.g., after branch switch).
+    /// Resolves the actual commit hash from .git/HEAD (following ref: symbolic refs).
     /// </summary>
     public static bool NeedsForcedReconcile(string rootPath, string lastKnownCommitHash)
     {
-        // If Git HEAD changed, force reconcile.
         var gitDir = Path.Combine(rootPath, ".git");
         if (!Directory.Exists(gitDir)) return false;
 
@@ -93,7 +93,35 @@ public sealed class ConsistencyReconciler
         if (!File.Exists(headFile)) return false;
 
         var currentHead = File.ReadAllText(headFile).Trim();
-        return currentHead != lastKnownCommitHash;
+
+        // Resolve symbolic ref (e.g., "ref: refs/heads/main" → read the actual commit hash)
+        if (currentHead.StartsWith("ref: ", StringComparison.Ordinal))
+        {
+            var refPath = currentHead["ref: ".Length..];
+            var resolvedFile = Path.Combine(gitDir, refPath);
+            if (File.Exists(resolvedFile))
+            {
+                currentHead = File.ReadAllText(resolvedFile).Trim();
+            }
+            else
+            {
+                // Packed-refs fallback
+                var packedRefs = Path.Combine(gitDir, "packed-refs");
+                if (File.Exists(packedRefs))
+                {
+                    foreach (var line in File.ReadAllLines(packedRefs))
+                    {
+                        if (line.EndsWith(refPath, StringComparison.Ordinal) && line.Length > 40)
+                        {
+                            currentHead = line[..40].Trim();
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        return !string.IsNullOrEmpty(currentHead) && currentHead != lastKnownCommitHash;
     }
 
     private static Dictionary<string, long> ScanDisk(string rootPath, IReadOnlySet<string>? ignorePatterns)
