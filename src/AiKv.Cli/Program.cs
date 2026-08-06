@@ -42,6 +42,7 @@ if (args.Length == 0)
     Console.WriteLine("  clean <temp|cache|exports|all>       Clean AI_KV data [--dry-run]");
     Console.WriteLine("  token <text|--file> [--model=<id>]    Estimate token count");
     Console.WriteLine("  hash <file>                          Compute file hash (SHA-256/fingerprint)");
+    Console.WriteLine("  scan <file|dir>                      Scan for secrets and sensitive files");
     Console.WriteLine("  integration verify                 Verify installation and integration");
     return 1;
 }
@@ -68,5 +69,6 @@ return args[0] switch
     "clean" => CleanCommands.Handle(args.AsSpan(1).ToArray()),
     "token" => TokenCommands.Handle(args.AsSpan(1).ToArray()),
     "hash" => await HashCommands.HandleAsync(args.AsSpan(1).ToArray()),
+    "scan" => ScanCommands.Handle(args.AsSpan(1).ToArray()),
     _ => 1,
 };
