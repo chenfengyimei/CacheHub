@@ -99,7 +99,7 @@ public sealed class LruCache : IDisposable
             _lruList.AddFirst(node);
 
             RecordHit(node.Value.Type);
-            return node.Value;
+            return node.Value with { IsHit = true };
         }
     }
 

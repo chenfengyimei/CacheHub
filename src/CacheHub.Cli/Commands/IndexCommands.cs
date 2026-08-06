@@ -117,6 +117,11 @@ public static class IndexCommands
                     content, typeInfo.Language,
                     hash.IsFullHash ? hash.Hash : "pending");
 
+                await InsertFileAsync(
+                    factory, snapshotId, relativePath, relativePath,
+                    file.Size, hash.IsFullHash ? hash.Hash : "pending",
+                    typeInfo.Language, typeInfo.IsBinary);
+
                 fileCount++;
                 if (fileCount % 1000 == 0)
                     Console.WriteLine($"  Indexed {fileCount} files...");
@@ -252,6 +257,34 @@ public static class IndexCommands
             """;
         cmd.Parameters.AddWithValue("$id", snapshotId.Value);
         cmd.Parameters.AddWithValue("$ws", workspaceId.Value);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    private static async Task InsertFileAsync(
+        SqliteConnectionFactory factory,
+        IndexSnapshotId snapshotId,
+        string path,
+        string normalizedPath,
+        long size,
+        string contentHash,
+        string language,
+        bool isBinary)
+    {
+        await using var conn = factory.CreateOpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText =
+            """
+            INSERT INTO files (id, snapshot_id, path, normalized_path, size, content_hash, language, is_binary, status)
+            VALUES ($id, $snap, $path, $norm, $size, $hash, $lang, $bin, 'Indexed');
+            """;
+        cmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+        cmd.Parameters.AddWithValue("$snap", snapshotId.Value);
+        cmd.Parameters.AddWithValue("$path", path);
+        cmd.Parameters.AddWithValue("$norm", normalizedPath);
+        cmd.Parameters.AddWithValue("$size", size);
+        cmd.Parameters.AddWithValue("$hash", contentHash);
+        cmd.Parameters.AddWithValue("$lang", language);
+        cmd.Parameters.AddWithValue("$bin", isBinary ? 1 : 0);
         await cmd.ExecuteNonQueryAsync();
     }
 
