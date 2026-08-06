@@ -1,4 +1,10 @@
+using System.Text.Json;
+using AiKv.Context.Engine;
+using AiKv.Context.Parsing;
+using AiKv.Context.Recall;
 using AiKv.Core.Capabilities;
+using AiKv.Core.Context;
+using AiKv.Core.Feedback;
 using AiKv.Core.Identifiers;
 using AiKv.Core.Workspaces;
 using AiKv.Storage;
@@ -13,39 +19,69 @@ builder.Services.AddSingleton<SqliteConnectionFactory>(sp =>
 {
     var appData = sp.GetRequiredService<AppDataDirectory>();
     appData.EnsureCreated();
-    return new SqliteConnectionFactory(appData.GetWorkspaceDatabasePath("main"));
+    var dbPath = appData.GetWorkspaceDatabasePath("main");
+    var factory = new SqliteConnectionFactory(dbPath);
+    var runner = new MigrationRunner(factory, dbPath,
+    [
+        new Migration0001Initial(),
+        new Migration0002Fts5(),
+    ]);
+    runner.Migrate();
+    return factory;
 });
 builder.Services.AddSingleton<IWorkspaceRepository, SqliteWorkspaceRepository>();
+builder.Services.AddSingleton<ContextEngine>();
 
 var app = builder.Build();
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
-// === API Routes ===
-
-app.MapGet("/api/v1/capabilities", () =>
+static async Task<List<IndexedFileInfo>> GetIndexedFilesAsync(SqliteConnectionFactory factory, string workspaceId)
 {
-    return Results.Ok(new CapabilityDiscovery
+    var result = new List<IndexedFileInfo>();
+    await using var conn = factory.CreateOpenConnection();
+    using var cmd = conn.CreateCommand();
+    cmd.CommandText = """
+        SELECT f.normalized_path, f.size, f.language
+        FROM files f
+        INNER JOIN index_snapshots s ON f.snapshot_id = s.id
+        WHERE s.workspace_id = $ws AND s.status = 'Active';
+        """;
+    cmd.Parameters.AddWithValue("$ws", workspaceId);
+    await using var reader = await cmd.ExecuteReaderAsync();
+    while (await reader.ReadAsync())
     {
-        Version = "0.1.0-beta",
-        ProtocolVersion = "1.0",
-        Capabilities = CapabilityFlags.With(
-            Capability.WorkspaceImport,
-            Capability.ContextBuild,
-            Capability.ContextExpand,
-            Capability.ContextExplain,
-            Capability.FileExport,
-            Capability.Cache),
-        SchemaVersions = new Dictionary<string, int>
+        result.Add(new IndexedFileInfo
         {
-            ["contextPackage"] = 1,
-            ["capabilityDiscovery"] = 1,
-        },
-        Limitations = ["No Gateway", "No Semantic", "No LSP"],
-    });
-});
+            Path = reader.GetString(0),
+            NormalizedPath = reader.GetString(0),
+            Language = reader.IsDBNull(1) ? "unknown" : reader.GetString(1),
+            Size = reader.IsDBNull(2) ? 0 : reader.GetInt64(2),
+            Symbols = [],
+        });
+    }
+    return result;
+}
 
+// === Capabilities ===
+app.MapGet("/api/v1/capabilities", () => Results.Ok(new CapabilityDiscovery
+{
+    Version = "0.1.0-beta",
+    ProtocolVersion = "1.0",
+    Capabilities = CapabilityFlags.With(
+        Capability.WorkspaceImport, Capability.ContextBuild,
+        Capability.ContextExpand, Capability.ContextExplain,
+        Capability.FileExport, Capability.Cache),
+    SchemaVersions = new Dictionary<string, int>
+    {
+        ["contextPackage"] = 1,
+        ["capabilityDiscovery"] = 1,
+    },
+    Limitations = ["No Gateway", "No Semantic", "No LSP"],
+}));
+
+// === Workspaces ===
 app.MapGet("/api/v1/workspaces", async (IWorkspaceRepository repo) =>
 {
     var workspaces = await repo.ListAllAsync();
@@ -70,14 +106,7 @@ app.MapGet("/api/v1/workspaces/{id}/status", async (string id, IWorkspaceReposit
 {
     var ws = await repo.FindByIdAsync(WorkspaceId.Parse(id));
     if (ws is null) return Results.NotFound(new { error = "Workspace not found" });
-    return Results.Ok(new
-    {
-        id = ws.Id.Value,
-        name = ws.Name,
-        rootPath = ws.RootPath,
-        status = ws.Status.ToString(),
-        createdAt = ws.CreatedAt,
-    });
+    return Results.Ok(new { id = ws.Id.Value, name = ws.Name, rootPath = ws.RootPath, status = ws.Status.ToString() });
 });
 
 app.MapDelete("/api/v1/workspaces/{id}", async (string id, IWorkspaceRepository repo) =>
@@ -86,6 +115,56 @@ app.MapDelete("/api/v1/workspaces/{id}", async (string id, IWorkspaceRepository 
     return Results.Ok(new { removed = true });
 });
 
+// === Context ===
+app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextEngine engine, SqliteConnectionFactory factory, IWorkspaceRepository repo) =>
+{
+    var ws = await repo.FindByIdAsync(WorkspaceId.Parse(req.WorkspaceId));
+    if (ws is null) return Results.NotFound(new { error = "Workspace not found" });
+
+    var indexedFiles = await GetIndexedFilesAsync(factory, req.WorkspaceId);
+    var snapshotId = IndexSnapshotId.New();
+
+    var manifest = engine.Build(
+        new ContextBuildRequest
+        {
+            WorkspaceId = ws.Id,
+            IndexSnapshotId = snapshotId,
+            Task = req.Task,
+        },
+        () => indexedFiles,
+        path => File.Exists(Path.Combine(ws.RootPath, path)) ? File.ReadAllText(Path.Combine(ws.RootPath, path)) : "",
+        path => "sha256:pending");
+
+    return Results.Ok(manifest);
+});
+
+app.MapGet("/api/v1/context/{id}", (string id) =>
+{
+    return Results.Ok(new { id, status = "not_persisted", message = "Context packages are not yet persisted between requests" });
+});
+
+app.MapPost("/api/v1/context/{id}/expand", (string id, ExpandApiRequest req) =>
+{
+    return Results.Ok(new { contextId = id, expandedSymbol = req.Symbol, status = "not_persisted" });
+});
+
+app.MapPost("/api/v1/context/{id}/feedback", (string id, FeedbackApiRequest req) =>
+{
+    var feedback = new ContextFeedback
+    {
+        ContextPackageId = id,
+        ClientId = req.ClientId,
+        FilesActuallyRead = req.FilesActuallyRead ?? [],
+        TaskCompleted = req.TaskCompleted,
+        MissingContextReported = req.MissingContextReported,
+    };
+    // In a full implementation, this would persist to the database.
+    return Results.Ok(new { received = true, contextId = id, clientId = feedback.ClientId });
+});
+
 app.Run();
 
 record ImportRequest(string Path, string? Name);
+record ContextBuildApiRequest(string WorkspaceId, string Task);
+record ExpandApiRequest(string? Symbol, string? File);
+record FeedbackApiRequest(string? ClientId, bool TaskCompleted, bool MissingContextReported, IReadOnlyList<string>? FilesActuallyRead);
