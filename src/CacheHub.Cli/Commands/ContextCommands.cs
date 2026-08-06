@@ -441,19 +441,37 @@ public static class ContextCommands
             return 1;
         }
 
-        // Persist feedback
+        // R3-W008: Validate that CLI --id matches feedback JSON's ContextPackageId
+        if (!string.IsNullOrEmpty(feedback.ContextPackageId) &&
+            !string.Equals(ctxId, feedback.ContextPackageId, StringComparison.OrdinalIgnoreCase))
+        {
+            Console.Error.WriteLine($"Error: --id={ctxId} does not match feedback JSON ContextPackageId={feedback.ContextPackageId}");
+            return 1;
+        }
+
+        // Validate that the context package exists
         var appData = new AppDataDirectory();
         var dbPath = appData.GetWorkspaceDatabasePath("main");
         var factory = new SqliteConnectionFactory(dbPath);
+        var ctxRepo = new SqliteContextPackageRepository(factory);
+        var manifest = await ctxRepo.FindByIdAsync(ContextPackageId.Parse(ctxId));
+        if (manifest is null)
+        {
+            Console.Error.WriteLine($"Error: Context package not found: {ctxId}");
+            return 1;
+        }
+
+        // Persist feedback
         var feedbackRepo = new SqliteFeedbackRepository(factory);
         await feedbackRepo.SaveAsync(feedback);
 
         Console.Error.WriteLine($"Feedback saved for context: {ctxId}");
+        Console.Error.WriteLine($"  Workspace: {manifest.WorkspaceId.Value}");
         Console.Error.WriteLine($"  Client: {feedback.ClientId ?? "unknown"}");
         Console.Error.WriteLine($"  Files read: {feedback.FilesActuallyRead.Count}");
         Console.Error.WriteLine($"  Task completed: {feedback.TaskCompleted}");
         Console.Error.WriteLine($"  Missing context: {feedback.MissingContextReported}");
-        Console.WriteLine($"{{ \"received\": true, \"contextId\": \"{ctxId}\" }}");
+        Console.WriteLine($"{{ \"received\": true, \"contextId\": \"{ctxId}\", \"workspaceId\": \"{manifest.WorkspaceId.Value}\" }}");
         return 0;
     }
 
