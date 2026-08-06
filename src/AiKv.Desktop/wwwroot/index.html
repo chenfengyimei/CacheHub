@@ -45,6 +45,7 @@
     <nav>
         <button class="active" onclick="showPage('workspaces')">Workspaces</button>
         <button onclick="showPage('context')">Context</button>
+        <button onclick="showPage('history')">History</button>
         <button onclick="showPage('integration')">Integration</button>
         <button onclick="showPage('settings')">Settings</button>
     </nav>
@@ -84,6 +85,22 @@
             <div class="card" id="ctx-result" style="display:none">
                 <h2>Context Package</h2>
                 <div id="ctx-manifest"></div>
+            </div>
+        </div>
+
+        <!-- History Page -->
+        <div id="page-history" class="page" style="display:none">
+            <div class="card">
+                <h2>Context History</h2>
+                <div class="row" style="margin-bottom: 0.5rem">
+                    <input type="text" id="history-ws" placeholder="Workspace ID" style="width:300px">
+                    <button class="btn" onclick="loadHistory()">Load</button>
+                </div>
+                <table>
+                    <thead><tr><th>ID</th><th>Task</th><th>Tokens</th><th>Engine</th><th>Created</th></tr></thead>
+                    <tbody id="history-table-body"></tbody>
+                </table>
+                <div id="history-empty" class="empty" style="display:none">No context packages found.</div>
             </div>
         </div>
 
@@ -192,6 +209,21 @@ async function loadIntegration() {
         <h3>Limitations</h3>
         <ul>${caps.limitations.map(l => `<li>${l}</li>`).join('')}</ul>
     `;
+}
+
+async function loadHistory() {
+    const ws = document.getElementById('history-ws').value;
+    if (!ws) { toast('Workspace ID is required'); return; }
+    const list = await api(`/api/v1/workspaces/${ws}/contexts`);
+    const tbody = document.getElementById('history-table-body');
+    tbody.innerHTML = '';
+    if (!list.length) { document.getElementById('history-empty').style.display = ''; return; }
+    document.getElementById('history-empty').style.display = 'none';
+    list.forEach(c => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td title="${c.id}">${c.id.slice(0,12)}…</td><td>${c.task}</td><td>${c.budget}</td><td>${c.engine}</td><td>${new Date(c.createdAt).toLocaleString()}</td>`;
+        tbody.appendChild(tr);
+    });
 }
 
 loadWorkspaces();
