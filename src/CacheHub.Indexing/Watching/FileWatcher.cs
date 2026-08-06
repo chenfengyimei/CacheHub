@@ -10,6 +10,10 @@ public sealed record FileChangeEvent
     public required string Path { get; init; }
     public required ChangeType ChangeType { get; init; }
     public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
+    /// <summary>
+    /// For Renamed events: the old path before rename. Null for other types.
+    /// </summary>
+    public string? OldPath { get; init; }
 }
 
 /// <summary>
@@ -26,9 +30,12 @@ public enum ChangeType
 /// <summary>
 /// Watches a directory for file changes and enqueues events with debouncing.
 /// File system events are acceleration signals only; the final truth is file fingerprint reconciliation.
+/// WATCH-P2-001 fixes: Renamed saves old+new path, queue has max capacity.
 /// </summary>
 public sealed class FileWatcher : IDisposable
 {
+    private const int MaxQueueSize = 10_000;
+
     private readonly FileSystemWatcher _watcher;
     private readonly ConcurrentQueue<FileChangeEvent> _eventQueue = new();
     private readonly TimeSpan _debounceInterval;
@@ -87,8 +94,11 @@ public sealed class FileWatcher : IDisposable
     private void OnDeleted(object sender, FileSystemEventArgs e) =>
         EnqueueDebounced(e.FullPath, ChangeType.Deleted);
 
+    /// <summary>
+    /// WATCH-P2-001 fix: Save both old and new path for rename events.
+    /// </summary>
     private void OnRenamed(object sender, RenamedEventArgs e) =>
-        EnqueueDebounced(e.FullPath, ChangeType.Renamed);
+        EnqueueDebouncedRenamed(e.OldFullPath, e.FullPath);
 
     private void OnError(object sender, ErrorEventArgs e)
     {
@@ -98,10 +108,37 @@ public sealed class FileWatcher : IDisposable
 
     private void EnqueueDebounced(string path, ChangeType type)
     {
+        // WATCH-P2-001 fix: Queue overflow protection
+        if (_eventQueue.Count >= MaxQueueSize)
+        {
+            Interlocked.Increment(ref _overflowCount);
+            return;
+        }
+
         _pendingEvents[path] = new FileChangeEvent
         {
             Path = path,
             ChangeType = type,
+        };
+    }
+
+    /// <summary>
+    /// Enqueues a rename event with both old and new paths.
+    /// </summary>
+    private void EnqueueDebouncedRenamed(string? oldPath, string newPath)
+    {
+        if (_eventQueue.Count >= MaxQueueSize)
+        {
+            Interlocked.Increment(ref _overflowCount);
+            return;
+        }
+
+        // Use new path as key but store old path in the event
+        _pendingEvents[newPath] = new FileChangeEvent
+        {
+            Path = newPath,
+            ChangeType = ChangeType.Renamed,
+            OldPath = oldPath,
         };
     }
 
@@ -112,7 +149,15 @@ public sealed class FileWatcher : IDisposable
         var oldPending = Interlocked.Exchange(ref _pendingEvents, new ConcurrentDictionary<string, FileChangeEvent>());
 
         foreach (var kvp in oldPending)
+        {
+            // Check queue limit before enqueuing
+            if (_eventQueue.Count >= MaxQueueSize)
+            {
+                Interlocked.Increment(ref _overflowCount);
+                break;
+            }
             _eventQueue.Enqueue(kvp.Value);
+        }
     }
 
     public void Dispose()

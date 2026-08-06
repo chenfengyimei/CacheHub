@@ -25,19 +25,24 @@ public static class GatewayCommands
     private static int Start(string[] args)
     {
         var baseUrl = GetOpt(args, "--provider-url");
-        var apiKey = GetOpt(args, "--provider-key");
         var port = GetOpt(args, "--port") ?? "5218";
+
+        // CONFIG-P2-001 fix: API key only from environment variable, never from CLI args
+        var apiKey = Environment.GetEnvironmentVariable("CACHEHUB_PROVIDER_KEY")
+                     ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
 
         if (string.IsNullOrEmpty(baseUrl))
         {
             Console.Error.WriteLine("Error: --provider-url=<url> is required");
-            Console.Error.WriteLine("Example: cachehub gateway start --provider-url=https://api.openai.com --provider-key=$OPENAI_API_KEY");
+            Console.Error.WriteLine("Example: cachehub gateway start --provider-url=https://api.openai.com");
+            Console.Error.WriteLine("  Set API key via: CACHEHUB_PROVIDER_KEY or OPENAI_API_KEY environment variable");
             return 1;
         }
 
         if (string.IsNullOrEmpty(apiKey))
         {
-            Console.Error.WriteLine("Warning: --provider-key not set; Gateway will forward without auth header");
+            Console.Error.WriteLine("Warning: No API key found. Set CACHEHUB_PROVIDER_KEY or OPENAI_API_KEY environment variable.");
+            Console.Error.WriteLine("  Gateway will forward without auth header (requests may fail).");
         }
 
         if (!int.TryParse(port, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var portNum))
