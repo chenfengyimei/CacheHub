@@ -2,10 +2,12 @@ using CacheHub.Core.Identifiers;
 using CacheHub.Core.Indexing;
 using CacheHub.Core.Jobs;
 using CacheHub.Core.Paths;
+using CacheHub.Core.Parsing;
 using CacheHub.Core.Workspaces;
 using CacheHub.Indexing.Detection;
 using CacheHub.Indexing.Hashing;
 using CacheHub.Indexing.IgnoreRules;
+using CacheHub.Indexing.Parsing;
 using CacheHub.Indexing.Reconciliation;
 using CacheHub.Indexing.Scanning;
 using CacheHub.Indexing.States;
@@ -135,18 +137,23 @@ public static class IndexCommands
 
         try
         {
-            // Insert all files + FTS in the same transaction
+            // Insert all files + parser results in the same transaction
             foreach (var (relativePath, fullPath, size, language, isBinary, hash, content) in filesToIndex)
             {
-                // Insert into files table
+                // Select parser by extension
+                var parser = SelectParser(relativePath);
+                var parseResult = parser.Parse(content, relativePath);
+
+                // Insert into files table (with parser info)
                 using var fileCmd = batchConn.CreateCommand();
                 fileCmd.Transaction = (SqliteTransaction)batchTx;
                 fileCmd.CommandText =
                     """
-                    INSERT INTO files (id, snapshot_id, path, normalized_path, size, content_hash, language, is_binary, status, hash_kind)
-                    VALUES ($id, $snap, $path, $norm, $size, $hash, $lang, $bin, 'Indexed', $hashKind);
+                    INSERT INTO files (id, snapshot_id, path, normalized_path, size, content_hash, language, is_binary, status, hash_kind, parser_id, parser_version)
+                    VALUES ($id, $snap, $path, $norm, $size, $hash, $lang, $bin, 'Indexed', $hashKind, $parserId, $parserVer);
                     """;
-                fileCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+                var fileId = Guid.NewGuid().ToString("N");
+                fileCmd.Parameters.AddWithValue("$id", fileId);
                 fileCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
                 fileCmd.Parameters.AddWithValue("$path", relativePath);
                 fileCmd.Parameters.AddWithValue("$norm", relativePath);
@@ -155,7 +162,71 @@ public static class IndexCommands
                 fileCmd.Parameters.AddWithValue("$lang", language);
                 fileCmd.Parameters.AddWithValue("$bin", isBinary ? 1 : 0);
                 fileCmd.Parameters.AddWithValue("$hashKind", hash.StartsWith("fp:", StringComparison.Ordinal) ? "fingerprint" : "full");
+                fileCmd.Parameters.AddWithValue("$parserId", parser.Id);
+                fileCmd.Parameters.AddWithValue("$parserVer", parser.Version);
                 await fileCmd.ExecuteNonQueryAsync();
+
+                // Insert symbols
+                foreach (var symbol in parseResult.Symbols)
+                {
+                    using var symCmd = batchConn.CreateCommand();
+                    symCmd.Transaction = (SqliteTransaction)batchTx;
+                    symCmd.CommandText =
+                        """
+                        INSERT INTO file_symbols (id, file_id, snapshot_id, name, kind, start_line, end_line, modifier, confidence)
+                        VALUES ($id, $fid, $snap, $name, $kind, $sl, $el, $mod, $conf);
+                        """;
+                    symCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+                    symCmd.Parameters.AddWithValue("$fid", fileId);
+                    symCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
+                    symCmd.Parameters.AddWithValue("$name", symbol.Name);
+                    symCmd.Parameters.AddWithValue("$kind", symbol.Kind.ToString());
+                    symCmd.Parameters.AddWithValue("$sl", symbol.StartLine);
+                    symCmd.Parameters.AddWithValue("$el", symbol.EndLine);
+                    symCmd.Parameters.AddWithValue("$mod", (object?)symbol.Modifier ?? DBNull.Value);
+                    symCmd.Parameters.AddWithValue("$conf", "syntactic");
+                    await symCmd.ExecuteNonQueryAsync();
+                }
+
+                // Insert imports
+                foreach (var import in parseResult.Imports)
+                {
+                    using var impCmd = batchConn.CreateCommand();
+                    impCmd.Transaction = (SqliteTransaction)batchTx;
+                    impCmd.CommandText =
+                        """
+                        INSERT INTO file_imports (id, file_id, snapshot_id, module, imported_name, line)
+                        VALUES ($id, $fid, $snap, $mod, $name, $line);
+                        """;
+                    impCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+                    impCmd.Parameters.AddWithValue("$fid", fileId);
+                    impCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
+                    impCmd.Parameters.AddWithValue("$mod", import.Module);
+                    impCmd.Parameters.AddWithValue("$name", (object?)import.ImportedName ?? DBNull.Value);
+                    impCmd.Parameters.AddWithValue("$line", import.Line);
+                    await impCmd.ExecuteNonQueryAsync();
+                }
+
+                // Insert relations (heuristic calls/references)
+                foreach (var relation in parseResult.Relations)
+                {
+                    using var relCmd = batchConn.CreateCommand();
+                    relCmd.Transaction = (SqliteTransaction)batchTx;
+                    relCmd.CommandText =
+                        """
+                        INSERT INTO file_relations (id, file_id, snapshot_id, source_symbol, target_symbol, relation_type, confidence, line)
+                        VALUES ($id, $fid, $snap, $src, $tgt, $rt, $conf, $line);
+                        """;
+                    relCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+                    relCmd.Parameters.AddWithValue("$fid", fileId);
+                    relCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
+                    relCmd.Parameters.AddWithValue("$src", relation.Relation);
+                    relCmd.Parameters.AddWithValue("$tgt", relation.TargetName);
+                    relCmd.Parameters.AddWithValue("$rt", relation.RelationType.ToString());
+                    relCmd.Parameters.AddWithValue("$conf", relation.Source.ToString());
+                    relCmd.Parameters.AddWithValue("$line", (object?)relation.Confidence ?? DBNull.Value);
+                    await relCmd.ExecuteNonQueryAsync();
+                }
             }
 
             // Commit file metadata
@@ -292,6 +363,22 @@ public static class IndexCommands
         Console.WriteLine("  status --id=<id>     Show index status");
         Console.WriteLine("  verify --id=<id>     Verify index consistency");
         return 1;
+    }
+
+    /// <summary>
+    /// Selects the appropriate parser for a file based on its extension.
+    /// </summary>
+    private static ICodeParser SelectParser(string filePath)
+    {
+        var ext = Path.GetExtension(filePath).ToLowerInvariant();
+        return ext switch
+        {
+            ".cs" => new CSharpRegexParser(),
+            ".ts" or ".tsx" or ".js" or ".jsx" => new TypeScriptRegexParser(),
+            ".py" => new PythonRegexParser(),
+            ".md" or ".markdown" => new MarkdownParser(),
+            _ => new TextParser(),
+        };
     }
 
     private static string? GetOption(string[] args, string prefix)
