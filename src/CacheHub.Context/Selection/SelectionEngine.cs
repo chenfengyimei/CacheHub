@@ -7,6 +7,7 @@ namespace CacheHub.Context.Selection;
 
 /// <summary>
 /// Result of the selection process: selected files with mode and token estimates.
+/// Includes an immutable PayloadPlan that PayloadGenerator uses to produce the final payload.
 /// </summary>
 public sealed record SelectionResult
 {
@@ -16,6 +17,11 @@ public sealed record SelectionResult
     public required int BudgetTarget { get; init; }
     public required int BudgetHardLimit { get; init; }
     public required bool BudgetExceeded { get; init; }
+
+    /// <summary>
+    /// The immutable payload plan. Manifest and Payload share this plan.
+    /// </summary>
+    public PayloadPlan? Plan { get; init; }
 }
 
 public sealed record SelectedFileItem
@@ -114,6 +120,23 @@ public sealed class SelectionEngine
             BudgetTarget = budget.ContextTarget,
             BudgetHardLimit = budget.ContextHardLimit,
             BudgetExceeded = totalTokens > budget.ContextHardLimit,
+            Plan = new PayloadPlan
+            {
+                Items = selected.Select(s => new PayloadPlanItem
+                {
+                    Path = s.Path,
+                    Mode = s.Mode,
+                    ContentHash = s.ContentHash,
+                    Score = s.Score,
+                    EstimatedTokens = s.EstimatedTokens,
+                    Reasons = s.Reasons,
+                    Ranges = s.Ranges,
+                }).ToList(),
+                TotalEstimatedTokens = totalTokens,
+                BudgetTarget = budget.ContextTarget,
+                BudgetHardLimit = budget.ContextHardLimit,
+                BudgetExceeded = totalTokens > budget.ContextHardLimit,
+            },
         };
     }
 
