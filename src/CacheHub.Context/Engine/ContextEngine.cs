@@ -57,7 +57,9 @@ public sealed class ContextEngine
         Func<IReadOnlyList<IndexedFileInfo>> indexedFilesProvider,
         Func<string, string> contentProvider,
         Func<string, string> hashProvider,
-        bool includePayload = false)
+        bool includePayload = false,
+        Func<string, IReadOnlyList<FtsMatch>>? ftsSearch = null,
+        Func<string, IReadOnlyList<string>>? symbolSearch = null)
     {
         var budget = request.Budget ?? DefaultTokenBudgetPolicy.Create();
         var profile = request.RankingProfile ?? DefaultRankingProfile.Create();
@@ -66,7 +68,7 @@ public sealed class ContextEngine
             : _tokenizers.Default;
 
         var parsedTask = _taskParser.Parse(request.Task);
-        var candidates = _recall.Recall(parsedTask, indexedFilesProvider(), request.GitDiffFiles, request.CurrentFile);
+        var candidates = _recall.Recall(parsedTask, indexedFilesProvider(), request.GitDiffFiles, request.CurrentFile, ftsSearch, symbolSearch);
         var ranked = _ranking.Rank(candidates, profile, parsedTask, request.CurrentFile);
         var selected = _selection.Select(ranked, budget, contentProvider, hashProvider);
 

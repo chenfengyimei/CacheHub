@@ -33,6 +33,7 @@ public sealed record CandidateFile
 
 /// <summary>
 /// Recall pipeline: collects candidates from multiple sources.
+/// Supports FTS full-text recall and symbol recall when provided.
 /// </summary>
 public sealed class RecallPipeline
 {
@@ -43,7 +44,9 @@ public sealed class RecallPipeline
         Parsing.ParsedTask task,
         IReadOnlyList<IndexedFileInfo> indexedFiles,
         IReadOnlyList<string>? gitDiffFiles = null,
-        string? currentFile = null)
+        string? currentFile = null,
+        Func<string, IReadOnlyList<FtsMatch>>? ftsSearch = null,
+        Func<string, IReadOnlyList<string>>? symbolSearch = null)
     {
         var candidates = new Dictionary<string, CandidateFileBuilder>(StringComparer.OrdinalIgnoreCase);
 
@@ -56,21 +59,56 @@ public sealed class RecallPipeline
             }
         }
 
-        // 2. Symbol matching
-        foreach (var symbol in task.ExtractedSymbols)
+        // 2. Symbol matching — use symbolSearch if provided, otherwise fall back to in-memory
+        if (symbolSearch is not null)
         {
-            foreach (var file in indexedFiles.Where(f => f.Symbols.Any(s => s.Contains(symbol, StringComparison.OrdinalIgnoreCase))))
+            foreach (var symbol in task.ExtractedSymbols)
             {
-                AddOrUpdate(candidates, file, RecallSource.Symbol, symbol);
+                var matchingPaths = symbolSearch(symbol);
+                foreach (var path in matchingPaths)
+                {
+                    var file = indexedFiles.FirstOrDefault(f =>
+                        f.NormalizedPath.Equals(path, StringComparison.OrdinalIgnoreCase));
+                    if (file is not null)
+                        AddOrUpdate(candidates, file, RecallSource.Symbol, symbol);
+                }
+            }
+        }
+        else
+        {
+            foreach (var symbol in task.ExtractedSymbols)
+            {
+                foreach (var file in indexedFiles.Where(f => f.Symbols.Any(s => s.Contains(symbol, StringComparison.OrdinalIgnoreCase))))
+                {
+                    AddOrUpdate(candidates, file, RecallSource.Symbol, symbol);
+                }
             }
         }
 
-        // 3. Keyword matching (FTS-like)
-        foreach (var keyword in task.ExtractedKeywords)
+        // 3. FullText search — use ftsSearch if provided
+        if (ftsSearch is not null)
         {
-            foreach (var file in indexedFiles.Where(f => f.NormalizedPath.Contains(keyword, StringComparison.OrdinalIgnoreCase)))
+            foreach (var keyword in task.ExtractedKeywords)
             {
-                AddOrUpdate(candidates, file, RecallSource.FileName, keyword);
+                var ftsResults = ftsSearch(keyword);
+                foreach (var match in ftsResults)
+                {
+                    var file = indexedFiles.FirstOrDefault(f =>
+                        f.NormalizedPath.Equals(match.Path, StringComparison.OrdinalIgnoreCase));
+                    if (file is not null)
+                        AddOrUpdate(candidates, file, RecallSource.FullText, keyword);
+                }
+            }
+        }
+        else
+        {
+            // Fallback: keyword matches against path only (no FTS)
+            foreach (var keyword in task.ExtractedKeywords)
+            {
+                foreach (var file in indexedFiles.Where(f => f.NormalizedPath.Contains(keyword, StringComparison.OrdinalIgnoreCase)))
+                {
+                    AddOrUpdate(candidates, file, RecallSource.FileName, keyword);
+                }
             }
         }
 
@@ -143,3 +181,8 @@ public sealed record IndexedFileInfo
     public string? ContentHash { get; init; }
     public IReadOnlyList<string> Symbols { get; init; } = [];
 }
+
+/// <summary>
+/// A single FTS match result for recall integration.
+/// </summary>
+public sealed record FtsMatch(string Path, string Language, string Snippet);
