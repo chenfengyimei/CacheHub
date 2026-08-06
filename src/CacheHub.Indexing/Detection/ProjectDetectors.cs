@@ -30,16 +30,30 @@ public sealed class NodeDetector : IProjectDetector
         else
             packageManager = "npm";
 
+        // Determine the actual source language: TypeScript only if there is TS evidence.
+        var language = DetectLanguage(rootPath, content);
+
         return new DetectedComponent
         {
             Id = "node-" + Path.GetFileName(rootPath),
             Path = rootPath,
-            Language = "typescript",
+            Language = language,
             Framework = framework,
             BuildSystem = "npm-scripts",
             PackageManager = packageManager,
             Evidence = evidence,
         };
+    }
+
+    private static string DetectLanguage(string rootPath, string packageJsonContent)
+    {
+        // TypeScript evidence: tsconfig.json / typescript dependency / .ts|.tsx files present.
+        if (File.Exists(Path.Combine(rootPath, "tsconfig.json")) ||
+            packageJsonContent.Contains("\"typescript\"", StringComparison.OrdinalIgnoreCase) ||
+            Directory.Exists(rootPath) && (Directory.EnumerateFiles(rootPath, "*.ts", SearchOption.AllDirectories).Any() ||
+                                           Directory.EnumerateFiles(rootPath, "*.tsx", SearchOption.AllDirectories).Any()))
+            return "typescript";
+        return "javascript";
     }
 }
 

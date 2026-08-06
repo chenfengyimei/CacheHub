@@ -17,6 +17,9 @@ public sealed class GatewayServer : IDisposable
     private readonly SingleFlight _singleFlight = new();
     private readonly List<ModelRequestLog> _logs = [];
     private readonly Lock _lock = new();
+    private const int MaxCacheEntries = 10_000;
+    private const int MaxLogEntries = 1_000;
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(24);
     private long _totalRequests;
     private long _cacheHits;
     private long _cacheMisses;
@@ -133,6 +136,13 @@ public sealed class GatewayServer : IDisposable
             lock (_lock)
             {
                 _cache.TryGetValue(requestHash, out cachedEntry);
+                // TTL check on read
+                if (cachedEntry is not null &&
+                    DateTimeOffset.UtcNow.Subtract(cachedEntry.CreatedAt) > CacheTtl)
+                {
+                    _cache.Remove(requestHash);
+                    cachedEntry = null;
+                }
             }
 
             if (cachedEntry is not null)
@@ -185,6 +195,7 @@ public sealed class GatewayServer : IDisposable
                     Model = "model",
                     HasToolCalls = false,
                 };
+                EvictStaleCacheLocked();
             }
         }
 
@@ -253,12 +264,38 @@ public sealed class GatewayServer : IDisposable
                 LatencyMs = (long)latency.TotalMilliseconds,
             });
 
+            // Bound the in-memory log to prevent unbounded growth.
+            if (_logs.Count > MaxLogEntries)
+                _logs.RemoveRange(0, _logs.Count - MaxLogEntries);
+
             _totalPromptTokens += promptTokens;
             _totalCompletionTokens += completionTokens;
             _totalLatencyMs += latency.TotalMilliseconds;
 
             if (cached)
                 _cachedTokensSaved += promptTokens;
+        }
+    }
+
+    private void EvictStaleCacheLocked()
+    {
+        var now = DateTimeOffset.UtcNow;
+        // TTL eviction
+        if (_cache.Count > MaxCacheEntries)
+        {
+            foreach (var key in _cache.Keys.ToList())
+            {
+                var age = now.Subtract(_cache[key].CreatedAt);
+                if (age > CacheTtl)
+                    _cache.Remove(key);
+            }
+        }
+
+        // Count cap: if still overflowing, remove oldest entries.
+        while (_cache.Count > MaxCacheEntries && _cache.Count > 0)
+        {
+            var oldestKey = _cache.MinBy(kvp => kvp.Value.CreatedAt).Key;
+            _cache.Remove(oldestKey);
         }
     }
 

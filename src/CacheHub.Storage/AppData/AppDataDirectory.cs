@@ -64,10 +64,10 @@ public sealed class AppDataDirectory
                     File.Delete(file);
                 }
             }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
             catch (FileNotFoundException) { }
             catch (DirectoryNotFoundException) { }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
     }
 

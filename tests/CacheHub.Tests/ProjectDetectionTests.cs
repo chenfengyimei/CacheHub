@@ -16,9 +16,23 @@ public class ProjectDetectionTests
         var result = engine.Detect(temp.Path);
 
         Assert.Single(result.Components);
-        Assert.Equal("typescript", result.Components[0].Language);
+        Assert.Equal("javascript", result.Components[0].Language);
         Assert.Equal("Next.js", result.Components[0].Framework);
         Assert.Equal("npm", result.Components[0].PackageManager);
+    }
+
+    [Fact]
+    public void NodeDetector_ShouldDetectTypeScript_WhenTsEvidencePresent()
+    {
+        using var temp = new TempDir();
+        File.WriteAllText(Path.Combine(temp.Path, "package.json"),
+            """{"dependencies":{"next":"14.0.0","typescript":"5.4.0"}}""");
+
+        var engine = new ProjectDetectionEngine();
+        var result = engine.Detect(temp.Path);
+
+        Assert.Single(result.Components);
+        Assert.Equal("typescript", result.Components[0].Language);
     }
 
     [Fact]
