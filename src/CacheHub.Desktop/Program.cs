@@ -100,7 +100,7 @@ static string? SafeResolvePath(string rootPath, string relativePath)
     if (cleaned.Contains("..")) return null;
     var fullPath = Path.GetFullPath(Path.Combine(rootPath, cleaned));
     var normalizedRoot = Path.GetFullPath(rootPath);
-    return fullPath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase) ? fullPath : null;
+    return fullPath.StartsWith(normalizedRoot, CacheHub.Core.Paths.PathComparer.PhysicalPathComparison) ? fullPath : null;
 }
 
 static async Task<List<IndexedFileInfo>> GetIndexedFilesAsync(SqliteConnectionFactory factory, string workspaceId)
