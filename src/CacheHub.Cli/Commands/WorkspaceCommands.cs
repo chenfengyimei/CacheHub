@@ -55,7 +55,7 @@ public static class WorkspaceCommands
         ]);
         runner.Migrate();
         var repo = new SqliteWorkspaceRepository(factory);
-        var workspace = Workspace.Create(name, path);
+        var workspace = Workspace.CreateValidated(name, path);
         await repo.InsertAsync(workspace);
 
         Console.WriteLine($"Workspace imported: {workspace.Id.Value}");

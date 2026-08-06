@@ -191,7 +191,7 @@ app.MapPost("/api/v1/workspaces/import", async (ImportRequest req, IWorkspaceRep
     if (string.IsNullOrEmpty(req.Path))
         return Results.BadRequest(ErrorEnvelope.From(ErrorCode.InvalidArgument, "Path is required"));
 
-    var workspace = Workspace.Create(req.Name ?? new DirectoryInfo(req.Path).Name, req.Path);
+    var workspace = Workspace.CreateValidated(req.Name ?? new DirectoryInfo(req.Path).Name, req.Path);
     await repo.InsertAsync(workspace);
     return Results.Ok(new { id = workspace.Id.Value, name = workspace.Name, status = workspace.Status.ToString() });
 });
@@ -328,7 +328,7 @@ app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextE
         path =>
         {
             var fullPath = SafeResolvePath(ws.RootPath, path);
-            return fullPath is not null && File.Exists(fullPath) ? File.ReadAllText(fullPath) : "";
+            return fullPath is not null && File.Exists(fullPath) ? File.ReadAllTextAsync(fullPath).GetAwaiter().GetResult() : "";
         },
         path => ResolveFileHashFromDb(factory, activeSnapshotId, path));
 
@@ -579,7 +579,7 @@ app.MapGet("/api/v1/context/{id}/payload", async (string id, IContextPackageRepo
     var payload = generator.Generate(manifest, path =>
     {
         var fullPath = SafeResolvePath(ws.RootPath, path);
-        return fullPath is not null && File.Exists(fullPath) ? File.ReadAllText(fullPath) : "";
+        return fullPath is not null && File.Exists(fullPath) ? File.ReadAllTextAsync(fullPath).GetAwaiter().GetResult() : "";
     }, enforcer);
 
     return Results.Ok(new

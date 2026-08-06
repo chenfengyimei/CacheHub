@@ -49,4 +49,19 @@ public sealed record Workspace
             RootPathHash = hash,
         };
     }
+
+    /// <summary>
+    /// Creates a workspace and validates that the root directory exists and is accessible.
+    /// Use this for real imports; use Create() for tests/mocks.
+    /// </summary>
+    public static Workspace CreateValidated(string name, string rootPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
+
+        if (!System.IO.Directory.Exists(rootPath))
+            throw new ArgumentException($"Directory does not exist or is not accessible: {rootPath}", nameof(rootPath));
+
+        return Create(name, rootPath);
+    }
 }
