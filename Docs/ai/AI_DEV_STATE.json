@@ -1,53 +1,42 @@
 {
   "schemaVersion": 1,
   "project": "AI_KV",
-  "currentPhase": "COMPLETE",
+  "currentPhase": "ENHANCED",
   "currentTask": null,
   "repository": {
     "branch": "main",
-    "head": "",
     "dirty": false,
     "uncommittedFiles": []
   },
   "qualityGates": {
     "build": "pass",
     "unitTests": "pass",
-    "integrationTests": "unknown",
-    "securityTests": "unknown",
+    "integrationTests": "pass",
+    "securityTests": "pass",
     "format": "pass"
   },
   "decisions": [
-    "使用 .NET 9 + C# latest",
-    "Context Package Manifest/Payload 分离，JSON Schema v1 冻结",
-    "RankingProfile 版本化 + ChunkingStrategy + TokenBudget + SelectionEngine 五模式",
-    "ContextEngine 集成全流程，输出版本化 Manifest",
-    "CLI 支持 --output=json，stdout/stderr 分离",
-    "Integration Kit: Universal Skill + CLI Agent 教程 + ContextFeedback 协议",
-    "Benchmark: Recall@K/Precision/聚合/阶段门/失败归因/JSON报告",
-    "0.1-beta UI: ASP.NET Core 最小 Web 状态页面（ADR-0004）",
-    "Repository Manager: Git 进程封装 + URL 解析 + 安全 Clone",
-    "项目检测: 9种生态检测器 + Monorepo + 初始化计划",
-    "缓存: LRU/TTL/空间上限/命中统计",
-    "Gateway: loopback绑定 + 缓存安全检查 + SingleFlight + 统计",
-    "Provider: 契约/费用/路由/预算/审计",
-    "Semantic: Embedding/向量存储/余弦相似度",
-    "LSP: 契约/能力协商/生命周期/崩溃重启",
-    "Ecosystem: 插件签名/团队/企业策略/自动更新"
+    "MIT 许可证",
+    "ContextEngine 0.2.0: 集成 TokenizerRegistry + SecurityPolicyEnforcer",
+    "Gateway CLI: start/status/stop 命令",
+    "Detect CLI: 项目检测 + 初始化计划",
+    "安全策略: 4级外发模式 + 5种密钥扫描 + 路径拦截",
+    "Tokenizer: 3种分词器(char/word/code) + 模型注册表",
+    "Benchmark: 6个真实任务 + Ground Truth + 阶段门",
+    "E2E: 8个跨模块集成测试"
   ],
   "risks": [
-    "许可证未正式确定（LICENSE 占位）",
     "Tree-sitter 原生库打包策略待后续确定（当前用 Regex 替代）",
-    "Tokenizer 为粗略估算（chars/4）",
-    "Benchmark 需要真实任务集和 Ground Truth 标注",
-    "Gateway/Provider/LSP/Semantic 为模型层实现，HTTP 端点和进程管理待后续完善"
+    "Gateway SSE 流式转发尚未实现",
+    "LSP JSON-RPC 进程通信尚未实现",
+    "Benchmark 需要实际运行验证（当前仅框架+任务集）"
   ],
   "blockers": [],
   "nextActions": [
-    "完善 HTTP 端点实现（Gateway/Local API）",
-    "建立真实 Benchmark 任务集",
-    "选择正式开源许可证",
-    "考虑引入 Tree-sitter 替换 Regex 解析器",
-    "引入精确 Tokenizer 替换 chars/4 估算"
+    "实现 Gateway SSE 流式转发",
+    "实现 LSP JSON-RPC 进程通信",
+    "引入 Tree-sitter 替换 Regex 解析器",
+    "运行实际 Benchmark 验证阶段门"
   ],
-  "lastUpdated": "2026-08-06T20:00:00Z"
+  "lastUpdated": "2026-08-06T20:30:00Z"
 }
