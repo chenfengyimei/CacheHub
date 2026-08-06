@@ -94,6 +94,7 @@ public sealed class PythonDetector : IProjectDetector
 
 /// <summary>
 /// Detects .NET projects: *.sln, *.csproj, global.json.
+/// Framework is determined from .csproj content, not assumed.
 /// </summary>
 public sealed class DotNetDetector : IProjectDetector
 {
@@ -106,10 +107,31 @@ public sealed class DotNetDetector : IProjectDetector
     public DetectedComponent? Detect(string rootPath, IReadOnlyDictionary<string, string> triggerFileContents)
     {
         var evidence = new List<string>();
+        string? framework = null;
 
         if (triggerFileContents.ContainsKey("global.json")) evidence.Add("global.json");
         if (triggerFileContents.Keys.Any(k => k.EndsWith(".sln", StringComparison.OrdinalIgnoreCase))) evidence.Add("*.sln");
-        if (triggerFileContents.Keys.Any(k => k.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))) evidence.Add("*.csproj");
+
+        // Parse .csproj to detect framework (not assume ASP.NET Core)
+        var csprojKey = triggerFileContents.Keys.FirstOrDefault(k => k.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase));
+        if (csprojKey is not null)
+        {
+            evidence.Add(csprojKey);
+            var csprojContent = triggerFileContents[csprojKey];
+
+            // Detect framework from SDK/PackageReference
+            if (csprojContent.Contains("Microsoft.NET.Sdk.Web", StringComparison.OrdinalIgnoreCase))
+                framework = "ASP.NET Core";
+            else if (csprojContent.Contains("Microsoft.NET.Sdk.Worker", StringComparison.OrdinalIgnoreCase))
+                framework = ".NET Worker Service";
+            else if (csprojContent.Contains("Microsoft.NET.Sdk.BlazorWebAssembly", StringComparison.OrdinalIgnoreCase))
+                framework = "Blazor WebAssembly";
+            else if (csprojContent.Contains("Microsoft.NET.Sdk.Maui", StringComparison.OrdinalIgnoreCase))
+                framework = ".NET MAUI";
+            else if (csprojContent.Contains("Microsoft.NET.Sdk", StringComparison.OrdinalIgnoreCase))
+                framework = ".NET (class library or console)";
+            // If no SDK match, leave framework null — don't guess
+        }
 
         if (evidence.Count == 0) return null;
 
@@ -118,7 +140,7 @@ public sealed class DotNetDetector : IProjectDetector
             Id = "dotnet-" + Path.GetFileName(rootPath),
             Path = rootPath,
             Language = "csharp",
-            Framework = "ASP.NET Core",
+            Framework = framework, // null if unknown — don't guess
             BuildSystem = "MSBuild",
             PackageManager = "NuGet",
             Evidence = evidence,
