@@ -26,7 +26,9 @@ Write-Host "  Build successful." -ForegroundColor Green
 Write-Host "[3/4] Running tests..." -ForegroundColor Yellow
 dotnet test CacheHub.sln -c Release --no-build --nologo --verbosity quiet 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "Warning: Some tests failed. Continuing anyway." -ForegroundColor Yellow
+    Write-Host "Error: Tests failed. Aborting installation." -ForegroundColor Red
+    Write-Host "  Use -SkipTests flag to bypass (not recommended for production)." -ForegroundColor Yellow
+    exit 1
 } else {
     Write-Host "  All tests passed." -ForegroundColor Green
 }
