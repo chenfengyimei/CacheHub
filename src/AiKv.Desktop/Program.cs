@@ -4,6 +4,7 @@ using AiKv.Context.Explain;
 using AiKv.Context.Parsing;
 using AiKv.Context.Recall;
 using AiKv.Context.Expand;
+using AiKv.Context.Payload;
 using AiKv.Core.Capabilities;
 using AiKv.Core.Context;
 using AiKv.Core.Feedback;
@@ -334,6 +335,64 @@ app.MapGet("/api/v1/outline", (string path) =>
             modifier = s.Modifier,
         }),
         imports = outline.Imports.Select(i => new { module = i.Module, name = i.ImportedName, line = i.Line }),
+    });
+});
+
+// === Stats ===
+app.MapGet("/api/v1/stats", async (SqliteConnectionFactory factory) =>
+{
+    var wsRepo = new SqliteWorkspaceRepository(factory);
+    var ctxRepo = new SqliteContextPackageRepository(factory);
+
+    var workspaces = await wsRepo.ListAllAsync();
+    var totalContexts = 0;
+    var totalTokens = 0;
+
+    foreach (var ws in workspaces)
+    {
+        var contexts = await ctxRepo.ListByWorkspaceAsync(ws.Id);
+        totalContexts += contexts.Count;
+        totalTokens += contexts.Sum(c => c.Budget.ActualEstimate);
+    }
+
+    return Results.Ok(new
+    {
+        workspaces = workspaces.Count,
+        contextPackages = totalContexts,
+        totalEstimatedTokens = totalTokens,
+        statuses = workspaces.GroupBy(w => w.Status.ToString())
+            .Select(g => new { status = g.Key, count = g.Count() }),
+    });
+});
+
+// === Payload ===
+app.MapGet("/api/v1/context/{id}/payload", async (string id, IContextPackageRepository ctxRepo, IWorkspaceRepository wsRepo) =>
+{
+    var manifest = await ctxRepo.FindByIdAsync(ContextPackageId.Parse(id));
+    if (manifest is null) return Results.NotFound(new { error = "Context package not found" });
+
+    var ws = await wsRepo.FindByIdAsync(manifest.WorkspaceId);
+    if (ws is null) return Results.NotFound(new { error = "Workspace not found" });
+
+    var generator = new PayloadGenerator();
+    var payload = generator.Generate(manifest, path =>
+        File.Exists(Path.Combine(ws.RootPath, path.Replace('/', Path.DirectorySeparatorChar)))
+            ? File.ReadAllText(Path.Combine(ws.RootPath, path.Replace('/', Path.DirectorySeparatorChar)))
+            : "");
+
+    return Results.Ok(new
+    {
+        contextPackageId = payload.ContextPackageId,
+        format = payload.Format.ToString(),
+        totalEstimatedTokens = payload.TotalEstimatedTokens,
+        items = payload.Items.Select(i => new
+        {
+            path = i.Path,
+            mode = i.Mode.ToString(),
+            content = i.Content,
+            startLine = i.StartLine,
+            endLine = i.EndLine,
+        }),
     });
 });
 
