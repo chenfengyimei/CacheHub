@@ -7,14 +7,18 @@ if (args.Length == 0)
     Console.WriteLine("Usage: aikv <command> [options]");
     Console.WriteLine();
     Console.WriteLine("Commands:");
-    Console.WriteLine("  capabilities              Show available capabilities");
-    Console.WriteLine("  workspace import <path>   Import a local directory as a workspace");
-    Console.WriteLine("  workspace list            List all workspaces");
-    Console.WriteLine("  workspace status --id=<id> Show workspace status");
-    Console.WriteLine("  workspace remove --id=<id> Remove a workspace");
-    Console.WriteLine("  index build --id=<id>      Build a new index snapshot");
-    Console.WriteLine("  index status --id=<id>    Show index status");
-    Console.WriteLine("  index verify --id=<id>    Verify index consistency");
+    Console.WriteLine("  capabilities [--output=json]     Show available capabilities");
+    Console.WriteLine("  workspace import <path>          Import a local directory as a workspace");
+    Console.WriteLine("  workspace list                    List all workspaces");
+    Console.WriteLine("  workspace status --id=<id>        Show workspace status");
+    Console.WriteLine("  workspace remove --id=<id>        Remove a workspace");
+    Console.WriteLine("  index build --id=<id>              Build a new index snapshot");
+    Console.WriteLine("  index status --id=<id>            Show index status");
+    Console.WriteLine("  index verify --id=<id>            Verify index consistency");
+    Console.WriteLine("  context build --workspace=<id> --task=<text> [--output=json]");
+    Console.WriteLine("  context inspect --id=<ctx-id>     Inspect a context package");
+    Console.WriteLine("  context export --id=<ctx-id>      Export a context package");
+    Console.WriteLine("  context expand --id=<ctx-id> --symbol=<name>");
     return 1;
 }
 
@@ -22,6 +26,7 @@ return args[0] switch
 {
     "workspace" => await WorkspaceCommands.HandleAsync(args.AsSpan(1).ToArray()),
     "index" => await IndexCommands.HandleAsync(args.AsSpan(1).ToArray()),
-    "capabilities" => WorkspaceCommands.HandleAsync(["capabilities"]).Result,
+    "context" => await ContextCommands.HandleAsync(args.AsSpan(1).ToArray()),
+    "capabilities" => CapabilitiesCommands.Handle(args.AsSpan(1).ToArray()),
     _ => 1,
 };
