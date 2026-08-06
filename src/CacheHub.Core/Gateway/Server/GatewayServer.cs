@@ -80,6 +80,12 @@ public sealed class GatewayServer : IDisposable
                 return;
             }
 
+            if (path == "/v1/responses" && req.HttpMethod == "POST")
+            {
+                await HandleResponsesAsync(req, resp, ct);
+                return;
+            }
+
             resp.StatusCode = 404;
             var emptyBytes = System.Text.Encoding.UTF8.GetBytes("{}");
             resp.ContentLength64 = emptyBytes.Length;
@@ -199,6 +205,36 @@ public sealed class GatewayServer : IDisposable
 
         var response = await _httpClient.SendAsync(msg, ct);
         return await response.Content.ReadAsStringAsync(ct);
+    }
+
+    /// <summary>
+    /// Handles POST /v1/responses — forwards to provider's responses endpoint.
+    /// Similar to chat/completions but uses the responses API path.
+    /// </summary>
+    private async Task HandleResponsesAsync(HttpListenerRequest req, HttpListenerResponse resp, CancellationToken ct)
+    {
+        using var reader = new StreamReader(req.InputStream);
+        var requestBody = await reader.ReadToEndAsync(ct);
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        Interlocked.Increment(ref _totalRequests);
+
+        // Forward to provider's /v1/responses endpoint
+        using var msg = new HttpRequestMessage(HttpMethod.Post, $"{_config.ProviderBaseUrl}/v1/responses");
+        msg.Content = new StringContent(requestBody, System.Text.Encoding.UTF8, "application/json");
+        msg.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _config.ProviderApiKey);
+
+        var response = await _httpClient.SendAsync(msg, ct);
+        var responseBody = await response.Content.ReadAsStringAsync(ct);
+
+        sw.Stop();
+        LogRequest("responses", "model", sw.Elapsed, (int)response.StatusCode, false, 0, 0);
+
+        resp.StatusCode = (int)response.StatusCode;
+        resp.ContentType = "application/json";
+        var respBytes = System.Text.Encoding.UTF8.GetBytes(responseBody);
+        resp.ContentLength64 = respBytes.Length;
+        await resp.OutputStream.WriteAsync(respBytes, ct);
     }
 
     private void LogRequest(string endpoint, string model, TimeSpan latency, int statusCode, bool cached, int promptTokens, int completionTokens)
