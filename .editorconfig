@@ -94,6 +94,7 @@ dotnet_diagnostic.CA1852.severity = none
 dotnet_diagnostic.CA2007.severity = none
 dotnet_diagnostic.IDE1006.severity = none
 dotnet_diagnostic.CA1310.severity = none
+dotnet_diagnostic.CA1822.severity = none
 
 # Context uses [GeneratedRegex]; ConfigureAwait not needed
 [**/AiKv.Context/**]
