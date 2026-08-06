@@ -3,6 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
     <title>CacheHub — Context Hub</title>
     <style>
         :root {
@@ -210,6 +211,12 @@ function toast(msg) {
     setTimeout(() => t.style.display = 'none', 3000);
 }
 
+// XSS prevention: escape all untrusted content before inserting into HTML
+function esc(str) {
+    if (str == null) return '';
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
 async function loadWorkspaces() {
     const list = await api('/api/v1/workspaces');
     const tbody = document.getElementById('ws-table-body');
@@ -218,7 +225,18 @@ async function loadWorkspaces() {
     document.getElementById('ws-empty').style.display = 'none';
     list.forEach(w => {
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td title="${w.id}">${w.id.slice(0,12)}…</td><td>${w.name}</td><td title="${w.rootPath}">${w.rootPath.slice(0,40)}…</td><td><span class="status-badge status-${w.status}">${w.status}</span></td><td>${new Date(w.createdAt).toLocaleDateString()}</td><td><button class="btn btn-secondary" onclick="removeWorkspace('${w.id}')">Remove</button></td>`;
+        const tdId = document.createElement('td'); tdId.textContent = w.id.slice(0,12) + '…'; tdId.title = w.id;
+        const tdName = document.createElement('td'); tdName.textContent = w.name;
+        const tdPath = document.createElement('td'); tdPath.textContent = w.rootPath.slice(0,40) + '…'; tdPath.title = w.rootPath;
+        const tdStatus = document.createElement('td');
+        const badge = document.createElement('span'); badge.className = 'status-badge status-' + w.status; badge.textContent = w.status;
+        tdStatus.appendChild(badge);
+        const tdCreated = document.createElement('td'); tdCreated.textContent = new Date(w.createdAt).toLocaleDateString();
+        const tdAction = document.createElement('td');
+        const btn = document.createElement('button'); btn.className = 'btn btn-secondary'; btn.textContent = 'Remove';
+        btn.onclick = () => removeWorkspace(w.id);
+        tdAction.appendChild(btn);
+        tr.append(tdId, tdName, tdPath, tdStatus, tdCreated, tdAction);
         tbody.appendChild(tr);
     });
 }
@@ -256,13 +274,13 @@ async function buildContext() {
     const el = document.getElementById('ctx-manifest');
     el.dataset.ctxId = manifest.id;
     el.innerHTML = `
-        <p><strong>ID:</strong> ${manifest.id}</p>
-        <p><strong>Budget:</strong> ${manifest.budget.actualEstimate} / ${manifest.budget.contextTarget} (hard: ${manifest.budget.contextHardLimit})</p>
-        <h3>Selected Files (${manifest.selectedFiles.length})</h3>
+        <p><strong>ID:</strong> ${esc(manifest.id)}</p>
+        <p><strong>Budget:</strong> ${esc(manifest.budget.actualEstimate)} / ${esc(manifest.budget.contextTarget)} (hard: ${esc(manifest.budget.contextHardLimit)})</p>
+        <h3>Selected Files (${esc(manifest.selectedFiles.length)})</h3>
         <table><thead><tr><th>Path</th><th>Mode</th><th>Score</th><th>Reasons</th></tr></thead><tbody>
-        ${manifest.selectedFiles.map(f => `<tr><td>${f.path}</td><td>${f.mode}</td><td>${f.score.toFixed(2)}</td><td>${f.reasons.join(', ')}</td></tr>`).join('')}
+        ${manifest.selectedFiles.map(f => `<tr><td>${esc(f.path)}</td><td>${esc(f.mode)}</td><td>${esc(f.score.toFixed(2))}</td><td>${esc(f.reasons.join(', '))}</td></tr>`).join('')}
         </tbody></table>
-        ${manifest.excludedCandidates.length ? `<h3>Excluded (${manifest.excludedCandidates.length})</h3><table><thead><tr><th>Path</th><th>Score</th><th>Reason</th></tr></thead><tbody>${manifest.excludedCandidates.map(e => `<tr><td>${e.path}</td><td>${e.score.toFixed(2)}</td><td>${e.reason}</td></tr>`).join('')}</tbody></table>` : ''}
+        ${manifest.excludedCandidates.length ? `<h3>Excluded (${esc(manifest.excludedCandidates.length)})</h3><table><thead><tr><th>Path</th><th>Score</th><th>Reason</th></tr></thead><tbody>${manifest.excludedCandidates.map(e => `<tr><td>${esc(e.path)}</td><td>${esc(e.score.toFixed(2))}</td><td>${esc(e.reason)}</td></tr>`).join('')}</tbody></table>` : ''}
     `;
     toast('Context built');
 }
@@ -274,11 +292,11 @@ async function explainContext() {
     const el = document.getElementById('ctx-explain');
     el.style.display = '';
     el.innerHTML = `
-        <h3>Budget: ${result.budgetSummary}</h3>
-        ${result.potentialMisses && result.potentialMisses.length ? `<h3 style="color:var(--warning)">⚠ Potential Misses</h3><ul>${result.potentialMisses.map(m => `<li>${m}</li>`).join('')}</ul>` : ''}
+        <h3>Budget: ${esc(result.budgetSummary)}</h3>
+        ${result.potentialMisses && result.potentialMisses.length ? `<h3 style="color:var(--warning)">⚠ Potential Misses</h3><ul>${result.potentialMisses.map(m => `<li>${esc(m)}</li>`).join('')}</ul>` : ''}
         <h3>File Explanations</h3>
         <table><thead><tr><th>Status</th><th>Path</th><th>Score</th><th>Reasons</th></tr></thead><tbody>
-        ${result.explanations.map(e => `<tr><td>${e.selected ? '✓' : '✗'}</td><td>${e.path}</td><td>${e.score.toFixed(2)}</td><td>${e.reasons ? e.reasons.join(', ') : e.exclusionReason || ''}</td></tr>`).join('')}
+        ${result.explanations.map(e => `<tr><td>${e.selected ? '✓' : '✗'}</td><td>${esc(e.path)}</td><td>${esc(e.score.toFixed(2))}</td><td>${esc(e.reasons ? e.reasons.join(', ') : e.exclusionReason || '')}</td></tr>`).join('')}
         </tbody></table>
     `;
 }
@@ -301,12 +319,12 @@ async function expandContext() {
 async function loadIntegration() {
     const caps = await api('/api/v1/capabilities');
     document.getElementById('integration-info').innerHTML = `
-        <p><strong>Version:</strong> ${caps.version}</p>
-        <p><strong>Protocol:</strong> ${caps.protocolVersion}</p>
+        <p><strong>Version:</strong> ${esc(caps.version)}</p>
+        <p><strong>Protocol:</strong> ${esc(caps.protocolVersion)}</p>
         <h3>Capabilities</h3>
-        <ul>${Object.entries(caps.capabilities).map(([k,v]) => `<li>${k}: ${v ? '✅' : '❌'}</li>`).join('')}</ul>
+        <ul>${Object.entries(caps.capabilities).map(([k,v]) => `<li>${esc(k)}: ${v ? '✅' : '❌'}</li>`).join('')}</ul>
         <h3>Limitations</h3>
-        <ul>${caps.limitations.map(l => `<li>${l}</li>`).join('')}</ul>
+        <ul>${caps.limitations.map(l => `<li>${esc(l)}</li>`).join('')}</ul>
     `;
 }
 
@@ -320,7 +338,12 @@ async function loadHistory() {
     document.getElementById('history-empty').style.display = 'none';
     list.forEach(c => {
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td title="${c.id}">${c.id.slice(0,12)}…</td><td>${c.task}</td><td>${c.budget}</td><td>${c.engine}</td><td>${new Date(c.createdAt).toLocaleString()}</td>`;
+        const tdId = document.createElement('td'); tdId.textContent = c.id.slice(0,12) + '…'; tdId.title = c.id;
+        const tdTask = document.createElement('td'); tdTask.textContent = c.task;
+        const tdBudget = document.createElement('td'); tdBudget.textContent = c.budget;
+        const tdEngine = document.createElement('td'); tdEngine.textContent = c.engine;
+        const tdCreated = document.createElement('td'); tdCreated.textContent = new Date(c.createdAt).toLocaleString();
+        tr.append(tdId, tdTask, tdBudget, tdEngine, tdCreated);
         tbody.appendChild(tr);
     });
 }
@@ -333,11 +356,21 @@ async function searchFiles() {
     const result = await api(url);
     const el = document.getElementById('search-results');
     if (!result.count) { el.innerHTML = '<p style="color:var(--text-dim)">No results found.</p>'; return; }
-    el.innerHTML = `<p>Found ${result.count} matches</p>` + result.results.map(r => `
-        <div style="margin-bottom:0.5rem;padding:0.5rem;border:1px solid var(--border);border-radius:4px">
-            <div><strong>[${r.language}]</strong> ${r.path}</div>
-            <div style="color:var(--text-dim);font-size:0.85rem">${r.snippet}</div>
-        </div>`).join('');
+    el.innerHTML = `<p>Found ${esc(result.count)} matches</p>`;
+    result.results.forEach(r => {
+        const div = document.createElement('div');
+        div.style.cssText = 'margin-bottom:0.5rem;padding:0.5rem;border:1px solid var(--border);border-radius:4px';
+        const header = document.createElement('div');
+        const langSpan = document.createElement('strong'); langSpan.textContent = '[' + r.language + ']';
+        header.appendChild(langSpan);
+        header.appendChild(document.createTextNode(' ' + r.path));
+        const snippet = document.createElement('div');
+        snippet.style.cssText = 'color:var(--text-dim);font-size:0.85rem';
+        snippet.textContent = r.snippet;
+        div.appendChild(header);
+        div.appendChild(snippet);
+        el.appendChild(div);
+    });
 }
 
 loadWorkspaces();
