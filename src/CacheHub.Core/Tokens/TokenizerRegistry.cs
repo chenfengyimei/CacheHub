@@ -83,7 +83,7 @@ public sealed partial class CodeTokenizer : ITokenizer
     public int CountTokensForMessages(IReadOnlyList<string> messages) =>
         messages.Sum(CountTokens);
 
-    [GeneratedRegex(@"\b\w+\b|::|=>|->|<=|>=|==|!=|\+\+|--|&&|\|\||::|[{}()\[\];,.<>+\-*/%&|^!?=:\""'#@]")]
+    [GeneratedRegex(@"\b\w+\b|::|=>|->|<=|>=|==|!=|\+\+|--|&&|\|\||[{}()\[\];,.<>+\-*/%&|^!?=:\""'#@]")]
     private static partial Regex CodeTokenRegex();
 }
 

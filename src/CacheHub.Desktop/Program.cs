@@ -9,6 +9,7 @@ using CacheHub.Core.Capabilities;
 using CacheHub.Core.Context;
 using CacheHub.Core.Feedback;
 using CacheHub.Core.Identifiers;
+using CacheHub.Core.Paths;
 using CacheHub.Core.Workspaces;
 using CacheHub.Storage;
 using CacheHub.Storage.Database;
@@ -45,6 +46,17 @@ var app = builder.Build();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
+// Security: resolve a relative path within a workspace root, rejecting traversal attempts.
+static string? SafeResolvePath(string rootPath, string relativePath)
+{
+    if (string.IsNullOrEmpty(relativePath)) return null;
+    var cleaned = relativePath.Replace('/', Path.DirectorySeparatorChar);
+    if (cleaned.Contains("..")) return null;
+    var fullPath = Path.GetFullPath(Path.Combine(rootPath, cleaned));
+    var normalizedRoot = Path.GetFullPath(rootPath);
+    return fullPath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase) ? fullPath : null;
+}
+
 static async Task<List<IndexedFileInfo>> GetIndexedFilesAsync(SqliteConnectionFactory factory, string workspaceId)
 {
     var result = new List<IndexedFileInfo>();
@@ -64,8 +76,8 @@ static async Task<List<IndexedFileInfo>> GetIndexedFilesAsync(SqliteConnectionFa
         {
             Path = reader.GetString(0),
             NormalizedPath = reader.GetString(0),
-            Language = reader.IsDBNull(1) ? "unknown" : reader.GetString(1),
-            Size = reader.IsDBNull(2) ? 0 : reader.GetInt64(2),
+            Size = reader.IsDBNull(1) ? 0 : reader.GetInt64(1),
+            Language = reader.IsDBNull(2) ? "unknown" : reader.GetString(2),
             Symbols = [],
         });
     }
@@ -105,6 +117,9 @@ app.MapGet("/api/v1/workspaces", async (IWorkspaceRepository repo) =>
 
 app.MapPost("/api/v1/workspaces/import", async (ImportRequest req, IWorkspaceRepository repo) =>
 {
+    if (string.IsNullOrEmpty(req.Path))
+        return Results.BadRequest(new { error = "Path is required" });
+
     var workspace = Workspace.Create(req.Name ?? new DirectoryInfo(req.Path).Name, req.Path);
     await repo.InsertAsync(workspace);
     return Results.Ok(new { id = workspace.Id.Value, name = workspace.Name, status = workspace.Status.ToString() });
@@ -140,7 +155,11 @@ app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextE
             Task = req.Task,
         },
         () => indexedFiles,
-        path => File.Exists(Path.Combine(ws.RootPath, path)) ? File.ReadAllText(Path.Combine(ws.RootPath, path)) : "",
+        path =>
+        {
+            var fullPath = SafeResolvePath(ws.RootPath, path);
+            return fullPath is not null && File.Exists(fullPath) ? File.ReadAllText(fullPath) : "";
+        },
         path => "sha256:pending");
 
     await ctxRepo.SaveAsync(manifest);
@@ -164,7 +183,10 @@ app.MapPost("/api/v1/context/{id}/expand", async (string id, ExpandApiRequest re
     if (ws is null) return Results.NotFound(new { error = "Workspace not found" });
 
     var targetPath = req.File ?? req.Symbol ?? "";
-    var fullPath = Path.Combine(ws.RootPath, targetPath.Replace('/', Path.DirectorySeparatorChar));
+    var fullPath = SafeResolvePath(ws.RootPath, targetPath);
+
+    if (fullPath is null)
+        return Results.BadRequest(new { error = "Invalid file path" });
 
     if (!File.Exists(fullPath))
         return Results.NotFound(new { error = $"File not found: {targetPath}" });
@@ -376,9 +398,10 @@ app.MapGet("/api/v1/context/{id}/payload", async (string id, IContextPackageRepo
 
     var generator = new PayloadGenerator();
     var payload = generator.Generate(manifest, path =>
-        File.Exists(Path.Combine(ws.RootPath, path.Replace('/', Path.DirectorySeparatorChar)))
-            ? File.ReadAllText(Path.Combine(ws.RootPath, path.Replace('/', Path.DirectorySeparatorChar)))
-            : "");
+    {
+        var fullPath = SafeResolvePath(ws.RootPath, path);
+        return fullPath is not null && File.Exists(fullPath) ? File.ReadAllText(fullPath) : "";
+    });
 
     return Results.Ok(new
     {

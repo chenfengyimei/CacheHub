@@ -40,7 +40,19 @@ public sealed class GatewayServer : IDisposable
 
         while (!ct.IsCancellationRequested)
         {
-            var ctx = await _listener.GetContextAsync();
+            HttpListenerContext ctx;
+            try
+            {
+                ctx = await _listener.GetContextAsync();
+            }
+            catch (HttpListenerException) when (ct.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (ObjectDisposedException) when (ct.IsCancellationRequested)
+            {
+                break;
+            }
             _ = HandleRequestAsync(ctx, ct);
         }
     }

@@ -110,8 +110,13 @@ public sealed class FileExporter
         return System.Text.Json.JsonSerializer.Deserialize<ContextPackageManifest>(json, _jsonOpts);
     }
 
-    private string GetExportDir(string workspaceId) =>
-        Path.Combine(_appData.Root, "exports", workspaceId);
+    private string GetExportDir(string workspaceId)
+    {
+        // Sanitize workspaceId to prevent path traversal
+        var safeId = workspaceId.Replace("..", "").Replace("/", "").Replace("\\", "").Replace(":", "");
+        if (string.IsNullOrWhiteSpace(safeId)) safeId = "default";
+        return Path.Combine(_appData.Root, "exports", safeId);
+    }
 
     private static string GenerateRepoMap(ContextPackageManifest manifest)
     {

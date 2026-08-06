@@ -81,27 +81,38 @@ public static class CacheSafetyChecker
 {
     public static bool IsCacheable(string requestBody, string model)
     {
-        using var doc = JsonDocument.Parse(requestBody);
-        var root = doc.RootElement;
+        try
+        {
+            using var doc = JsonDocument.Parse(requestBody);
+            var root = doc.RootElement;
 
-        // Reject if tools or functions are present
-        if (root.TryGetProperty("tools", out _) || root.TryGetProperty("functions", out _))
+            // Reject if tools or functions are present
+            if (root.TryGetProperty("tools", out _) || root.TryGetProperty("functions", out _))
+                return false;
+
+            // Reject if temperature is too high
+            if (root.TryGetProperty("temperature", out var temp) && temp.ValueKind == JsonValueKind.Number && temp.GetDouble() > 0.7)
+                return false;
+
+            // Reject if stream is true (streaming responses not cached in v1)
+            if (root.TryGetProperty("stream", out var stream) && stream.ValueKind == JsonValueKind.True)
+                return false;
+
+            // Reject if no-cache header is present
+            if (root.TryGetProperty("metadata", out var meta) &&
+                meta.TryGetProperty("no_cache", out var nc) && nc.ValueKind == JsonValueKind.True)
+                return false;
+
+            return true;
+        }
+        catch (JsonException)
+        {
             return false;
-
-        // Reject if temperature is too high
-        if (root.TryGetProperty("temperature", out var temp) && temp.GetDouble() > 0.7)
+        }
+        catch (InvalidOperationException)
+        {
             return false;
-
-        // Reject if stream is true (streaming responses not cached in v1)
-        if (root.TryGetProperty("stream", out var stream) && stream.GetBoolean())
-            return false;
-
-        // Reject if no-cache header is present
-        if (root.TryGetProperty("metadata", out var meta) &&
-            meta.TryGetProperty("no_cache", out var nc) && nc.GetBoolean())
-            return false;
-
-        return true;
+        }
     }
 
     public static bool HasToolCalls(string responseBody)

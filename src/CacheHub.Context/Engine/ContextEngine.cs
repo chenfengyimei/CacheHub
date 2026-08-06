@@ -143,7 +143,7 @@ public sealed class ContextEngine
                 CloudSendAllowed = cloudSendAllowed,
                 SecretsScanPassed = securityPassed,
                 IgnoreRulesHash = request.IgnoreRulesHash,
-                SecurityPolicyVersion = request.SecurityPolicyVersion ?? _securityEnforcer?.IsCloudSendAllowed().ToString(),
+                SecurityPolicyVersion = request.SecurityPolicyVersion ?? "sec-v1",
                 SecretScannerVersion = scannerVersion,
                 SensitiveExclusions = securityFindings.Count > 0 ? securityFindings : null,
             },

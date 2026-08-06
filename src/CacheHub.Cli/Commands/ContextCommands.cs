@@ -327,9 +327,11 @@ public static class ContextCommands
 
         var expander = new Context.Expand.ContextExpander();
         var targetFile = file ?? symbol!;
-        var fullPath = Path.Combine(ws.RootPath, targetFile.Replace('/', Path.DirectorySeparatorChar));
+        var fullPath = ResolveFileContent(ws.RootPath, targetFile) != ""
+            ? Path.GetFullPath(Path.Combine(ws.RootPath, targetFile.Replace('/', Path.DirectorySeparatorChar)))
+            : null;
 
-        if (!File.Exists(fullPath))
+        if (fullPath is null || !File.Exists(fullPath))
         {
             Console.Error.WriteLine($"File not found: {targetFile}");
             return 1;
@@ -445,7 +447,10 @@ public static class ContextCommands
 
     private static string ResolveFileContent(string rootPath, string relativePath)
     {
-        var fullPath = Path.Combine(rootPath, relativePath.Replace('/', Path.DirectorySeparatorChar));
+        if (relativePath.Contains("..")) return "";
+        var fullPath = Path.GetFullPath(Path.Combine(rootPath, relativePath.Replace('/', Path.DirectorySeparatorChar)));
+        var normalizedRoot = Path.GetFullPath(rootPath);
+        if (!fullPath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase)) return "";
         return File.Exists(fullPath) ? File.ReadAllText(fullPath) : "";
     }
 
