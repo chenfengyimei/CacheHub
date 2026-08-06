@@ -32,6 +32,7 @@ if (args.Length == 0)
     Console.WriteLine("  repo status [path]                  Show Git status");
     Console.WriteLine("  repo diff [path]                    Show changed files");
     Console.WriteLine("  repo pull [path]                    Pull with --ff-only (safe)");
+    Console.WriteLine("  version [--output=json]             Show version info");
     Console.WriteLine("  integration verify                 Verify installation and integration");
     return 1;
 }
@@ -48,5 +49,6 @@ return args[0] switch
     "config" => ConfigCommands.Handle(args.AsSpan(1).ToArray()),
     "stats" => await StatsCommands.HandleAsync(args.AsSpan(1).ToArray()),
     "repo" => await RepoCommands.HandleAsync(args.AsSpan(1).ToArray()),
+    "version" => VersionCommands.Handle(args.AsSpan(1).ToArray()),
     _ => 1,
 };
