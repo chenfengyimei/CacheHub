@@ -164,4 +164,92 @@ public class ChunkingBudgetSelectionTests
         Assert.Single(result.SelectedFiles);
         Assert.Equal(Core.Context.SelectionMode.Full, result.SelectedFiles[0].Mode);
     }
+
+    // === Anchor-based chunking tests (R2-W005) ===
+
+    [Fact]
+    public void ChunkingStrategy_Chunk_WithAnchors_ShouldOnlyReturnAnchorChunks()
+    {
+        var chunker = new ChunkingStrategy();
+        var lines = Enumerable.Range(1, 500).Select(i => $"line {i}: content");
+        var content = string.Join('\n', lines);
+
+        // Anchor at line 100 and line 300
+        var anchors = new List<LineAnchor>
+        {
+            new(100, "fts:keyword"),
+            new(300, "symbol:AuthService"),
+        };
+
+        var chunks = chunker.Chunk("test.ts", content, Core.Context.SelectionMode.Chunks, 10000, anchors);
+
+        // Should return only anchor-based chunks (not all 500 lines)
+        Assert.True(chunks.Count >= 1);
+        Assert.True(chunks.Count <= 3); // Should be 1-2 merged chunks
+
+        // Each chunk should be around 30 lines (anchor ± 15)
+        foreach (var chunk in chunks)
+        {
+            Assert.True(chunk.EndLine - chunk.StartLine <= 100);
+            Assert.NotNull(chunk.AnchorSource);
+        }
+    }
+
+    [Fact]
+    public void ChunkingStrategy_Chunk_AnchorsMerge_WhenOverlapping()
+    {
+        var chunker = new ChunkingStrategy();
+        var lines = Enumerable.Range(1, 200).Select(i => $"line {i}");
+        var content = string.Join('\n', lines);
+
+        // Two close anchors that should merge
+        var anchors = new List<LineAnchor>
+        {
+            new(50, "fts:a"),
+            new(60, "fts:b"),
+        };
+
+        var chunks = chunker.Chunk("test.ts", content, Core.Context.SelectionMode.Chunks, 10000, anchors);
+
+        Assert.Single(chunks); // Should merge into one
+        Assert.Contains("a", chunks[0].AnchorSource);
+        Assert.Contains("b", chunks[0].AnchorSource);
+    }
+
+    [Fact]
+    public void ChunkingStrategy_Chunk_AnchorsRespectBudget()
+    {
+        var chunker = new ChunkingStrategy();
+        var lines = Enumerable.Range(1, 1000).Select(i => $"line {i}: some content here for testing");
+        var content = string.Join('\n', lines);
+
+        // Many anchors with small budget
+        var anchors = Enumerable.Range(1, 10).Select(i => new LineAnchor(i * 100, $"fts:{i}")).ToList();
+
+        var chunks = chunker.Chunk("test.ts", content, Core.Context.SelectionMode.Chunks, 500, anchors);
+
+        // Should not exceed the budget (roughly)
+        var totalTokens = chunks.Sum(c => c.EstimatedTokens);
+        Assert.True(totalTokens <= 600, $"Expected <= 600 tokens, got {totalTokens}");
+    }
+
+    [Fact]
+    public void ChunkingStrategy_Chunk_NoAnchors_FallsBackToLineChunking()
+    {
+        var chunker = new ChunkingStrategy();
+        var content = string.Join('\n', Enumerable.Range(1, 500).Select(i => $"line {i}"));
+
+        // No anchors: should fall back to line-based chunking
+        var chunks = chunker.Chunk("test.ts", content, Core.Context.SelectionMode.Chunks, 5000, null);
+
+        Assert.NotEmpty(chunks);
+        // Line-based chunks don't have AnchorSource
+        Assert.All(chunks, c => Assert.Null(c.AnchorSource));
+    }
+
+    [Fact]
+    public void ChunkingStrategy_Version_ShouldBeV2()
+    {
+        Assert.Equal("chunking-v2", ChunkingStrategy.Version);
+    }
 }

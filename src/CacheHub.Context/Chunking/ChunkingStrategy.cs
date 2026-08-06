@@ -13,19 +13,28 @@ public sealed record FileChunk
     public required int EndLine { get; init; }
     public required string Content { get; init; }
     public required int EstimatedTokens { get; init; }
+    /// <summary>
+    /// Anchor that produced this chunk (e.g., "symbol:AuthService", "fts:login", "gitdiff").
+    /// </summary>
+    public string? AnchorSource { get; init; }
 }
 
 /// <summary>
-/// Chunking strategy: splits files into syntax-aware chunks when possible.
-/// Version 1: line-window based with overlap control.
+/// Chunking strategy v2: anchor-based chunking.
+/// Instead of blindly splitting files by line window, it uses anchors
+/// (symbol ranges, FTS hit lines, error stack lines) to select only
+/// relevant chunks. Non-anchor modes (Full, Outline, Summary, Metadata)
+/// remain unchanged.
 /// </summary>
 public sealed class ChunkingStrategy
 {
-    public const string Version = "chunking-v1";
+    public const string Version = "chunking-v2";
 
     private const int DefaultChunkSize = 200; // lines
     private const int DefaultOverlap = 10; // lines
     private const int MaxChunkSize = 500;
+    private const int AnchorContextLines = 15; // lines of context around an anchor
+    private const int AnchorMaxLines = 100; // max lines per anchor chunk
 
     /// <summary>
     /// Chunks a file's content based on the selection mode and token budget.
@@ -34,7 +43,8 @@ public sealed class ChunkingStrategy
         string filePath,
         string content,
         SelectionMode mode,
-        int maxTokens)
+        int maxTokens,
+        IReadOnlyList<LineAnchor>? anchors = null)
     {
         var lines = content.Split('\n');
         var totalTokens = EstimateTokens(content);
@@ -42,12 +52,86 @@ public sealed class ChunkingStrategy
         return mode switch
         {
             SelectionMode.Full => ChunkFull(filePath, content, lines, totalTokens, maxTokens),
+            SelectionMode.Chunks when anchors is not null && anchors.Count > 0
+                => ChunkByAnchors(filePath, lines, anchors, maxTokens),
             SelectionMode.Chunks => ChunkByLines(filePath, lines, maxTokens),
             SelectionMode.Outline => ChunkOutline(filePath, lines),
             SelectionMode.DeterministicSummary => ChunkSummary(filePath, lines),
             SelectionMode.Metadata => ChunkMetadata(filePath, lines, totalTokens),
             _ => ChunkByLines(filePath, lines, maxTokens),
         };
+    }
+
+    /// <summary>
+    /// Anchor-based chunking: creates chunks centered around anchor lines.
+    /// Each chunk includes AnchorContextLines before and after the anchor.
+    /// Overlapping chunks are merged. Only anchored regions are included.
+    /// </summary>
+    private static List<FileChunk> ChunkByAnchors(
+        string path, string[] lines, IReadOnlyList<LineAnchor> anchors, int maxTokens)
+    {
+        // Create expanded ranges around each anchor
+        var ranges = new List<(int start, int end, string source)>();
+        foreach (var anchor in anchors)
+        {
+            var start = Math.Max(0, anchor.Line - AnchorContextLines);
+            var end = Math.Min(lines.Length - 1, anchor.Line + AnchorContextLines);
+            // Cap to max lines
+            if (end - start + 1 > AnchorMaxLines)
+                end = start + AnchorMaxLines - 1;
+            ranges.Add((start, end, anchor.Source));
+        }
+
+        // Sort and merge overlapping ranges
+        ranges.Sort((a, b) => a.start.CompareTo(b.start));
+        var merged = new List<(int start, int end, string source)>();
+        foreach (var (start, end, source) in ranges)
+        {
+            if (merged.Count > 0 && start <= merged[^1].end + 1)
+            {
+                // Merge with previous
+                var prev = merged[^1];
+                merged[^1] = (prev.start, Math.Max(prev.end, end), prev.source + "+" + source);
+            }
+            else
+            {
+                merged.Add((start, end, source));
+            }
+        }
+
+        // Apply budget: select chunks until budget exhausted
+        var chunks = new List<FileChunk>();
+        var usedTokens = 0;
+        foreach (var (start, end, source) in merged)
+        {
+            var content = string.Join('\n', lines.Skip(start).Take(end - start + 1));
+            var tokens = EstimateTokens(content);
+
+            if (usedTokens + tokens > maxTokens)
+            {
+                // Try to trim the chunk to fit
+                var remaining = maxTokens - usedTokens;
+                if (remaining <= 50) break; // Not enough budget for meaningful content
+                var linesToFit = remaining / 10; // ~10 tokens per line
+                if (linesToFit < 5) break;
+                var actualEnd = Math.Min(end, start + linesToFit);
+                content = string.Join('\n', lines.Skip(start).Take(actualEnd - start + 1));
+                tokens = EstimateTokens(content);
+            }
+
+            chunks.Add(new FileChunk
+            {
+                Path = path,
+                StartLine = start + 1, // 1-based
+                EndLine = end + 1,
+                Content = content,
+                EstimatedTokens = tokens,
+                AnchorSource = source,
+            });
+            usedTokens += tokens;
+        }
+
+        return chunks;
     }
 
     private static List<FileChunk> ChunkFull(string path, string content, string[] lines, int totalTokens, int maxTokens)
@@ -88,7 +172,6 @@ public sealed class ChunkingStrategy
 
     private static List<FileChunk> ChunkOutline(string path, string[] lines)
     {
-        // Extract only class/function/interface/namespace declarations
         var outlineLines = new List<string>();
         var lineNums = new List<int>();
 
@@ -120,9 +203,8 @@ public sealed class ChunkingStrategy
 
     private static List<FileChunk> ChunkSummary(string path, string[] lines)
     {
-        // Deterministic summary: first N lines + imports + last N lines
         var head = lines.Take(Math.Min(20, lines.Length)).ToList();
-        var imports = lines.Where(l => l.Contains("import ") || l.Contains("using ")).Take(10).ToList();
+        var imports = lines.Where(l => l.Contains("import ", StringComparison.Ordinal) || l.Contains("using ", StringComparison.Ordinal)).Take(10).ToList();
         var tail = lines.Skip(Math.Max(0, lines.Length - 10)).Take(10).ToList();
 
         var content = string.Join('\n', head.Concat(imports).Concat(tail).Distinct());
@@ -157,7 +239,6 @@ public sealed class ChunkingStrategy
 
     private static int DetermineChunkSize(int totalLines, int maxTokens)
     {
-        // Rough: ~4 chars per token, ~40 chars per line
         var tokensPerLine = 10;
         var linesForBudget = maxTokens / tokensPerLine;
         return Math.Clamp(linesForBudget, 50, MaxChunkSize);
@@ -183,3 +264,9 @@ public sealed class ChunkingStrategy
     /// </summary>
     public static int EstimateTokens(string text) => text.Length / 4;
 }
+
+/// <summary>
+/// A line anchor: a specific line number that should be included in chunking,
+/// along with its source (e.g., "fts", "symbol", "gitdiff", "errorstack").
+/// </summary>
+public sealed record LineAnchor(int Line, string Source);
