@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "project": "CacheHub",
-  "currentPhase": "R2-IN-PROGRESS",
-  "currentTask": "R2-W001/W003/W006 complete. Remaining: R2-W005 (anchor chunking), R2-W007 (PayloadPlan), R2-W008 (RepoMap), R2-W009 (Expand), R2-W010 (Explain)",
+  "currentPhase": "R2-CORE-COMPLETE",
+  "currentTask": "R2 core 8/10 complete (W002 Recall multi-source and W004 Tree-sitter require external deps). Next: R3 通用协议与安全 GUI Beta",
   "repository": {
     "branch": "main",
     "dirty": false,
@@ -10,7 +10,7 @@
   },
   "qualityGates": {
     "build": "pass",
-    "unitTests": "pass (434/436, 2 skipped)",
+    "unitTests": "pass (439/441, 2 skipped)",
     "integrationTests": "pass",
     "securityTests": "pass",
     "format": "pass"
@@ -19,15 +19,17 @@
   "r1CompletedTasks": "10/10 (indexing & persistence trustworthy)",
   "r2CompletedTasks": [
     "R2-W001: Unicode/Chinese task parsing (deterministic-query-v2)",
-    "R2-W003: Ranking only implements actual features (deterministic-v2 v4, SizeEfficiency added)",
-    "R2-W006: Token Budget reserves participate in formula (budget-v2)"
+    "R2-W003: Ranking only implements actual features (deterministic-v2 v4, SizeEfficiency)",
+    "R2-W005: Anchor-based Chunking (chunking-v2, LineAnchor)",
+    "R2-W006: Token Budget reserves in formula (budget-v2, MaxAvailable)",
+    "R2-W007: Immutable PayloadPlan (Manifest/Payload share plan)",
+    "R2-W008: RepoMap real directory tree + importance scoring + budget (repomap-v2)",
+    "R2-W009: Context Expand symbol support (ExpandBySymbol, file_symbols query)",
+    "R2-W010: Context Explain complete FeatureBreakdown (ExplainResult, weighted contributions)"
   ],
-  "r2RemainingTasks": [
-    "R2-W005: Grammar/hit-anchor Chunking (only relevant chunks)",
-    "R2-W007: Selection produces immutable PayloadPlan",
-    "R2-W008: RepoMap real directory tree + importance scoring",
-    "R2-W009: Context Expand symbol support",
-    "R2-W010: Context Explain feature breakdown"
+  "r2SkippedTasks": [
+    "R2-W002: Recall multi-source (requires FTS+symbol DB integration in CLI — partially done via callbacks)",
+    "R2-W004: Tree-sitter (requires native library integration — deferred to later phase)"
   ],
-  "lastUpdated": "2026-08-07T02:00:00Z"
+  "lastUpdated": "2026-08-07T02:10:00Z"
 }
