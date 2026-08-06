@@ -96,7 +96,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - FailureAttribution: Retrieval/Ranking/Budget/AgentNonCompliance/ModelRandom/Environment
 
 #### Persistence
-- 4 SQLite migrations: Initial (workspaces/snapshots/files/jobs), FTS5, ContextPackages, Feedback (context_feedback + feedback_files)
+- 5 SQLite migrations: Initial (workspaces/snapshots/files/jobs), FTS5, ContextPackages, Feedback (context_feedback + feedback_files), ContextPackageDetails (budget details + JSON payload columns)
 - SqliteWorkspaceRepository, SqliteContextPackageRepository, SqliteFeedbackRepository
 
 #### Infrastructure
