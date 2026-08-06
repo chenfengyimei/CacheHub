@@ -145,13 +145,29 @@
                 <p style="color:var(--text-dim)">Log level: Info</p>
                 <p style="color:var(--text-dim)">Privacy: Local only, no telemetry</p>
             </div>
+            <div class="card">
+                <h2>API Authentication</h2>
+                <p style="color:var(--text-dim)">Access token (printed to console on startup):</p>
+                <div class="row" style="margin-bottom:0.5rem">
+                    <input type="password" id="settings-token" placeholder="Paste access token..." style="flex:1">
+                    <button class="btn" onclick="saveToken()">Save</button>
+                </div>
+                <p id="token-status" style="color:var(--text-dim);font-size:0.85rem"></p>
+            </div>
         </div>
     </main>
     <div id="toast"></div>
 
 <script>
+// Auth token management — stored in localStorage, set via Settings page
+function getAuthToken() { return localStorage.getItem('cachehub_token') || ''; }
+function setAuthToken(token) { localStorage.setItem('cachehub_token', token); }
+
 async function api(path, opts) {
-    const res = await fetch(path, opts);
+    const token = getAuthToken();
+    const headers = { ...(opts?.headers || {}) };
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    const res = await fetch(path, { ...opts, headers });
     return res.json();
 }
 
@@ -160,6 +176,32 @@ function showPage(id) {
     document.getElementById('page-' + id).style.display = '';
     document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
     event.target.classList.add('active');
+    if (id === 'settings') loadTokenStatus();
+}
+
+function saveToken() {
+    const token = document.getElementById('settings-token').value.trim();
+    if (token) {
+        setAuthToken(token);
+        document.getElementById('token-status').textContent = 'Token saved. API requests will include authentication.';
+        document.getElementById('token-status').style.color = 'var(--success)';
+    } else {
+        localStorage.removeItem('cachehub_token');
+        document.getElementById('token-status').textContent = 'Token cleared. API requests will fail until a token is set.';
+        document.getElementById('token-status').style.color = 'var(--warning)';
+    }
+}
+
+function loadTokenStatus() {
+    const token = getAuthToken();
+    const status = document.getElementById('token-status');
+    if (token) {
+        status.textContent = 'Token is set (' + token.substring(0, 8) + '...)';
+        status.style.color = 'var(--success)';
+    } else {
+        status.textContent = 'No token set. Copy the access token from the console and paste it above.';
+        status.style.color = 'var(--warning)';
+    }
 }
 
 function toast(msg) {

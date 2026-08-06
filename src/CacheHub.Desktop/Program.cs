@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using CacheHub.Context.Engine;
 using CacheHub.Context.Explain;
@@ -18,6 +19,9 @@ using CacheHub.Storage.Search;
 using CacheHub.Storage.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Security: generate a random access token for API authentication
+var accessToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
 
 builder.Services.AddSingleton<AppDataDirectory>();
 builder.Services.AddSingleton<SqliteConnectionFactory>(sp =>
@@ -42,7 +46,44 @@ builder.Services.AddSingleton<IContextPackageRepository, SqliteContextPackageRep
 builder.Services.AddSingleton<IFeedbackRepository, SqliteFeedbackRepository>();
 builder.Services.AddSingleton<ContextEngine>();
 
+// Security: force loopback binding only
+builder.WebHost.UseUrls("http://127.0.0.1:5099");
+
 var app = builder.Build();
+
+// Security: API authentication middleware — all /api/ routes require a valid bearer token
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path.Value;
+    if (path is not null && path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
+    {
+    #if DEBUG
+        // In debug mode, allow requests without token if no Authorization header is present
+        // This is for development convenience — production builds always require the token
+    #endif
+        var authHeader = context.Request.Headers.Authorization.ToString();
+        if (string.IsNullOrEmpty(authHeader) || !authHeader.Equals($"Bearer {accessToken}", StringComparison.OrdinalIgnoreCase))
+        {
+            context.Response.StatusCode = 401;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync($"{{\"error\":\"Unauthorized\",\"code\":\"AUTH_REQUIRED\",\"hint\":\"Use Authorization: Bearer <token> header. Token was printed to console on startup.\"}}");
+            return;
+        }
+
+        // Host header validation — prevent DNS rebinding attacks
+        var host = context.Request.Headers.Host.ToString();
+        if (!host.StartsWith("127.0.0.1", StringComparison.OrdinalIgnoreCase) &&
+            !host.StartsWith("localhost", StringComparison.OrdinalIgnoreCase))
+        {
+            context.Response.StatusCode = 403;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync("{\"error\":\"Forbidden\",\"code\":\"INVALID_HOST\",\"hint\":\"Only localhost/127.0.0.1 access is allowed.\"}");
+            return;
+        }
+    }
+
+    await next();
+});
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
@@ -456,6 +497,13 @@ app.MapGet("/api/v1/context/{id}/payload", async (string id, IContextPackageRepo
         }),
     });
 });
+
+// Print access token to console for user
+Console.WriteLine("============================================================");
+Console.WriteLine("CacheHub Local API started on http://127.0.0.1:5099");
+Console.WriteLine($"Access Token: {accessToken}");
+Console.WriteLine("All API requests require: Authorization: Bearer <token>");
+Console.WriteLine("============================================================");
 
 app.Run();
 
