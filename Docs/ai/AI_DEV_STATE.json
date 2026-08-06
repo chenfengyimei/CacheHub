@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "project": "CacheHub",
-  "currentPhase": "R0-COMPLETE",
-  "currentTask": "R0 all tasks complete. Next: R1 索引与持久化可信化",
+  "currentPhase": "R1-COMPLETE",
+  "currentTask": "R1 all tasks complete. Next: R2 Context Engine 正确性 0.2",
   "repository": {
     "branch": "main",
     "dirty": false,
@@ -10,45 +10,38 @@
   },
   "qualityGates": {
     "build": "pass",
-    "unitTests": "pass (392/394, 2 skipped)",
+    "unitTests": "pass (423/425, 2 skipped)",
     "integrationTests": "pass",
-    "securityTests": "pass (P0 issues resolved)",
+    "securityTests": "pass",
     "format": "pass"
   },
-  "r0CompletedTasks": [
-    "R0-W001: Pre-alpha 标记 + README 功能矩阵",
-    "R0-W002: SafePathResolver + 封锁任意路径 Outline",
-    "R0-W003: Local API 认证 + loopback 强制",
-    "R0-W004: 前端 XSS 修复 + CSP",
-    "R0-W005: 修复 snapshot 激活 SQL 跨工作区 bug",
-    "R0-W006: Context Build 绑定真实 Active Snapshot 和真实 hash",
-    "R0-W007: Gateway 安全修复 (认证+状态码+缓存安全+请求限制)",
-    "R0-W008: 安全策略 PolicyDecision + Payload 出口强制执行",
-    "R0-W009: CI push/PR 自动触发 + install.ps1 测试失败中止",
-    "R0-W010: Benchmark 标记为 DEMO"
+  "r0CompletedTasks": "10/10 (all P0 issues resolved)",
+  "r1CompletedTasks": [
+    "R1-W001: PhysicalPath/VirtualPath/PathComparer",
+    "R1-W002: Schema v2 migration (symbols/imports/relations tables)",
+    "R1-W003: index build batch transaction + real hash",
+    "R1-W004: index refresh incremental update",
+    "R1-W006: gitignore matcher (!, **, root anchor, last-rule-wins)",
+    "R1-W007: reconcile VirtualPath + size+mtime comparison",
+    "R1-W008: Parser results persisted to index",
+    "R1-W009: FTS QueryCompiler + Recall integration",
+    "R1-W009b: Fts5Index.SearchAsync uses FtsQueryCompiler",
+    "R1-W010: Context Repository complete round-trip (Migration0007)"
   ],
   "risks": [
-    "R1: index refresh 未实现",
-    "R1: Parser 结果未持久化到索引",
-    "R1: FTS 未接入 Context Recall",
-    "R1: Context Package 读写字段不完整",
-    "R2: Tokenizer 未真正参与预算",
-    "R2: 任务解析仅支持英文",
-    "R2: Chunking 返回全部分块",
-    "R2: Context Expand --symbol 当作文件路径"
+    "R2: Task parser only supports English",
+    "R2: Tokenizer not used in budget calculation",
+    "R2: Chunking returns all chunks not relevant ones",
+    "R2: Context Expand --symbol treated as file path",
+    "R2: Ranking dimensions mostly zero"
   ],
   "blockers": [],
   "nextActions": [
-    "R1-W001: 定义 PhysicalPath/VirtualPath/PathComparer",
-    "R1-W002: Schema v2 (mtime, hash_kind, parser_version, symbols/imports/relations, FK)",
-    "R1-W003: 重写 index build 为单连接批量事务",
-    "R1-W004: 实现 refresh",
-    "R1-W005: FileWatcher 接入 Coordinator",
-    "R1-W006: 正确 gitignore matcher",
-    "R1-W007: 修复 reconcile",
-    "R1-W008: Parser 结果进入索引",
-    "R1-W009: FTS QueryCompiler + Context Recall 接入",
-    "R1-W010: Context Repository 完整 round-trip"
+    "R2-W001: Unicode/Chinese task parsing",
+    "R2-W002: Recall implement FTS/Symbol/Git hunk/RepoMap",
+    "R2-W005: Grammar/hit-anchor Chunking",
+    "R2-W006: Token Budget with real ITokenizer",
+    "R2-W007: Selection produces immutable PayloadPlan"
   ],
-  "lastUpdated": "2026-08-07T01:25:00Z"
+  "lastUpdated": "2026-08-07T01:45:00Z"
 }
