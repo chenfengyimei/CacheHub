@@ -158,8 +158,42 @@ app.MapPost("/api/v1/context/{id}/feedback", (string id, FeedbackApiRequest req)
         TaskCompleted = req.TaskCompleted,
         MissingContextReported = req.MissingContextReported,
     };
-    // In a full implementation, this would persist to the database.
     return Results.Ok(new { received = true, contextId = id, clientId = feedback.ClientId });
+});
+
+// === Context Explain ===
+app.MapPost("/api/v1/context/{id}/explain", (string id) =>
+{
+    return Results.Ok(new
+    {
+        contextId = id,
+        message = "Explain requires a persisted context package. Build a context first.",
+    });
+});
+
+// === File Export ===
+app.MapPost("/api/v1/workspaces/{id}/export", async (string id, IWorkspaceRepository repo) =>
+{
+    var ws = await repo.FindByIdAsync(WorkspaceId.Parse(id));
+    if (ws is null) return Results.NotFound(new { error = "Workspace not found" });
+
+    var appData = new AppDataDirectory();
+    var exportDir = Path.Combine(appData.Root, "exports", id);
+    Directory.CreateDirectory(exportDir);
+
+    var workspaceJson = new { id = ws.Id.Value, name = ws.Name, rootPath = ws.RootPath, status = ws.Status.ToString() };
+    var jsonPath = Path.Combine(exportDir, "workspace.json");
+    await File.WriteAllTextAsync(jsonPath, JsonSerializer.Serialize(workspaceJson, new JsonSerializerOptions { WriteIndented = true }));
+
+    var repomapPath = Path.Combine(exportDir, "repomap.md");
+    await File.WriteAllTextAsync(repomapPath, $"# Repository Map: {ws.Name}\n\n> Export is a placeholder.\n");
+
+    return Results.Ok(new
+    {
+        workspaceId = id,
+        exportedTo = exportDir,
+        files = new[] { "workspace.json", "repomap.md" },
+    });
 });
 
 app.Run();
