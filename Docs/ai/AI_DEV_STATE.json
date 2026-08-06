@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "project": "AI_KV",
-  "currentPhase": "P05",
+  "currentPhase": "P06",
   "currentTask": null,
   "repository": {
     "branch": "main",
@@ -35,18 +35,21 @@
     "TokenBudget: 区分模型窗口/Agent保留/响应保留/目标/硬限制/安全余量",
     "SelectionEngine: Full/Chunks/Outline/DeterministicSummary/Metadata 五种模式",
     "ContextEngine 集成全流程，输出版本化 Manifest",
-    "ContextPackageCache 严格绑定任务+快照+排序+预算+安全策略"
+    "ContextPackageCache 严格绑定任务+快照+排序+预算+安全策略",
+    "CLI 支持 --output=json，stdout/stderr 分离",
+    "Integration Kit: Universal Skill + CLI Agent 教程 + ContextFeedback 协议"
   ],
   "risks": [
     "许可证未正式确定（LICENSE 占位）",
     "Tree-sitter 原生库打包策略待后续确定（当前用 Regex 替代）",
     "P02-W012 性能基准尚未建立",
-    "Tokenizer 为粗略估算（chars/4），非精确模型 Tokenizer"
+    "Tokenizer 为粗略估算（chars/4），非精确模型 Tokenizer",
+    "Local API 尚未实现（仅 CLI）",
+    "Context inspect/export/expand 为骨架实现"
   ],
   "blockers": [],
   "nextActions": [
-    "开始 P05-W001: 稳定 CLI JSON 契约",
-    "开始 P05-W002: 实现 capability discovery"
+    "开始 P06: 核心 Benchmark 与阶段门"
   ],
-  "lastUpdated": "2026-08-06T18:40:00Z"
+  "lastUpdated": "2026-08-06T18:50:00Z"
 }
