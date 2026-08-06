@@ -135,7 +135,7 @@ public static class IndexCommands
         }
 
         // Activate snapshot
-        await ActivateSnapshotAsync(factory, snapshotId, fileCount);
+        await ActivateSnapshotAsync(factory, snapshotId, workspace.Id, fileCount);
         await repo.UpdateStatusAsync(workspace.Id, WorkspaceStatus.Ready);
 
         Console.WriteLine($"Index build complete:");
@@ -289,14 +289,21 @@ public static class IndexCommands
         await cmd.ExecuteNonQueryAsync();
     }
 
-    private static async Task ActivateSnapshotAsync(SqliteConnectionFactory factory, IndexSnapshotId snapshotId, int fileCount)
+    private static async Task ActivateSnapshotAsync(SqliteConnectionFactory factory, IndexSnapshotId snapshotId, WorkspaceId workspaceId, int fileCount)
     {
         await using var conn = factory.CreateOpenConnection();
+        await using var tx = await conn.BeginTransactionAsync();
+
+        // Deactivate only this workspace's active snapshot (not other workspaces')
         using var deactivateCmd = conn.CreateCommand();
-        deactivateCmd.CommandText = "UPDATE index_snapshots SET status = 'Superseded' WHERE status = 'Active';";
+        deactivateCmd.Transaction = (SqliteTransaction)tx;
+        deactivateCmd.CommandText =
+            "UPDATE index_snapshots SET status = 'Superseded' WHERE status = 'Active' AND workspace_id = $ws;";
+        deactivateCmd.Parameters.AddWithValue("$ws", workspaceId.Value);
         await deactivateCmd.ExecuteNonQueryAsync();
 
         using var activateCmd = conn.CreateCommand();
+        activateCmd.Transaction = (SqliteTransaction)tx;
         activateCmd.CommandText =
             """
             UPDATE index_snapshots SET status = 'Active', file_count = $count, completed_at = datetime('now')
@@ -305,6 +312,8 @@ public static class IndexCommands
         activateCmd.Parameters.AddWithValue("$id", snapshotId.Value);
         activateCmd.Parameters.AddWithValue("$count", fileCount);
         await activateCmd.ExecuteNonQueryAsync();
+
+        await tx.CommitAsync();
     }
 
     private static async Task<(string id, int fileCount)?> GetActiveSnapshotAsync(SqliteConnectionFactory factory, WorkspaceId workspaceId)
