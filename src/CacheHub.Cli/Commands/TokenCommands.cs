@@ -79,5 +79,5 @@ public static class TokenCommands
     private static readonly System.Text.Json.JsonSerializerOptions _jsonOpts = new() { WriteIndented = true };
 
     private static string? GetOpt(string[] args, string prefix) =>
-        args.FirstOrDefault(a => a.StartsWith(prefix + "=", StringComparison.OrdinalIgnoreCase))?[prefix.Length..];
+        args.FirstOrDefault(a => a.StartsWith(prefix + "=", StringComparison.OrdinalIgnoreCase))?[(prefix.Length + 1)..];
 }

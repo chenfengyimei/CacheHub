@@ -98,5 +98,5 @@ public static class GatewayCommands
     }
 
     private static string? GetOpt(string[] args, string prefix) =>
-        args.FirstOrDefault(a => a.StartsWith(prefix + "=", StringComparison.OrdinalIgnoreCase))?[prefix.Length..];
+        args.FirstOrDefault(a => a.StartsWith(prefix + "=", StringComparison.OrdinalIgnoreCase))?[(prefix.Length + 1)..];
 }
