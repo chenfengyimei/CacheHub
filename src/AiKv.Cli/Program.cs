@@ -38,6 +38,8 @@ if (args.Length == 0)
     Console.WriteLine("  search <query> [--workspace=<id>]   Search indexed files (FTS5)");
     Console.WriteLine("  benchmark <list|run|report>        Run benchmark tasks and generate reports");
     Console.WriteLine("  outline <file> [--output=json]      Extract file outline (symbols/imports)");
+    Console.WriteLine("  repomap <dir> [--max-tokens=N]       Generate repository map");
+    Console.WriteLine("  clean <temp|cache|exports|all>       Clean AI_KV data [--dry-run]");
     Console.WriteLine("  integration verify                 Verify installation and integration");
     return 1;
 }
@@ -60,5 +62,7 @@ return args[0] switch
     "search" => await SearchCommands.HandleAsync(args.AsSpan(1).ToArray()),
     "benchmark" => BenchmarkCommands.Handle(args.AsSpan(1).ToArray()),
     "outline" => OutlineCommands.Handle(args.AsSpan(1).ToArray()),
+    "repomap" => await RepoMapCommands.Handle(args.AsSpan(1).ToArray()),
+    "clean" => CleanCommands.Handle(args.AsSpan(1).ToArray()),
     _ => 1,
 };
