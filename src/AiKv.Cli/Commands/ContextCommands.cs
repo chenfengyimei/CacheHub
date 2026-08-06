@@ -1,8 +1,8 @@
 using System.Text.Json;
 using AiKv.Context.Engine;
-using AiKv.Context.Parsing;
 using AiKv.Context.Recall;
 using AiKv.Core.Context;
+using AiKv.Core.Feedback;
 using AiKv.Core.Identifiers;
 using AiKv.Core.Workspaces;
 using AiKv.Storage;
@@ -12,18 +12,15 @@ using AiKv.Storage.Repositories;
 
 namespace AiKv.Cli.Commands;
 
-/// <summary>
-/// Handles `aikv context build/inspect/export/expand` commands.
-/// All commands support --output=json.
-/// </summary>
 public static class ContextCommands
 {
     private static readonly JsonSerializerOptions _jsonOpts = new() { WriteIndented = true };
+
     public static async Task<int> HandleAsync(string[] args)
     {
         if (args.Length == 0)
         {
-            Console.Error.WriteLine("Usage: aikv context <build|inspect|export|expand> [options]");
+            Console.Error.WriteLine("Usage: aikv context <build|inspect|export|expand|feedback> [options]");
             return 1;
         }
 
@@ -33,6 +30,7 @@ public static class ContextCommands
             "inspect" => await InspectAsync(args.AsSpan(1).ToArray()),
             "export" => await ExportAsync(args.AsSpan(1).ToArray()),
             "expand" => await ExpandAsync(args.AsSpan(1).ToArray()),
+            "feedback" => await FeedbackAsync(args.AsSpan(1).ToArray()),
             _ => 1,
         };
     }
@@ -49,32 +47,15 @@ public static class ContextCommands
             return 1;
         }
 
-        var appData = new AppDataDirectory();
-        var dbPath = appData.GetWorkspaceDatabasePath("main");
-        var factory = new SqliteConnectionFactory(dbPath);
-        var runner = new MigrationRunner(factory, dbPath,
-        [
-            new Migration0001Initial(),
-            new Migration0002Fts5(),
-        ]);
-        runner.Migrate();
-
-        var repo = new SqliteWorkspaceRepository(factory);
-        var workspace = await repo.FindByIdAsync(WorkspaceId.Parse(wsId));
-        if (workspace is null)
-        {
-            Console.Error.WriteLine($"Workspace not found: {wsId}");
-            return 1;
-        }
+        var (factory, workspace) = await ResolveWorkspaceAsync(wsId);
+        if (workspace is null) return 1;
 
         Console.Error.WriteLine($"Building context for: {workspace.Name}");
         Console.Error.WriteLine($"  Task: {task}");
 
         var engine = new ContextEngine();
         var snapshotId = IndexSnapshotId.New();
-
-        // Collect indexed files from FTS
-        var indexedFiles = GetIndexedFiles(factory, snapshotId);
+        var indexedFiles = await GetIndexedFilesAsync(factory, wsId);
 
         var manifest = engine.Build(
             new ContextBuildRequest
@@ -84,13 +65,12 @@ public static class ContextCommands
                 Task = task,
             },
             () => indexedFiles,
-            path => File.Exists(path) ? File.ReadAllText(path) : "",
+            path => ResolveFileContent(workspace.RootPath, path),
             path => "sha256:pending");
 
         if (outputJson)
         {
-            var json = JsonSerializer.Serialize(manifest, _jsonOpts);
-            Console.WriteLine(json);
+            Console.WriteLine(JsonSerializer.Serialize(manifest, _jsonOpts));
         }
         else
         {
@@ -98,13 +78,16 @@ public static class ContextCommands
             Console.WriteLine($"  Schema: v{manifest.SchemaVersion}");
             Console.WriteLine($"  Task: {manifest.Task.OriginalText}");
             Console.WriteLine($"  Ranking: {manifest.Ranking.ProfileId} v{manifest.Ranking.ProfileVersion}");
-            Console.WriteLine($"  Budget: {manifest.Budget.ActualEstimate} / {manifest.Budget.ContextTarget} (hard limit: {manifest.Budget.ContextHardLimit})");
-            Console.WriteLine($"  Selected Files ({manifest.SelectedFiles.Count}):");
+            Console.WriteLine($"  Budget: {manifest.Budget.ActualEstimate} / {manifest.Budget.ContextTarget} (hard: {manifest.Budget.ContextHardLimit})");
+            Console.WriteLine($"  Selected ({manifest.SelectedFiles.Count}):");
             foreach (var f in manifest.SelectedFiles)
-                Console.WriteLine($"    [{f.Mode,-10}] {f.Score:F2}  {f.Path}");
-            Console.WriteLine($"  Excluded ({manifest.ExcludedCandidates.Count}):");
-            foreach (var e in manifest.ExcludedCandidates)
-                Console.WriteLine($"    [{e.Score:F2}] {e.Path} — {e.Reason}");
+                Console.WriteLine($"    [{f.Mode,-20}] {f.Score:F2}  {f.Path}");
+            if (manifest.ExcludedCandidates.Count > 0)
+            {
+                Console.WriteLine($"  Excluded ({manifest.ExcludedCandidates.Count}):");
+                foreach (var e in manifest.ExcludedCandidates)
+                    Console.WriteLine($"    [{e.Score:F2}] {e.Path} — {e.Reason}");
+            }
         }
 
         return 0;
@@ -119,7 +102,6 @@ public static class ContextCommands
             return Task.FromResult(1);
         }
 
-        Console.Error.WriteLine($"Context inspect not yet persisted. Context ID: {ctxId}");
         Console.WriteLine($"{{ \"id\": \"{ctxId}\", \"status\": \"not_persisted\" }}");
         return Task.FromResult(0);
     }
@@ -128,17 +110,20 @@ public static class ContextCommands
     {
         var ctxId = GetOpt(args, "--id");
         var format = GetOpt(args, "--format") ?? "markdown";
-
         if (string.IsNullOrEmpty(ctxId))
         {
             Console.Error.WriteLine("Error: --id=<context-id> is required");
             return Task.FromResult(1);
         }
 
-        Console.Error.WriteLine($"Export not yet fully implemented. Context ID: {ctxId}, Format: {format}");
-        Console.WriteLine($"# Context Package {ctxId}");
-        Console.WriteLine();
-        Console.WriteLine("> Export is a placeholder in the current version.");
+        if (format == "json")
+            Console.WriteLine($"{{ \"id\": \"{ctxId}\", \"format\": \"json\", \"status\": \"placeholder\" }}");
+        else
+        {
+            Console.WriteLine($"# Context Package {ctxId}");
+            Console.WriteLine();
+            Console.WriteLine("> Export is a placeholder in the current version.");
+        }
         return Task.FromResult(0);
     }
 
@@ -146,23 +131,102 @@ public static class ContextCommands
     {
         var ctxId = GetOpt(args, "--id");
         var symbol = GetOpt(args, "--symbol");
-
+        var file = GetOpt(args, "--file");
         if (string.IsNullOrEmpty(ctxId))
         {
             Console.Error.WriteLine("Error: --id=<context-id> is required");
             return Task.FromResult(1);
         }
 
-        Console.Error.WriteLine($"Expand: ctx={ctxId}, symbol={symbol}");
-        Console.WriteLine($"{{ \"contextId\": \"{ctxId}\", \"expandedSymbol\": \"{symbol ?? "none"}\", \"status\": \"not_persisted\" }}");
+        var detail = symbol is not null ? $"symbol={symbol}" : $"file={file}";
+        Console.WriteLine($"{{ \"contextId\": \"{ctxId}\", \"expanded\": \"{detail}\", \"status\": \"not_persisted\" }}");
         return Task.FromResult(0);
     }
 
-    private static List<Context.Recall.IndexedFileInfo> GetIndexedFiles(SqliteConnectionFactory factory, IndexSnapshotId snapshotId)
+    private static async Task<int> FeedbackAsync(string[] args)
     {
-        // In a full implementation, this would query the FTS5 + files tables.
-        // For now, return empty list — the Context Engine handles empty gracefully.
-        return [];
+        var ctxId = GetOpt(args, "--id");
+        var filePath = GetOpt(args, "--file");
+        if (string.IsNullOrEmpty(ctxId) || string.IsNullOrEmpty(filePath))
+        {
+            Console.Error.WriteLine("Error: --id=<context-id> and --file=<path> are required");
+            return 1;
+        }
+
+        if (!File.Exists(filePath))
+        {
+            Console.Error.WriteLine($"Error: File not found: {filePath}");
+            return 1;
+        }
+
+        var json = await File.ReadAllTextAsync(filePath);
+        var feedback = ContextFeedback.ParseJson(json);
+        if (feedback is null)
+        {
+            Console.Error.WriteLine("Error: Invalid feedback JSON");
+            return 1;
+        }
+
+        Console.Error.WriteLine($"Feedback received for context: {ctxId}");
+        Console.Error.WriteLine($"  Client: {feedback.ClientId ?? "unknown"}");
+        Console.Error.WriteLine($"  Files read: {feedback.FilesActuallyRead.Count}");
+        Console.Error.WriteLine($"  Task completed: {feedback.TaskCompleted}");
+        Console.Error.WriteLine($"  Missing context: {feedback.MissingContextReported}");
+        Console.WriteLine($"{{ \"received\": true, \"contextId\": \"{ctxId}\" }}");
+        return 0;
+    }
+
+    private static async Task<(SqliteConnectionFactory factory, Workspace? workspace)> ResolveWorkspaceAsync(string wsId)
+    {
+        var appData = new AppDataDirectory();
+        var dbPath = appData.GetWorkspaceDatabasePath("main");
+        var factory = new SqliteConnectionFactory(dbPath);
+        var runner = new MigrationRunner(factory, dbPath,
+        [
+            new Migration0001Initial(),
+            new Migration0002Fts5(),
+        ]);
+        runner.Migrate();
+
+        var repo = new SqliteWorkspaceRepository(factory);
+        var ws = await repo.FindByIdAsync(WorkspaceId.Parse(wsId));
+        if (ws is null)
+            Console.Error.WriteLine($"Workspace not found: {wsId}");
+
+        return (factory, ws);
+    }
+
+    private static async Task<List<IndexedFileInfo>> GetIndexedFilesAsync(SqliteConnectionFactory factory, string workspaceId)
+    {
+        var result = new List<IndexedFileInfo>();
+        await using var conn = factory.CreateOpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT f.normalized_path, f.size, f.language
+            FROM files f
+            INNER JOIN index_snapshots s ON f.snapshot_id = s.id
+            WHERE s.workspace_id = $ws AND s.status = 'Active';
+            """;
+        cmd.Parameters.AddWithValue("$ws", workspaceId);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            result.Add(new IndexedFileInfo
+            {
+                Path = reader.GetString(0),
+                NormalizedPath = reader.GetString(0),
+                Language = reader.IsDBNull(2) ? "unknown" : reader.GetString(2),
+                Size = reader.IsDBNull(1) ? 0 : reader.GetInt64(1),
+                Symbols = [],
+            });
+        }
+        return result;
+    }
+
+    private static string ResolveFileContent(string rootPath, string relativePath)
+    {
+        var fullPath = Path.Combine(rootPath, relativePath.Replace('/', Path.DirectorySeparatorChar));
+        return File.Exists(fullPath) ? File.ReadAllText(fullPath) : "";
     }
 
     private static string? GetOpt(string[] args, string prefix) =>
