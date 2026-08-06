@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AiKv.Context.Engine;
+using AiKv.Context.Explain;
 using AiKv.Context.Parsing;
 using AiKv.Context.Recall;
 using AiKv.Core.Capabilities;
@@ -30,6 +31,7 @@ builder.Services.AddSingleton<SqliteConnectionFactory>(sp =>
     return factory;
 });
 builder.Services.AddSingleton<IWorkspaceRepository, SqliteWorkspaceRepository>();
+builder.Services.AddSingleton<IContextPackageRepository, SqliteContextPackageRepository>();
 builder.Services.AddSingleton<ContextEngine>();
 
 var app = builder.Build();
@@ -116,7 +118,7 @@ app.MapDelete("/api/v1/workspaces/{id}", async (string id, IWorkspaceRepository 
 });
 
 // === Context ===
-app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextEngine engine, SqliteConnectionFactory factory, IWorkspaceRepository repo) =>
+app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextEngine engine, SqliteConnectionFactory factory, IWorkspaceRepository repo, IContextPackageRepository ctxRepo) =>
 {
     var ws = await repo.FindByIdAsync(WorkspaceId.Parse(req.WorkspaceId));
     if (ws is null) return Results.NotFound(new { error = "Workspace not found" });
@@ -135,12 +137,16 @@ app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextE
         path => File.Exists(Path.Combine(ws.RootPath, path)) ? File.ReadAllText(Path.Combine(ws.RootPath, path)) : "",
         path => "sha256:pending");
 
+    await ctxRepo.SaveAsync(manifest);
+
     return Results.Ok(manifest);
 });
 
-app.MapGet("/api/v1/context/{id}", (string id) =>
+app.MapGet("/api/v1/context/{id}", async (string id, IContextPackageRepository ctxRepo) =>
 {
-    return Results.Ok(new { id, status = "not_persisted", message = "Context packages are not yet persisted between requests" });
+    var manifest = await ctxRepo.FindByIdAsync(ContextPackageId.Parse(id));
+    if (manifest is null) return Results.NotFound(new { error = "Context package not found" });
+    return Results.Ok(manifest);
 });
 
 app.MapPost("/api/v1/context/{id}/expand", (string id, ExpandApiRequest req) =>
@@ -162,12 +168,28 @@ app.MapPost("/api/v1/context/{id}/feedback", (string id, FeedbackApiRequest req)
 });
 
 // === Context Explain ===
-app.MapPost("/api/v1/context/{id}/explain", (string id) =>
+app.MapGet("/api/v1/context/{id}/explain", async (string id, IContextPackageRepository ctxRepo) =>
 {
+    var manifest = await ctxRepo.FindByIdAsync(ContextPackageId.Parse(id));
+    if (manifest is null) return Results.NotFound(new { error = "Context package not found" });
+
+    var explanations = ContextExplainer.Explain(manifest);
+    var misses = ContextExplainer.DetectPotentialMisses(manifest);
+    var budgetSummary = ContextExplainer.BudgetSummary(manifest);
+
     return Results.Ok(new
     {
         contextId = id,
-        message = "Explain requires a persisted context package. Build a context first.",
+        explanations = explanations.Select(e => new
+        {
+            path = e.Path,
+            selected = e.Selected,
+            score = e.Score,
+            reasons = e.Reasons,
+            exclusionReason = e.ExclusionReason,
+        }),
+        potentialMisses = misses,
+        budgetSummary,
     });
 });
 
