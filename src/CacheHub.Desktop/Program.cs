@@ -8,6 +8,7 @@ using CacheHub.Context.Expand;
 using CacheHub.Context.Payload;
 using CacheHub.Core.Capabilities;
 using CacheHub.Core.Context;
+using CacheHub.Core.Errors;
 using CacheHub.Core.Feedback;
 using CacheHub.Core.Identifiers;
 using CacheHub.Core.Paths;
@@ -188,7 +189,7 @@ app.MapGet("/api/v1/workspaces", async (IWorkspaceRepository repo) =>
 app.MapPost("/api/v1/workspaces/import", async (ImportRequest req, IWorkspaceRepository repo) =>
 {
     if (string.IsNullOrEmpty(req.Path))
-        return Results.BadRequest(new { error = "Path is required" });
+        return Results.BadRequest(ErrorEnvelope.From(ErrorCode.InvalidArgument, "Path is required"));
 
     var workspace = Workspace.Create(req.Name ?? new DirectoryInfo(req.Path).Name, req.Path);
     await repo.InsertAsync(workspace);
@@ -198,7 +199,7 @@ app.MapPost("/api/v1/workspaces/import", async (ImportRequest req, IWorkspaceRep
 app.MapGet("/api/v1/workspaces/{id}/status", async (string id, IWorkspaceRepository repo) =>
 {
     var ws = await repo.FindByIdAsync(WorkspaceId.Parse(id));
-    if (ws is null) return Results.NotFound(new { error = "Workspace not found" });
+    if (ws is null) return Results.NotFound(ErrorEnvelope.From(ErrorCode.WorkspaceNotFound, "Workspace not found"));
     return Results.Ok(new { id = ws.Id.Value, name = ws.Name, rootPath = ws.RootPath, status = ws.Status.ToString() });
 });
 
@@ -212,11 +213,11 @@ app.MapDelete("/api/v1/workspaces/{id}", async (string id, IWorkspaceRepository 
 app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextEngine engine, SqliteConnectionFactory factory, IWorkspaceRepository repo, IContextPackageRepository ctxRepo) =>
 {
     var ws = await repo.FindByIdAsync(WorkspaceId.Parse(req.WorkspaceId));
-    if (ws is null) return Results.NotFound(new { error = "Workspace not found" });
+    if (ws is null) return Results.NotFound(ErrorEnvelope.From(ErrorCode.WorkspaceNotFound, "Workspace not found"));
 
     var activeSnapshotId = await GetActiveSnapshotIdAsync(factory, req.WorkspaceId);
     if (activeSnapshotId is null)
-        return Results.BadRequest(new { error = "No active index snapshot. Run 'cachehub index build' first.", code = "INDEX_NOT_READY" });
+        return Results.BadRequest(ErrorEnvelope.From(ErrorCode.IndexNotFound, "No active index snapshot. Run 'cachehub index build' first."));
 
     var indexedFiles = await GetIndexedFilesAsync(factory, req.WorkspaceId);
 
@@ -243,26 +244,26 @@ app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextE
 app.MapGet("/api/v1/context/{id}", async (string id, IContextPackageRepository ctxRepo) =>
 {
     var manifest = await ctxRepo.FindByIdAsync(ContextPackageId.Parse(id));
-    if (manifest is null) return Results.NotFound(new { error = "Context package not found" });
+    if (manifest is null) return Results.NotFound(ErrorEnvelope.From(ErrorCode.ContextPackageNotFound, "Context package not found"));
     return Results.Ok(manifest);
 });
 
 app.MapPost("/api/v1/context/{id}/expand", async (string id, ExpandApiRequest req, IContextPackageRepository ctxRepo, IWorkspaceRepository wsRepo) =>
 {
     var manifest = await ctxRepo.FindByIdAsync(ContextPackageId.Parse(id));
-    if (manifest is null) return Results.NotFound(new { error = "Context package not found" });
+    if (manifest is null) return Results.NotFound(ErrorEnvelope.From(ErrorCode.ContextPackageNotFound, "Context package not found"));
 
     var ws = await wsRepo.FindByIdAsync(manifest.WorkspaceId);
-    if (ws is null) return Results.NotFound(new { error = "Workspace not found" });
+    if (ws is null) return Results.NotFound(ErrorEnvelope.From(ErrorCode.WorkspaceNotFound, "Workspace not found"));
 
     var targetPath = req.File ?? req.Symbol ?? "";
     var fullPath = SafeResolvePath(ws.RootPath, targetPath);
 
     if (fullPath is null)
-        return Results.BadRequest(new { error = "Invalid file path" });
+        return Results.BadRequest(ErrorEnvelope.From(ErrorCode.InvalidArgument, "Invalid file path"));
 
     if (!File.Exists(fullPath))
-        return Results.NotFound(new { error = $"File not found: {targetPath}" });
+        return Results.NotFound(ErrorEnvelope.From(ErrorCode.InvalidArgument, $"File not found: {targetPath}"));
 
     var content = await File.ReadAllTextAsync(fullPath);
     var expander = new ContextExpander();
@@ -311,7 +312,7 @@ app.MapGet("/api/v1/workspaces/{id}/contexts", async (string id, IContextPackage
 app.MapGet("/api/v1/context/{id}/explain", async (string id, IContextPackageRepository ctxRepo) =>
 {
     var manifest = await ctxRepo.FindByIdAsync(ContextPackageId.Parse(id));
-    if (manifest is null) return Results.NotFound(new { error = "Context package not found" });
+    if (manifest is null) return Results.NotFound(ErrorEnvelope.From(ErrorCode.ContextPackageNotFound, "Context package not found"));
 
     var explanations = ContextExplainer.Explain(manifest);
     var misses = ContextExplainer.DetectPotentialMisses(manifest);
@@ -337,7 +338,7 @@ app.MapGet("/api/v1/context/{id}/explain", async (string id, IContextPackageRepo
 app.MapPost("/api/v1/workspaces/{id}/export", async (string id, IWorkspaceRepository repo) =>
 {
     var ws = await repo.FindByIdAsync(WorkspaceId.Parse(id));
-    if (ws is null) return Results.NotFound(new { error = "Workspace not found" });
+    if (ws is null) return Results.NotFound(ErrorEnvelope.From(ErrorCode.WorkspaceNotFound, "Workspace not found"));
 
     var appData = new AppDataDirectory();
     var exportDir = Path.Combine(appData.Root, "exports", id);
@@ -362,7 +363,7 @@ app.MapPost("/api/v1/workspaces/{id}/export", async (string id, IWorkspaceReposi
 app.MapGet("/api/v1/search", async (string q, string? workspace, int? limit, SqliteConnectionFactory factory) =>
 {
     if (string.IsNullOrWhiteSpace(q))
-        return Results.BadRequest(new { error = "Query parameter 'q' is required" });
+        return Results.BadRequest(ErrorEnvelope.From(ErrorCode.InvalidArgument, "Query parameter 'q' is required"));
 
     var wsId = workspace ?? "";
     IndexSnapshotId? snapshotId = null;
@@ -396,18 +397,18 @@ app.MapGet("/api/v1/search", async (string q, string? workspace, int? limit, Sql
 app.MapGet("/api/v1/outline", async (string workspaceId, string path, IWorkspaceRepository wsRepo) =>
 {
     if (string.IsNullOrWhiteSpace(workspaceId))
-        return Results.BadRequest(new { error = "Query parameter 'workspaceId' is required" });
+        return Results.BadRequest(ErrorEnvelope.From(ErrorCode.InvalidArgument, "Query parameter 'workspaceId' is required"));
     if (string.IsNullOrWhiteSpace(path))
-        return Results.BadRequest(new { error = "Query parameter 'path' (relative file path) is required" });
+        return Results.BadRequest(ErrorEnvelope.From(ErrorCode.InvalidArgument, "Query parameter 'path' (relative file path) is required"));
 
     var ws = await wsRepo.FindByIdAsync(WorkspaceId.Parse(workspaceId));
     if (ws is null)
-        return Results.NotFound(new { error = "Workspace not found" });
+        return Results.NotFound(ErrorEnvelope.From(ErrorCode.WorkspaceNotFound, "Workspace not found"));
 
     var resolver = new SafePathResolver(ws.RootPath);
     var resolvedPath = resolver.ResolveFile(path);
     if (resolvedPath is null)
-        return Results.BadRequest(new { error = "File not found within workspace or path traversal detected", code = "PATH_RESOLUTION_FAILED" });
+        return Results.BadRequest(ErrorEnvelope.From(ErrorCode.PathTraversalDetected, "File not found within workspace or path traversal detected"));
 
     var content = File.ReadAllText(resolvedPath);
     var ext = Path.GetExtension(resolvedPath).ToLowerInvariant();
@@ -472,10 +473,10 @@ app.MapGet("/api/v1/stats", async (SqliteConnectionFactory factory) =>
 app.MapGet("/api/v1/context/{id}/payload", async (string id, IContextPackageRepository ctxRepo, IWorkspaceRepository wsRepo) =>
 {
     var manifest = await ctxRepo.FindByIdAsync(ContextPackageId.Parse(id));
-    if (manifest is null) return Results.NotFound(new { error = "Context package not found" });
+    if (manifest is null) return Results.NotFound(ErrorEnvelope.From(ErrorCode.ContextPackageNotFound, "Context package not found"));
 
     var ws = await wsRepo.FindByIdAsync(manifest.WorkspaceId);
-    if (ws is null) return Results.NotFound(new { error = "Workspace not found" });
+    if (ws is null) return Results.NotFound(ErrorEnvelope.From(ErrorCode.WorkspaceNotFound, "Workspace not found"));
 
     var generator = new PayloadGenerator();
     var enforcer = new CacheHub.Core.Security.SecurityPolicyEnforcer();
