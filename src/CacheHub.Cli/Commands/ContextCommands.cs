@@ -340,7 +340,43 @@ public static class ContextCommands
         }
 
         var expander = new Context.Expand.ContextExpander();
-        var targetFile = file ?? symbol!;
+
+        // Handle --symbol: search file_symbols table, NOT treat as file path
+        if (!string.IsNullOrEmpty(symbol) && string.IsNullOrEmpty(file))
+        {
+            // Search for the symbol in the index
+            var symbolMatches = await SearchSymbolsAsync(factory, manifest.IndexSnapshotId, symbol);
+            if (symbolMatches.Count == 0)
+            {
+                Console.Error.WriteLine($"Symbol not found in index: {symbol}");
+                return 1;
+            }
+
+            var symbolResult = expander.ExpandBySymbol(
+                ctxId,
+                symbolMatches,
+                path => ResolveFileContent(ws.RootPath, path),
+                reason ?? $"Symbol: {symbol}");
+
+            if (outputJson)
+            {
+                Console.WriteLine(JsonSerializer.Serialize(symbolResult, _jsonOpts));
+            }
+            else
+            {
+                Console.WriteLine($"Expansion for: {ctxId}");
+                Console.WriteLine($"  Type: symbol");
+                Console.WriteLine($"  Symbol: {symbol}");
+                Console.WriteLine($"  Matches: {symbolMatches.Count} files");
+                Console.WriteLine($"  Tokens: {symbolResult.AdditionalTokens}");
+                Console.WriteLine($"  Reason: {symbolResult.Reason}");
+                Console.WriteLine($"  Items: {symbolResult.AddedItems.Count}");
+            }
+            return 0;
+        }
+
+        // Handle --file (existing behavior)
+        var targetFile = file!;
 
         // Resolve path safely without reading file content
         if (targetFile.Contains(".."))
@@ -497,6 +533,36 @@ public static class ContextCommands
         if (result is string hash && !string.IsNullOrEmpty(hash) && hash != "pending")
             return hash;
         return "sha256:pending";
+    }
+
+    private static async Task<List<Context.Expand.SymbolMatch>> SearchSymbolsAsync(SqliteConnectionFactory factory, IndexSnapshotId snapshotId, string symbolName)
+    {
+        var results = new List<Context.Expand.SymbolMatch>();
+        await using var conn = factory.CreateOpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT s.name, s.kind, s.start_line, s.end_line, f.normalized_path
+            FROM file_symbols s
+            INNER JOIN files f ON s.file_id = f.id
+            WHERE s.snapshot_id = $snap AND s.name LIKE '%' || $name || '%'
+            ORDER BY s.start_line
+            LIMIT 20;
+            """;
+        cmd.Parameters.AddWithValue("$snap", snapshotId.Value);
+        cmd.Parameters.AddWithValue("$name", symbolName);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(new Context.Expand.SymbolMatch
+            {
+                SymbolName = reader.GetString(0),
+                SymbolKind = reader.GetString(1),
+                StartLine = reader.GetInt32(2),
+                EndLine = reader.GetInt32(3),
+                FilePath = reader.GetString(4),
+            });
+        }
+        return results;
     }
 
     private static string ResolveFileContent(string rootPath, string relativePath)
