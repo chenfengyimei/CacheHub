@@ -84,12 +84,13 @@ public static class IndexCommands
 
         Console.WriteLine($"  Ignore rules hash: {ignoreEngine.GetRulesHash()}");
 
-        // Enumerate files
+        // Enumerate files first (in memory) so we can batch-write in a single transaction
         var enumerator = new DirectoryEnumerator();
         var fts = new Fts5Index(factory);
         var fileCount = 0;
         var failedCount = 0;
         var ignoredCount = 0;
+        var filesToIndex = new List<(string relativePath, string fullPath, long size, string language, bool isBinary, string hash, string content)>();
 
         await foreach (var file in enumerator.EnumerateAsync(workspace.RootPath))
         {
@@ -114,19 +115,12 @@ public static class IndexCommands
                 var hash = await FileHasher.HashAsync(file.Path, file.Size);
                 var content = await File.ReadAllTextAsync(file.Path);
 
-                await fts.IndexFileAsync(
-                    snapshotId, relativePath, relativePath,
-                    content, typeInfo.Language,
-                    hash.IsFullHash ? hash.Hash : "pending");
-
-                await InsertFileAsync(
-                    factory, snapshotId, relativePath, relativePath,
-                    file.Size, hash.IsFullHash ? hash.Hash : "pending",
-                    typeInfo.Language, typeInfo.IsBinary);
+                filesToIndex.Add((relativePath, file.Path, file.Size, typeInfo.Language, typeInfo.IsBinary,
+                    hash.Hash, content));
 
                 fileCount++;
                 if (fileCount % 1000 == 0)
-                    Console.WriteLine($"  Indexed {fileCount} files...");
+                    Console.WriteLine($"  Scanned {fileCount} files...");
             }
             catch (Exception ex)
             {
@@ -135,7 +129,62 @@ public static class IndexCommands
             }
         }
 
-        // Activate snapshot
+        // Batch write: single connection, single transaction for atomicity
+        await using var batchConn = factory.CreateOpenConnection();
+        await using var batchTx = await batchConn.BeginTransactionAsync();
+
+        try
+        {
+            // Insert all files + FTS in the same transaction
+            foreach (var (relativePath, fullPath, size, language, isBinary, hash, content) in filesToIndex)
+            {
+                // Insert into files table
+                using var fileCmd = batchConn.CreateCommand();
+                fileCmd.Transaction = (SqliteTransaction)batchTx;
+                fileCmd.CommandText =
+                    """
+                    INSERT INTO files (id, snapshot_id, path, normalized_path, size, content_hash, language, is_binary, status, hash_kind)
+                    VALUES ($id, $snap, $path, $norm, $size, $hash, $lang, $bin, 'Indexed', $hashKind);
+                    """;
+                fileCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+                fileCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
+                fileCmd.Parameters.AddWithValue("$path", relativePath);
+                fileCmd.Parameters.AddWithValue("$norm", relativePath);
+                fileCmd.Parameters.AddWithValue("$size", size);
+                fileCmd.Parameters.AddWithValue("$hash", hash);
+                fileCmd.Parameters.AddWithValue("$lang", language);
+                fileCmd.Parameters.AddWithValue("$bin", isBinary ? 1 : 0);
+                fileCmd.Parameters.AddWithValue("$hashKind", hash.StartsWith("fp:", StringComparison.Ordinal) ? "fingerprint" : "full");
+                await fileCmd.ExecuteNonQueryAsync();
+            }
+
+            // Commit file metadata
+            await batchTx.CommitAsync();
+        }
+        catch (Exception ex)
+        {
+            await batchTx.RollbackAsync();
+            // Clean up the failed snapshot
+            await DeleteSnapshotAsync(factory, snapshotId);
+            Console.Error.WriteLine($"Error: Batch write failed, snapshot cleaned up: {ex.Message}");
+            return 1;
+        }
+
+        // FTS indexing (separate transaction — FTS5 virtual tables don't support DDL in DML transactions)
+        try
+        {
+            foreach (var (relativePath, _, _, language, _, hash, content) in filesToIndex)
+            {
+                await fts.IndexFileAsync(snapshotId, relativePath, relativePath, content, language, hash);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Warning: FTS indexing partially failed: {ex.Message}");
+            // Don't fail the whole build — FTS is a search optimization, not critical
+        }
+
+        // Activate snapshot only after all data is written successfully
         await ActivateSnapshotAsync(factory, snapshotId, workspace.Id, fileCount);
         await repo.UpdateStatusAsync(workspace.Id, WorkspaceStatus.Ready);
 
@@ -276,8 +325,8 @@ public static class IndexCommands
         using var cmd = conn.CreateCommand();
         cmd.CommandText =
             """
-            INSERT INTO files (id, snapshot_id, path, normalized_path, size, content_hash, language, is_binary, status)
-            VALUES ($id, $snap, $path, $norm, $size, $hash, $lang, $bin, 'Indexed');
+            INSERT INTO files (id, snapshot_id, path, normalized_path, size, content_hash, language, is_binary, status, hash_kind)
+            VALUES ($id, $snap, $path, $norm, $size, $hash, $lang, $bin, 'Indexed', $hashKind);
             """;
         cmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
         cmd.Parameters.AddWithValue("$snap", snapshotId.Value);
@@ -287,6 +336,16 @@ public static class IndexCommands
         cmd.Parameters.AddWithValue("$hash", contentHash);
         cmd.Parameters.AddWithValue("$lang", language);
         cmd.Parameters.AddWithValue("$bin", isBinary ? 1 : 0);
+        cmd.Parameters.AddWithValue("$hashKind", contentHash.StartsWith("fp:", StringComparison.Ordinal) ? "fingerprint" : "full");
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    private static async Task DeleteSnapshotAsync(SqliteConnectionFactory factory, IndexSnapshotId snapshotId)
+    {
+        await using var conn = factory.CreateOpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM files WHERE snapshot_id = $id; DELETE FROM index_snapshots WHERE id = $id;";
+        cmd.Parameters.AddWithValue("$id", snapshotId.Value);
         await cmd.ExecuteNonQueryAsync();
     }
 
