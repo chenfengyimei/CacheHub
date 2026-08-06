@@ -349,17 +349,25 @@ app.MapGet("/api/v1/search", async (string q, string? workspace, int? limit, Sql
     });
 });
 
-// === Outline ===
-app.MapGet("/api/v1/outline", (string path) =>
+// === Outline === (SECURITY: workspace-scoped, no arbitrary absolute paths)
+app.MapGet("/api/v1/outline", async (string workspaceId, string path, IWorkspaceRepository wsRepo) =>
 {
+    if (string.IsNullOrWhiteSpace(workspaceId))
+        return Results.BadRequest(new { error = "Query parameter 'workspaceId' is required" });
     if (string.IsNullOrWhiteSpace(path))
-        return Results.BadRequest(new { error = "Query parameter 'path' is required" });
+        return Results.BadRequest(new { error = "Query parameter 'path' (relative file path) is required" });
 
-    if (!File.Exists(path))
-        return Results.NotFound(new { error = $"File not found: {path}" });
+    var ws = await wsRepo.FindByIdAsync(WorkspaceId.Parse(workspaceId));
+    if (ws is null)
+        return Results.NotFound(new { error = "Workspace not found" });
 
-    var content = File.ReadAllText(path);
-    var ext = Path.GetExtension(path).ToLowerInvariant();
+    var resolver = new SafePathResolver(ws.RootPath);
+    var resolvedPath = resolver.ResolveFile(path);
+    if (resolvedPath is null)
+        return Results.BadRequest(new { error = "File not found within workspace or path traversal detected", code = "PATH_RESOLUTION_FAILED" });
+
+    var content = File.ReadAllText(resolvedPath);
+    var ext = Path.GetExtension(resolvedPath).ToLowerInvariant();
 
     CacheHub.Core.Parsing.ICodeParser? parser = ext switch
     {

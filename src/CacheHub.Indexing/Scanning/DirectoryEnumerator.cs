@@ -159,7 +159,28 @@ public sealed class DirectoryEnumerator(EnumerationOptions? options = null)
     {
         try
         {
-            return System.IO.Path.GetFullPath(path);
+            // Use FileSystemInfo.LinkTarget (.NET 9) to resolve the actual symlink target
+            var fileInfo = new FileInfo(path);
+            if (fileInfo.LinkTarget is not null)
+            {
+                // If the link target is relative, resolve it relative to the link's directory
+                var target = fileInfo.LinkTarget;
+                if (!Path.IsPathRooted(target))
+                    target = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(path)!, target));
+                return Path.GetFullPath(target);
+            }
+
+            var dirInfo = new DirectoryInfo(path);
+            if (dirInfo.LinkTarget is not null)
+            {
+                var target = dirInfo.LinkTarget;
+                if (!Path.IsPathRooted(target))
+                    target = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(path)!, target));
+                return Path.GetFullPath(target);
+            }
+
+            // Not a symlink — return the normalized full path
+            return Path.GetFullPath(path);
         }
         catch { return null; }
     }
