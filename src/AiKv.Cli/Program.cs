@@ -40,6 +40,8 @@ if (args.Length == 0)
     Console.WriteLine("  outline <file> [--output=json]      Extract file outline (symbols/imports)");
     Console.WriteLine("  repomap <dir> [--max-tokens=N]       Generate repository map");
     Console.WriteLine("  clean <temp|cache|exports|all>       Clean AI_KV data [--dry-run]");
+    Console.WriteLine("  token <text|--file> [--model=<id>]    Estimate token count");
+    Console.WriteLine("  hash <file>                          Compute file hash (SHA-256/fingerprint)");
     Console.WriteLine("  integration verify                 Verify installation and integration");
     return 1;
 }
@@ -64,5 +66,7 @@ return args[0] switch
     "outline" => OutlineCommands.Handle(args.AsSpan(1).ToArray()),
     "repomap" => await RepoMapCommands.Handle(args.AsSpan(1).ToArray()),
     "clean" => CleanCommands.Handle(args.AsSpan(1).ToArray()),
+    "token" => TokenCommands.Handle(args.AsSpan(1).ToArray()),
+    "hash" => await HashCommands.HandleAsync(args.AsSpan(1).ToArray()),
     _ => 1,
 };
