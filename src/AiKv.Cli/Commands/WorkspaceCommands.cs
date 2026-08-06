@@ -52,7 +52,7 @@ public static class WorkspaceCommands
         }
 
         var path = args[0];
-        var name = args.FirstOrDefault(a => a.StartsWith("--name="))?["--name=".Length..]
+        var name = args.FirstOrDefault(a => a.StartsWith("--name=", StringComparison.OrdinalIgnoreCase))?["--name=".Length..]
                    ?? new DirectoryInfo(path).Name;
 
         var appData = new AppDataDirectory();
@@ -97,7 +97,7 @@ public static class WorkspaceCommands
 
     private static async Task<int> HandleWorkspaceStatusAsync(string[] args)
     {
-        var id = args.FirstOrDefault(a => a.StartsWith("--id="))?["--id=".Length..];
+        var id = args.FirstOrDefault(a => a.StartsWith("--id=", StringComparison.OrdinalIgnoreCase))?["--id=".Length..];
         if (string.IsNullOrEmpty(id))
         {
             Console.Error.WriteLine("Error: --id=<workspace-id> is required");
@@ -126,7 +126,7 @@ public static class WorkspaceCommands
 
     private static async Task<int> HandleWorkspaceRemoveAsync(string[] args)
     {
-        var id = args.FirstOrDefault(a => a.StartsWith("--id="))?["--id=".Length..];
+        var id = args.FirstOrDefault(a => a.StartsWith("--id=", StringComparison.OrdinalIgnoreCase))?["--id=".Length..];
         if (string.IsNullOrEmpty(id))
         {
             Console.Error.WriteLine("Error: --id=<workspace-id> is required");

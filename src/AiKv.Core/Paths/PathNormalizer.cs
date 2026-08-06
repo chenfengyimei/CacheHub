@@ -8,7 +8,7 @@ namespace AiKv.Core.Paths;
 /// </summary>
 public sealed class PathNormalizer
 {
-    private static readonly char[] Separators = ['\\', '/'];
+    private static readonly char[] _separators = ['\\', '/'];
 
     /// <summary>
     /// Normalizes a path to its canonical form.
@@ -46,7 +46,7 @@ public sealed class PathNormalizer
                           .Replace("%2f", "/", StringComparison.OrdinalIgnoreCase)
                           .Replace("%2F", "/", StringComparison.OrdinalIgnoreCase);
 
-        var segments = decoded.Split(Separators, StringSplitOptions.None);
+        var segments = decoded.Split(_separators, StringSplitOptions.None);
         return segments.Any(s => s == "..");
     }
 

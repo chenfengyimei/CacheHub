@@ -77,3 +77,7 @@ dotnet_diagnostic.CA2007.severity = none
 # CLI is a top-level application; ConfigureAwait not needed
 [**/AiKv.Cli/**]
 dotnet_diagnostic.CA2007.severity = none
+
+# Tests don't need ConfigureAwait
+[**/AiKv.Tests/**]
+dotnet_diagnostic.CA2007.severity = none
