@@ -209,6 +209,102 @@ app.MapDelete("/api/v1/workspaces/{id}", async (string id, IWorkspaceRepository 
     return Results.Ok(new { removed = true });
 });
 
+// === Index Build (API-P1-003: GUI 索引任务闭环) ===
+app.MapPost("/api/v1/workspaces/{id}/index", async (string id, IWorkspaceRepository repo, SqliteConnectionFactory factory) =>
+{
+    var ws = await repo.FindByIdAsync(WorkspaceId.Parse(id));
+    if (ws is null) return Results.NotFound(ErrorEnvelope.From(ErrorCode.WorkspaceNotFound, "Workspace not found"));
+
+    // Run index build in background — return immediately with job info
+    var snapshotId = IndexSnapshotId.New();
+
+    // Insert snapshot as Building
+    await using var conn = factory.CreateOpenConnection();
+    using var snapCmd = conn.CreateCommand();
+    snapCmd.CommandText = "INSERT INTO index_snapshots (id, workspace_id, status, file_count) VALUES ($id, $ws, 'Building', 0);";
+    snapCmd.Parameters.AddWithValue("$id", snapshotId.Value);
+    snapCmd.Parameters.AddWithValue("$ws", ws.Id.Value);
+    await snapCmd.ExecuteNonQueryAsync();
+
+    // Run indexing in background
+    _ = Task.Run(async () =>
+    {
+        try
+        {
+            var ignoreEngine = new CacheHub.Indexing.IgnoreRules.IgnoreRuleEngine()
+                .WithDefaults()
+                .WithGitIgnore(System.IO.Path.Combine(ws.RootPath, ".gitignore"))
+                .WithCacheHubIgnore(System.IO.Path.Combine(ws.RootPath, ".cachehubignore"));
+
+            var enumerator = new CacheHub.Indexing.Scanning.DirectoryEnumerator();
+            var fts = new CacheHub.Storage.Search.Fts5Index(factory);
+            var fileCount = 0;
+
+            await foreach (var file in enumerator.EnumerateAsync(ws.RootPath))
+            {
+                if (file.IsDirectory) continue;
+                var relativePath = CacheHub.Core.Paths.PathNormalizer.GetRelativePath(ws.RootPath, file.Path);
+                if (ignoreEngine.IsIgnored(relativePath)) continue;
+
+                var typeInfo = CacheHub.Indexing.Detection.FileTypeDetector.Detect(file.Path, file.Size);
+                if (!typeInfo.ShouldIndex) continue;
+
+                var hash = await CacheHub.Indexing.Hashing.FileHasher.HashAsync(file.Path, file.Size);
+                var content = await System.IO.File.ReadAllTextAsync(file.Path);
+
+                using var fileCmd = conn.CreateCommand();
+                fileCmd.CommandText = """
+                    INSERT INTO files (id, snapshot_id, path, normalized_path, size, content_hash, language, is_binary, status, hash_kind)
+                    VALUES ($id, $snap, $path, $norm, $size, $hash, $lang, $bin, 'Indexed', $hashKind);
+                    """;
+                fileCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+                fileCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
+                fileCmd.Parameters.AddWithValue("$path", relativePath);
+                fileCmd.Parameters.AddWithValue("$norm", relativePath);
+                fileCmd.Parameters.AddWithValue("$size", file.Size);
+                fileCmd.Parameters.AddWithValue("$hash", hash.Hash);
+                fileCmd.Parameters.AddWithValue("$lang", typeInfo.Language);
+                fileCmd.Parameters.AddWithValue("$bin", typeInfo.IsBinary ? 1 : 0);
+                fileCmd.Parameters.AddWithValue("$hashKind", hash.Hash.StartsWith("fp:", StringComparison.Ordinal) ? "fingerprint" : "full");
+                await fileCmd.ExecuteNonQueryAsync();
+
+                await fts.IndexFileAsync(snapshotId, relativePath, relativePath, content, typeInfo.Language, hash.Hash);
+                fileCount++;
+            }
+
+            // Activate snapshot
+            using var activateCmd = conn.CreateCommand();
+            activateCmd.CommandText = "UPDATE index_snapshots SET status = 'Superseded' WHERE status = 'Active' AND workspace_id = $ws;";
+            activateCmd.Parameters.AddWithValue("$ws", ws.Id.Value);
+            await activateCmd.ExecuteNonQueryAsync();
+
+            using var setActiveCmd = conn.CreateCommand();
+            setActiveCmd.CommandText = "UPDATE index_snapshots SET status = 'Active', file_count = $count, completed_at = datetime('now') WHERE id = $id;";
+            setActiveCmd.Parameters.AddWithValue("$count", fileCount);
+            setActiveCmd.Parameters.AddWithValue("$id", snapshotId.Value);
+            await setActiveCmd.ExecuteNonQueryAsync();
+
+            await repo.UpdateStatusAsync(ws.Id, WorkspaceStatus.Ready);
+        }
+        catch (Exception)
+        {
+            // Mark snapshot as failed
+            using var failCmd = conn.CreateCommand();
+            failCmd.CommandText = "UPDATE index_snapshots SET status = 'Failed' WHERE id = $id;";
+            failCmd.Parameters.AddWithValue("$id", snapshotId.Value);
+            await failCmd.ExecuteNonQueryAsync();
+        }
+    });
+
+    return Results.Ok(new
+    {
+        workspaceId = ws.Id.Value,
+        snapshotId = snapshotId.Value,
+        status = "Building",
+        message = "Index build started. Poll /api/v1/workspaces/{id}/status for progress.",
+    });
+});
+
 // === Context ===
 app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextEngine engine, SqliteConnectionFactory factory, IWorkspaceRepository repo, IContextPackageRepository ctxRepo) =>
 {
