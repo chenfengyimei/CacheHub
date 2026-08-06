@@ -75,7 +75,7 @@ static async Task<List<IndexedFileInfo>> GetIndexedFilesAsync(SqliteConnectionFa
 // === Capabilities ===
 app.MapGet("/api/v1/capabilities", () => Results.Ok(new CapabilityDiscovery
 {
-    Version = "0.1.0-beta",
+    Version = "0.2.0",
     ProtocolVersion = "1.0",
     Capabilities = CapabilityFlags.With(
         Capability.WorkspaceImport, Capability.ContextBuild,
@@ -86,7 +86,7 @@ app.MapGet("/api/v1/capabilities", () => Results.Ok(new CapabilityDiscovery
         ["contextPackage"] = 1,
         ["capabilityDiscovery"] = 1,
     },
-    Limitations = ["No Gateway", "No Semantic", "No LSP"],
+    Limitations = ["No Semantic", "No LSP"],
 }));
 
 // === Workspaces ===

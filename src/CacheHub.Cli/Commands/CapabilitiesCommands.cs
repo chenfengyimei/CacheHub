@@ -17,7 +17,7 @@ public static class CapabilitiesCommands
 
         var cd = new CapabilityDiscovery
         {
-            Version = "0.1.0-alpha",
+            Version = "0.2.0",
             ProtocolVersion = "1.0",
             Capabilities = CapabilityFlags.With(
                 Capability.WorkspaceImport,
@@ -25,7 +25,8 @@ public static class CapabilitiesCommands
                 Capability.ContextExpand,
                 Capability.ContextExplain,
                 Capability.FileExport,
-                Capability.Cache),
+                Capability.Cache,
+                Capability.Gateway),
             SchemaVersions = new Dictionary<string, int>
             {
                 ["contextPackage"] = 1,
@@ -34,8 +35,6 @@ public static class CapabilitiesCommands
             },
             Limitations =
             [
-                "No GUI",
-                "No Gateway",
                 "No Semantic Search",
                 "No LSP",
                 "Tokenizer is rough estimate (chars/4)",

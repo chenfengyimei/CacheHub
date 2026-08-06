@@ -147,14 +147,14 @@ public static class WorkspaceCommands
     private static int HandleCapabilities()
     {
         Console.WriteLine($"{{");
-        Console.WriteLine($"  \"version\": \"0.1.0-alpha\",");
+        Console.WriteLine($"  \"version\": \"0.2.0\",");
         Console.WriteLine($"  \"protocolVersion\": \"1.0\",");
         Console.WriteLine($"  \"capabilities\": {{");
         Console.WriteLine($"    \"workspaceImport\": true,");
-        Console.WriteLine($"    \"contextBuild\": false,");
-        Console.WriteLine($"    \"contextExpand\": false,");
-        Console.WriteLine($"    \"contextFeedback\": false,");
-        Console.WriteLine($"    \"gateway\": false,");
+        Console.WriteLine($"    \"contextBuild\": true,");
+        Console.WriteLine($"    \"contextExpand\": true,");
+        Console.WriteLine($"    \"contextFeedback\": true,");
+        Console.WriteLine($"    \"gateway\": true,");
         Console.WriteLine($"    \"semantic\": false,");
         Console.WriteLine($"    \"lsp\": false");
         Console.WriteLine($"  }}");

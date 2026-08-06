@@ -16,7 +16,7 @@ public class CliCapabilitiesTests
             var exit = CapabilitiesCommands.Handle([]);
             Assert.Equal(0, exit);
             var output = sw.ToString();
-            Assert.Contains("0.1.0-alpha", output);
+            Assert.Contains("0.2.0", output);
             Assert.Contains("WorkspaceImport", output);
             Assert.Contains("ContextBuild", output);
             Assert.Contains("Limitations", output);
