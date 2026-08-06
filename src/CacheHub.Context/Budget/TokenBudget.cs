@@ -16,41 +16,62 @@ public sealed record TokenBudget
     public string? TokenizerVersion { get; init; }
 
     /// <summary>
-    /// The effective available budget: min(target, hardLimit - safetyMargin).
+    /// The total reserved tokens (agent + response + safety margin).
     /// </summary>
-    public int EffectiveBudget => Math.Min(ContextTarget, ContextHardLimit - SafetyMargin);
+    public int TotalReserved => AgentReservedTokens + ResponseReservedTokens + SafetyMargin;
 
     /// <summary>
-    /// Whether a given token count fits within the hard limit.
+    /// The maximum context tokens available: modelWindow - agentReserved - responseReserved - safetyMargin.
+    /// This is the absolute ceiling for context content.
     /// </summary>
-    public bool FitsHardLimit(int tokens) => tokens <= ContextHardLimit - SafetyMargin;
+    public int MaxAvailable => Math.Max(0, ModelContextWindow - TotalReserved);
+
+    /// <summary>
+    /// The effective available budget: min(target, MaxAvailable).
+    /// Accounts for all reserved tokens, not just safety margin.
+    /// </summary>
+    public int EffectiveBudget => Math.Min(ContextTarget, MaxAvailable);
+
+    /// <summary>
+    /// Whether a given token count fits within the hard limit (including reserved tokens).
+    /// </summary>
+    public bool FitsHardLimit(int tokens) => tokens <= MaxAvailable;
 
     /// <summary>
     /// Whether a given token count fits within the effective budget.
     /// </summary>
     public bool FitsEffective(int tokens) => tokens <= EffectiveBudget;
+
+    /// <summary>
+    /// Validates that the budget configuration is internally consistent.
+    /// Returns false if the target exceeds the available window.
+    /// </summary>
+    public bool IsValid => ContextTarget <= MaxAvailable
+        && ContextHardLimit <= ModelContextWindow
+        && ContextHardLimit >= ContextTarget;
 }
 
 /// <summary>
-/// Default token budget policy (version 1).
+/// Default token budget policy (version 2: accounts for reserved tokens).
 /// </summary>
 public static class DefaultTokenBudgetPolicy
 {
-    public const string Version = "budget-v1";
+    public const string Version = "budget-v2";
 
     /// <summary>
     /// Creates a budget for a standard 128K context window model.
+    /// Target and hard limit are now constrained by modelWindow - reserved - safetyMargin.
     /// </summary>
     public static TokenBudget Create(
         int modelContextWindow = 128_000,
         int agentReservedTokens = 18_000,
         int responseReservedTokens = 12_000,
-        double targetRatio = 0.625, // 80K of 128K
-        double hardLimitRatio = 0.703, // 90K
+        double targetRatio = 0.50, // ~64K, well within available window
         int safetyMargin = 10_000)
     {
-        var contextTarget = (int)(modelContextWindow * targetRatio);
-        var contextHardLimit = (int)(modelContextWindow * hardLimitRatio);
+        var maxAvailable = modelContextWindow - agentReservedTokens - responseReservedTokens - safetyMargin;
+        var contextTarget = Math.Min((int)(modelContextWindow * targetRatio), maxAvailable);
+        var contextHardLimit = (int)(maxAvailable * 0.85); // 85% of available as hard limit
 
         return new TokenBudget
         {
@@ -61,7 +82,7 @@ public static class DefaultTokenBudgetPolicy
             ContextHardLimit = contextHardLimit,
             SafetyMargin = safetyMargin,
             Tokenizer = "rough-estimate",
-            TokenizerVersion = "v1",
+            TokenizerVersion = "v2",
         };
     }
 }

@@ -75,7 +75,8 @@ public class ChunkingBudgetSelectionTests
         var budget = DefaultTokenBudgetPolicy.Create();
 
         Assert.True(budget.FitsHardLimit(1000));
-        Assert.False(budget.FitsHardLimit(budget.ContextHardLimit + 1));
+        // FitsHardLimit checks against MaxAvailable (modelWindow - all reserved)
+        Assert.False(budget.FitsHardLimit(budget.MaxAvailable + 1));
     }
 
     [Fact]
@@ -113,7 +114,12 @@ public class ChunkingBudgetSelectionTests
     public void SelectionEngine_Select_ShouldNeverExceedHardLimit()
     {
         var selection = new SelectionEngine();
-        var budget = DefaultTokenBudgetPolicy.Create(modelContextWindow: 8000);
+        // Use appropriate reserved values for a small model window
+        var budget = DefaultTokenBudgetPolicy.Create(
+            modelContextWindow: 8000,
+            agentReservedTokens: 500,
+            responseReservedTokens: 500,
+            safetyMargin: 500);
 
         var candidates = Enumerable.Range(0, 40).Select(i => new Context.Ranking.RankedCandidate
         {
@@ -130,8 +136,8 @@ public class ChunkingBudgetSelectionTests
             path => string.Join('\n', Enumerable.Range(0, 300).Select(n => $"public void Method{n}() {{ }}")),
             path => "sha256:abc");
 
-        // Invariant: total estimated tokens must stay within the hard limit.
-        Assert.True(result.TotalEstimatedTokens <= budget.ContextHardLimit);
+        // Invariant: total estimated tokens must stay within the available budget.
+        Assert.True(result.TotalEstimatedTokens <= budget.MaxAvailable);
     }
 
     [Fact]
