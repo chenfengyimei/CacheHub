@@ -140,41 +140,171 @@ public static class ContextCommands
         return 0;
     }
 
-    private static Task<int> ExportAsync(string[] args)
+    private static async Task<int> ExportAsync(string[] args)
     {
         var ctxId = GetOpt(args, "--id");
         var format = GetOpt(args, "--format") ?? "markdown";
+        var outputJson = HasFlag(args, "--output=json") || HasFlag(args, "--json");
         if (string.IsNullOrEmpty(ctxId))
         {
             Console.Error.WriteLine("Error: --id=<context-id> is required");
-            return Task.FromResult(1);
+            return 1;
         }
 
-        if (format == "json")
-            Console.WriteLine($"{{ \"id\": \"{ctxId}\", \"format\": \"json\", \"status\": \"placeholder\" }}");
+        var appData = new AppDataDirectory();
+        var dbPath = appData.GetWorkspaceDatabasePath("main");
+        var factory = new SqliteConnectionFactory(dbPath);
+        var repo = new SqliteContextPackageRepository(factory);
+        var manifest = await repo.FindByIdAsync(ContextPackageId.Parse(ctxId));
+
+        if (manifest is null)
+        {
+            Console.Error.WriteLine($"Context package not found: {ctxId}");
+            return 1;
+        }
+
+        var wsRepo = new SqliteWorkspaceRepository(factory);
+        var ws = await wsRepo.FindByIdAsync(manifest.WorkspaceId);
+
+        if (format == "json" || outputJson)
+        {
+            Console.WriteLine(JsonSerializer.Serialize(manifest, _jsonOpts));
+        }
         else
         {
-            Console.WriteLine($"# Context Package {ctxId}");
+            // Markdown export
+            Console.WriteLine($"# Context Package: {manifest.Id.Value}");
             Console.WriteLine();
-            Console.WriteLine("> Export is a placeholder in the current version.");
+            Console.WriteLine($"- **Task:** {manifest.Task.OriginalText}");
+            Console.WriteLine($"- **Schema Version:** {manifest.SchemaVersion}");
+            Console.WriteLine($"- **Ranking:** {manifest.Ranking.ProfileId} v{manifest.Ranking.ProfileVersion}");
+            Console.WriteLine($"- **Budget:** {manifest.Budget.ActualEstimate} / {manifest.Budget.ContextTarget} (hard: {manifest.Budget.ContextHardLimit})");
+            Console.WriteLine($"- **Engine:** {manifest.ContextEngineVersion}");
+            Console.WriteLine($"- **Created:** {manifest.CreatedAt:O}");
+            Console.WriteLine($"- **CloudSend:** {manifest.Safety.CloudSendAllowed}");
+            Console.WriteLine($"- **SecretsScan:** {manifest.Safety.SecretsScanPassed}");
+            Console.WriteLine();
+
+            if (manifest.SelectedFiles.Count > 0)
+            {
+                Console.WriteLine("## Selected Files");
+                Console.WriteLine();
+                Console.WriteLine("| Path | Mode | Score | Reasons |");
+                Console.WriteLine("|------|------|-------|---------|");
+                foreach (var f in manifest.SelectedFiles)
+                {
+                    var reasons = string.Join(", ", f.Reasons);
+                    Console.WriteLine($"| {f.Path} | {f.Mode} | {f.Score:F2} | {reasons} |");
+                }
+                Console.WriteLine();
+            }
+
+            if (manifest.ExcludedCandidates.Count > 0)
+            {
+                Console.WriteLine("## Excluded Candidates");
+                Console.WriteLine();
+                Console.WriteLine("| Path | Score | Reason |");
+                Console.WriteLine("|------|-------|--------|");
+                foreach (var e in manifest.ExcludedCandidates)
+                {
+                    Console.WriteLine($"| {e.Path} | {e.Score:F2} | {e.Reason} |");
+                }
+                Console.WriteLine();
+            }
+
+            // Include file contents if workspace root is available
+            if (ws is not null)
+            {
+                Console.WriteLine("## File Contents");
+                Console.WriteLine();
+                foreach (var f in manifest.SelectedFiles)
+                {
+                    var fullPath = Path.Combine(ws.RootPath, f.Path.Replace('/', Path.DirectorySeparatorChar));
+                    if (File.Exists(fullPath))
+                    {
+                        var content = await File.ReadAllTextAsync(fullPath);
+                        var ext = Path.GetExtension(f.Path).TrimStart('.');
+                        Console.WriteLine($"### {f.Path}");
+                        Console.WriteLine();
+                        Console.WriteLine($"```{ext}");
+                        Console.WriteLine(content);
+                        Console.WriteLine("```");
+                        Console.WriteLine();
+                    }
+                }
+            }
         }
-        return Task.FromResult(0);
+
+        return 0;
     }
 
-    private static Task<int> ExpandAsync(string[] args)
+    private static async Task<int> ExpandAsync(string[] args)
     {
         var ctxId = GetOpt(args, "--id");
         var symbol = GetOpt(args, "--symbol");
         var file = GetOpt(args, "--file");
+        var reason = GetOpt(args, "--reason");
+        var outputJson = HasFlag(args, "--output=json") || HasFlag(args, "--json");
+
         if (string.IsNullOrEmpty(ctxId))
         {
             Console.Error.WriteLine("Error: --id=<context-id> is required");
-            return Task.FromResult(1);
+            return 1;
         }
 
-        var detail = symbol is not null ? $"symbol={symbol}" : $"file={file}";
-        Console.WriteLine($"{{ \"contextId\": \"{ctxId}\", \"expanded\": \"{detail}\", \"status\": \"not_persisted\" }}");
-        return Task.FromResult(0);
+        if (string.IsNullOrEmpty(symbol) && string.IsNullOrEmpty(file))
+        {
+            Console.Error.WriteLine("Error: --symbol=<name> or --file=<path> is required");
+            return 1;
+        }
+
+        var appData = new AppDataDirectory();
+        var dbPath = appData.GetWorkspaceDatabasePath("main");
+        var factory = new SqliteConnectionFactory(dbPath);
+        var ctxRepo = new SqliteContextPackageRepository(factory);
+        var wsRepo = new SqliteWorkspaceRepository(factory);
+
+        var manifest = await ctxRepo.FindByIdAsync(ContextPackageId.Parse(ctxId));
+        if (manifest is null)
+        {
+            Console.Error.WriteLine($"Context package not found: {ctxId}");
+            return 1;
+        }
+
+        var ws = await wsRepo.FindByIdAsync(manifest.WorkspaceId);
+        if (ws is null)
+        {
+            Console.Error.WriteLine("Workspace not found");
+            return 1;
+        }
+
+        var expander = new Context.Expand.ContextExpander();
+        var targetFile = file ?? symbol!;
+        var fullPath = Path.Combine(ws.RootPath, targetFile.Replace('/', Path.DirectorySeparatorChar));
+
+        if (!File.Exists(fullPath))
+        {
+            Console.Error.WriteLine($"File not found: {targetFile}");
+            return 1;
+        }
+
+        var content = await File.ReadAllTextAsync(fullPath);
+        var result = expander.ExpandByFile(ctxId, targetFile, content, reason ?? $"Expanded: {symbol ?? file}");
+
+        if (outputJson)
+        {
+            Console.WriteLine(JsonSerializer.Serialize(result, _jsonOpts));
+        }
+        else
+        {
+            Console.WriteLine($"Expansion for: {ctxId}");
+            Console.WriteLine($"  File: {targetFile}");
+            Console.WriteLine($"  Tokens: {result.AdditionalTokens}");
+            Console.WriteLine($"  Reason: {result.Reason}");
+            Console.WriteLine($"  Items: {result.AddedItems.Count}");
+        }
+
+        return 0;
     }
 
     private static async Task<int> FeedbackAsync(string[] args)
