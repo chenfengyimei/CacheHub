@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "project": "AI_KV",
-  "currentPhase": "P10",
+  "currentPhase": "P12",
   "currentTask": null,
   "repository": {
     "branch": "main",
@@ -25,18 +25,21 @@
     "Benchmark: Recall@K/Precision/聚合/阶段门/失败归因/JSON报告",
     "0.1-beta UI: ASP.NET Core 最小 Web 状态页面（ADR-0004）",
     "Repository Manager: Git 进程封装 + URL 解析 + 安全 Clone",
-    "项目检测: 9种生态检测器 + Monorepo + 初始化计划（只读+审批）"
+    "项目检测: 9种生态检测器 + Monorepo + 初始化计划",
+    "缓存: LRU/TTL/空间上限/命中统计",
+    "Gateway: loopback绑定 + 缓存安全检查 + SingleFlight + 统计"
   ],
   "risks": [
     "许可证未正式确定（LICENSE 占位）",
     "Tree-sitter 原生库打包策略待后续确定（当前用 Regex 替代）",
     "Tokenizer 为粗略估算（chars/4）",
     "Local API 仅支持 workspace 管理，context build API 待实现",
-    "Benchmark 需要真实任务集和 Ground Truth 标注"
+    "Benchmark 需要真实任务集和 Ground Truth 标注",
+    "Gateway 尚未实现 HTTP 端点（仅有模型和安全检查器）"
   ],
   "blockers": [],
   "nextActions": [
-    "开始 P10-W001: 实现统一 Cache Metadata"
+    "开始 P12-W001: 定义 Provider Contract"
   ],
-  "lastUpdated": "2026-08-06T19:15:00Z"
+  "lastUpdated": "2026-08-06T19:30:00Z"
 }
