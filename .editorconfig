@@ -73,3 +73,7 @@ dotnet_diagnostic.CA1711.severity = none
 # Storage project uses await using and ConfigureAwait is noisy on DisposeAsync
 [**/AiKv.Storage/**]
 dotnet_diagnostic.CA2007.severity = none
+
+# CLI is a top-level application; ConfigureAwait not needed
+[**/AiKv.Cli/**]
+dotnet_diagnostic.CA2007.severity = none
