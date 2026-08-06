@@ -67,7 +67,7 @@ public class RipgrepAndWatcherAndReconcilerTests
         using var temp = new TempDir();
         File.WriteAllText(Path.Combine(temp.Path, "a.ts"), "a");
 
-        var result = ConsistencyReconciler.Reconcile(temp.Path, new Dictionary<string, long>());
+        var result = ConsistencyReconciler.Reconcile(temp.Path, new Dictionary<string, IndexedFileEntry>());
 
         Assert.Equal(1, result.AddedFiles);
         Assert.False(result.IsConsistent);
@@ -79,8 +79,10 @@ public class RipgrepAndWatcherAndReconcilerTests
         using var temp = new TempDir();
         File.WriteAllText(Path.Combine(temp.Path, "a.ts"), "short");
 
-        var normalized = Path.Combine(temp.Path, "a.ts").Replace('\\', '/');
-        var indexed = new Dictionary<string, long> { [normalized] = 999 };
+        var indexed = new Dictionary<string, IndexedFileEntry>
+        {
+            ["a.ts"] = new IndexedFileEntry { VirtualPath = "a.ts", Size = 999, Mtime = "2020-01-01T00:00:00.0000000Z" }
+        };
 
         var result = ConsistencyReconciler.Reconcile(temp.Path, indexed);
 
@@ -92,9 +94,11 @@ public class RipgrepAndWatcherAndReconcilerTests
     public void ConsistencyReconciler_ShouldDetectDeletedFiles()
     {
         using var temp = new TempDir();
-        var deletedPath = Path.Combine(temp.Path, "deleted.ts").Replace('\\', '/');
 
-        var indexed = new Dictionary<string, long> { [deletedPath] = 100 };
+        var indexed = new Dictionary<string, IndexedFileEntry>
+        {
+            ["deleted.ts"] = new IndexedFileEntry { VirtualPath = "deleted.ts", Size = 100 }
+        };
 
         var result = ConsistencyReconciler.Reconcile(temp.Path, indexed);
 
@@ -106,10 +110,18 @@ public class RipgrepAndWatcherAndReconcilerTests
     public void ConsistencyReconciler_ShouldReportConsistentWhenNothingChanged()
     {
         using var temp = new TempDir();
-        File.WriteAllText(Path.Combine(temp.Path, "stable.ts"), "content");
-        var normalized = Path.Combine(temp.Path, "stable.ts").Replace('\\', '/');
+        var info = new FileInfo(Path.Combine(temp.Path, "stable.ts"));
+        File.WriteAllText(info.FullName, "content");
 
-        var indexed = new Dictionary<string, long> { [normalized] = 7 }; // "content" = 7 bytes
+        var indexed = new Dictionary<string, IndexedFileEntry>
+        {
+            ["stable.ts"] = new IndexedFileEntry
+            {
+                VirtualPath = "stable.ts",
+                Size = info.Length,
+                Mtime = info.LastWriteTimeUtc.ToString("O")
+            }
+        };
 
         var result = ConsistencyReconciler.Reconcile(temp.Path, indexed);
 
@@ -125,11 +137,35 @@ public class RipgrepAndWatcherAndReconcilerTests
         File.WriteAllText(Path.Combine(temp.Path, "node_modules", "lib.js"), "lib");
         File.WriteAllText(Path.Combine(temp.Path, "app.ts"), "app");
 
-        var result = ConsistencyReconciler.Reconcile(temp.Path, new Dictionary<string, long>(),
+        var result = ConsistencyReconciler.Reconcile(temp.Path, new Dictionary<string, IndexedFileEntry>(),
             ignorePatterns: new HashSet<string> { "node_modules" });
 
         Assert.Equal(1, result.AddedFiles);
         Assert.DoesNotContain(result.AddedPaths, p => p.Contains("node_modules"));
+    }
+
+    [Fact]
+    public void ConsistencyReconciler_ShouldDetectSameSizeMutation_ViaMtime()
+    {
+        using var temp = new TempDir();
+        var info = new FileInfo(Path.Combine(temp.Path, "mutated.ts"));
+        File.WriteAllText(info.FullName, "12345678"); // 8 bytes
+
+        // Same size but different mtime
+        var indexed = new Dictionary<string, IndexedFileEntry>
+        {
+            ["mutated.ts"] = new IndexedFileEntry
+            {
+                VirtualPath = "mutated.ts",
+                Size = 8, // Same size!
+                Mtime = "2020-01-01T00:00:00.0000000Z" // Old mtime
+            }
+        };
+
+        var result = ConsistencyReconciler.Reconcile(temp.Path, indexed);
+
+        Assert.Equal(1, result.ModifiedFiles);
+        Assert.False(result.IsConsistent);
     }
 
     private sealed class TempDir : IDisposable

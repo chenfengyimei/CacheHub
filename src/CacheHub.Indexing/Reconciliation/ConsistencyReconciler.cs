@@ -1,3 +1,4 @@
+using CacheHub.Core.Paths;
 using CacheHub.Indexing.States;
 
 namespace CacheHub.Indexing.Reconciliation;
@@ -20,17 +21,32 @@ public sealed record ReconciliationResult
 }
 
 /// <summary>
+/// Represents an indexed file entry for reconciliation.
+/// Uses VirtualPath (relative, forward-slash, case-sensitive).
+/// </summary>
+public sealed record IndexedFileEntry
+{
+    public required string VirtualPath { get; init; }
+    public required long Size { get; init; }
+    public string? Mtime { get; init; }
+    public string? ContentHash { get; init; }
+}
+
+/// <summary>
 /// Compares the current index snapshot against disk state.
-/// Detects added, modified, and deleted files.
+/// Detects added, modified, and deleted files using relative VirtualPath + size + mtime.
 /// </summary>
 public sealed class ConsistencyReconciler
 {
     /// <summary>
-    /// Reconciles the index against disk. Compares paths, sizes, and modification times.
+    /// Reconciles the index against disk. Compares relative paths, sizes, and modification times.
     /// </summary>
+    /// <param name="rootPath">Workspace root path (absolute)</param>
+    /// <param name="indexedFiles">Indexed files keyed by VirtualPath (relative, forward-slash)</param>
+    /// <param name="ignorePatterns">Optional ignore patterns (directory/file names)</param>
     public static ReconciliationResult Reconcile(
         string rootPath,
-        IReadOnlyDictionary<string, long> indexedFiles,
+        IReadOnlyDictionary<string, IndexedFileEntry> indexedFiles,
         IReadOnlySet<string>? ignorePatterns = null)
     {
         var diskFiles = ScanDisk(rootPath, ignorePatterns);
@@ -41,15 +57,15 @@ public sealed class ConsistencyReconciler
         var unchanged = 0;
 
         // Find added and modified files
-        foreach (var (path, size) in diskFiles)
+        foreach (var (virtualPath, diskEntry) in diskFiles)
         {
-            if (!indexedFiles.TryGetValue(path, out var indexedSize))
+            if (!indexedFiles.TryGetValue(virtualPath, out var indexedEntry))
             {
-                added.Add(path);
+                added.Add(virtualPath);
             }
-            else if (indexedSize != size)
+            else if (IsModified(indexedEntry, diskEntry))
             {
-                modified.Add(path);
+                modified.Add(virtualPath);
             }
             else
             {
@@ -57,7 +73,7 @@ public sealed class ConsistencyReconciler
             }
         }
 
-        // Find deleted files
+        // Find deleted files (in index but not on disk)
         foreach (var indexedPath in indexedFiles.Keys)
         {
             if (!diskFiles.ContainsKey(indexedPath))
@@ -78,6 +94,27 @@ public sealed class ConsistencyReconciler
             ModifiedPaths = modified,
             DeletedPaths = deleted,
         };
+    }
+
+    /// <summary>
+    /// Checks if a file has been modified by comparing size and mtime.
+    /// Same-size mutations are detected via mtime comparison.
+    /// </summary>
+    private static bool IsModified(IndexedFileEntry indexed, DiskFileEntry disk)
+    {
+        // Size change is definitive
+        if (indexed.Size != disk.Size)
+            return true;
+
+        // Mtime comparison (if available)
+        if (!string.IsNullOrEmpty(indexed.Mtime) && !string.IsNullOrEmpty(disk.Mtime))
+        {
+            return !string.Equals(indexed.Mtime, disk.Mtime, StringComparison.Ordinal);
+        }
+
+        // If mtime is not available, a same-size file is considered unchanged
+        // (fingerprint check would be needed for certainty, but that requires reading the file)
+        return false;
     }
 
     /// <summary>
@@ -124,29 +161,36 @@ public sealed class ConsistencyReconciler
         return !string.IsNullOrEmpty(currentHead) && currentHead != lastKnownCommitHash;
     }
 
-    private static Dictionary<string, long> ScanDisk(string rootPath, IReadOnlySet<string>? ignorePatterns)
+    /// <summary>
+    /// Scans disk and returns files keyed by VirtualPath (relative, forward-slash).
+    /// </summary>
+    private static Dictionary<string, DiskFileEntry> ScanDisk(string rootPath, IReadOnlySet<string>? ignorePatterns)
     {
-        var result = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, DiskFileEntry>(StringComparer.Ordinal);
         var normalizedRoot = rootPath.Replace('\\', '/').TrimEnd('/');
 
         foreach (var file in Directory.EnumerateFiles(rootPath, "*", SearchOption.AllDirectories))
         {
             var normalized = file.Replace('\\', '/');
 
-            // Check ignore patterns
-            if (ignorePatterns is not null)
-            {
-                var relativePath = normalized.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase)
-                    ? normalized[normalizedRoot.Length..].TrimStart('/')
-                    : normalized;
+            // Convert to VirtualPath (relative, forward-slash)
+            var relativePath = normalized.StartsWith(normalizedRoot, PathComparer.PhysicalPathComparison)
+                ? normalized[normalizedRoot.Length..].TrimStart('/')
+                : normalized;
 
-                if (IsIgnored(relativePath, ignorePatterns)) continue;
-            }
+            // Check ignore patterns
+            if (ignorePatterns is not null && IsIgnored(relativePath, ignorePatterns))
+                continue;
 
             try
             {
                 var info = new FileInfo(file);
-                result[normalized] = info.Length;
+                result[relativePath] = new DiskFileEntry
+                {
+                    VirtualPath = relativePath,
+                    Size = info.Length,
+                    Mtime = info.LastWriteTimeUtc.ToString("O"),
+                };
             }
             catch (UnauthorizedAccessException) { }
             catch (FileNotFoundException) { }
@@ -159,5 +203,12 @@ public sealed class ConsistencyReconciler
     {
         var segments = path.Split('/');
         return patterns.Any(p => segments.Any(s => string.Equals(s, p, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private sealed record DiskFileEntry
+    {
+        public required string VirtualPath { get; init; }
+        public required long Size { get; init; }
+        public required string Mtime { get; init; }
     }
 }

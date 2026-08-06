@@ -267,17 +267,168 @@ public static class IndexCommands
         return 0;
     }
 
-    private static Task<int> RefreshAsync(string[] args)
+    private static async Task<int> RefreshAsync(string[] args)
     {
         var wsId = GetOption(args, "--id");
         if (string.IsNullOrEmpty(wsId))
         {
             Console.Error.WriteLine("Error: --id=<workspace-id> is required");
-            return Task.FromResult(1);
+            return 1;
         }
 
-        Console.WriteLine($"Refresh: Not yet implemented. Use 'index build' to rebuild.");
-        return Task.FromResult(0);
+        var appData = new AppDataDirectory();
+        var dbPath = appData.GetWorkspaceDatabasePath("main");
+        var factory = new SqliteConnectionFactory(dbPath);
+        var runner = new MigrationRunner(factory, dbPath,
+        [
+            new Migration0001Initial(),
+            new Migration0002Fts5(),
+            new Migration0003ContextPackages(),
+            new Migration0004Feedback(),
+        new Migration0005ContextPackageDetails(),
+        new Migration0006SchemaV2(),
+        ]);
+        runner.Migrate();
+
+        var repo = new SqliteWorkspaceRepository(factory);
+        var workspace = await repo.FindByIdAsync(WorkspaceId.Parse(wsId));
+        if (workspace is null)
+        {
+            Console.Error.WriteLine($"Workspace not found: {wsId}");
+            return 1;
+        }
+
+        // Get active snapshot
+        var activeSnapshot = await GetActiveSnapshotAsync(factory, workspace.Id);
+        if (activeSnapshot is null)
+        {
+            Console.Error.WriteLine("Error: No active snapshot. Run 'index build' first.");
+            return 1;
+        }
+
+        var snapshotId = activeSnapshot.Value.snapshotId;
+        Console.WriteLine($"Refreshing index for: {workspace.Name}");
+        Console.WriteLine($"  Snapshot: {snapshotId.Value}");
+
+        // Build ignore rules
+        var ignoreEngine = new IgnoreRuleEngine()
+            .WithDefaults()
+            .WithGitIgnore(Path.Combine(workspace.RootPath, ".gitignore"))
+            .WithCacheHubIgnore(Path.Combine(workspace.RootPath, ".cachehubignore"));
+
+        // Get current indexed files
+        var indexedFiles = await GetIndexedFileEntriesAsync(factory, workspace.Id);
+
+        // Reconcile against disk
+        var result = ConsistencyReconciler.Reconcile(workspace.RootPath, indexedFiles);
+
+        Console.WriteLine($"  Changes detected:");
+        Console.WriteLine($"    Added: {result.AddedFiles}");
+        Console.WriteLine($"    Modified: {result.ModifiedFiles}");
+        Console.WriteLine($"    Deleted: {result.DeletedFiles}");
+        Console.WriteLine($"    Unchanged: {result.UnchangedFiles}");
+
+        if (result.IsConsistent)
+        {
+            Console.WriteLine("Index is up to date. No changes needed.");
+            return 0;
+        }
+
+        var fts = new Fts5Index(factory);
+        var addedCount = 0;
+        var modifiedCount = 0;
+        var deletedCount = 0;
+        var failedCount = 0;
+
+        // Process added files
+        foreach (var path in result.AddedPaths)
+        {
+            try
+            {
+                var fullPath = Path.Combine(workspace.RootPath, path.Replace('/', Path.DirectorySeparatorChar));
+                var info = new FileInfo(fullPath);
+                var typeInfo = FileTypeDetector.Detect(fullPath, info.Length);
+                if (!typeInfo.ShouldIndex) continue;
+
+                var hash = await FileHasher.HashAsync(fullPath, info.Length);
+                var content = await File.ReadAllTextAsync(fullPath);
+                var parser = SelectParser(path);
+                var parseResult = parser.Parse(content, path);
+
+                await InsertFileWithParserAsync(factory, snapshotId, path, path, info.Length, hash.Hash,
+                    typeInfo.Language, typeInfo.IsBinary, info.LastWriteTimeUtc.ToString("O"),
+                    parser.Id, parser.Version, parseResult);
+
+                await fts.IndexFileAsync(snapshotId, path, path, content, typeInfo.Language, hash.Hash);
+                addedCount++;
+            }
+            catch (Exception ex)
+            {
+                failedCount++;
+                Console.Error.WriteLine($"  Failed to add: {path} - {ex.Message}");
+            }
+        }
+
+        // Process modified files (delete old + insert new)
+        foreach (var path in result.ModifiedPaths)
+        {
+            try
+            {
+                // Delete old entry
+                await DeleteFileFromSnapshotAsync(factory, snapshotId, path);
+                await fts.ClearSnapshotAsync(snapshotId); // Note: FTS5 doesn't support per-file delete easily
+
+                // Re-insert
+                var fullPath = Path.Combine(workspace.RootPath, path.Replace('/', Path.DirectorySeparatorChar));
+                var info = new FileInfo(fullPath);
+                var typeInfo = FileTypeDetector.Detect(fullPath, info.Length);
+                if (!typeInfo.ShouldIndex) continue;
+
+                var hash = await FileHasher.HashAsync(fullPath, info.Length);
+                var content = await File.ReadAllTextAsync(fullPath);
+                var parser = SelectParser(path);
+                var parseResult = parser.Parse(content, path);
+
+                await InsertFileWithParserAsync(factory, snapshotId, path, path, info.Length, hash.Hash,
+                    typeInfo.Language, typeInfo.IsBinary, info.LastWriteTimeUtc.ToString("O"),
+                    parser.Id, parser.Version, parseResult);
+
+                await fts.IndexFileAsync(snapshotId, path, path, content, typeInfo.Language, hash.Hash);
+                modifiedCount++;
+            }
+            catch (Exception ex)
+            {
+                failedCount++;
+                Console.Error.WriteLine($"  Failed to update: {path} - {ex.Message}");
+            }
+        }
+
+        // Process deleted files
+        foreach (var path in result.DeletedPaths)
+        {
+            try
+            {
+                await DeleteFileFromSnapshotAsync(factory, snapshotId, path);
+                deletedCount++;
+            }
+            catch (Exception ex)
+            {
+                failedCount++;
+                Console.Error.WriteLine($"  Failed to delete: {path} - {ex.Message}");
+            }
+        }
+
+        // Update snapshot file count
+        var newFileCount = activeSnapshot.Value.fileCount + addedCount - deletedCount;
+        await UpdateSnapshotFileCountAsync(factory, snapshotId, newFileCount);
+
+        Console.WriteLine($"Refresh complete:");
+        Console.WriteLine($"  Added: {addedCount}");
+        Console.WriteLine($"  Modified: {modifiedCount}");
+        Console.WriteLine($"  Deleted: {deletedCount}");
+        Console.WriteLine($"  Failed: {failedCount}");
+        Console.WriteLine($"  Total files: {newFileCount}");
+        return 0;
     }
 
     private static async Task<int> StatusAsync(string[] args)
@@ -308,7 +459,7 @@ public static class IndexCommands
         var activeSnapshot = await GetActiveSnapshotAsync(factory, workspace.Id);
         if (activeSnapshot is not null)
         {
-            Console.WriteLine($"  Active Snapshot: {activeSnapshot.Value.id}");
+            Console.WriteLine($"  Active Snapshot: {activeSnapshot.Value.snapshotId.Value}");
             Console.WriteLine($"  Files: {activeSnapshot.Value.fileCount}");
         }
         else
@@ -339,8 +490,8 @@ public static class IndexCommands
             return 1;
         }
 
-        // Run consistency check
-        var indexedFiles = await GetIndexedFileSizesAsync(factory, workspace.Id);
+        // Run consistency check using VirtualPath + size + mtime
+        var indexedFiles = await GetIndexedFileEntriesAsync(factory, workspace.Id);
         var result = ConsistencyReconciler.Reconcile(workspace.RootPath, indexedFiles);
 
         Console.WriteLine($"Verification result:");
@@ -383,6 +534,100 @@ public static class IndexCommands
 
     private static string? GetOption(string[] args, string prefix)
         => args.FirstOrDefault(a => a.StartsWith(prefix + "=", StringComparison.OrdinalIgnoreCase))?[(prefix.Length + 1)..];
+
+    private static async Task InsertFileWithParserAsync(
+        SqliteConnectionFactory factory, IndexSnapshotId snapshotId,
+        string path, string normalizedPath, long size, string contentHash,
+        string language, bool isBinary, string mtime,
+        string parserId, string parserVersion, Core.Parsing.ParseResult parseResult)
+    {
+        await using var conn = factory.CreateOpenConnection();
+        await using var tx = await conn.BeginTransactionAsync();
+
+        var fileId = Guid.NewGuid().ToString("N");
+
+        using var fileCmd = conn.CreateCommand();
+        fileCmd.Transaction = (SqliteTransaction)tx;
+        fileCmd.CommandText =
+            """
+            INSERT INTO files (id, snapshot_id, path, normalized_path, size, content_hash, language, is_binary, status, hash_kind, mtime, parser_id, parser_version)
+            VALUES ($id, $snap, $path, $norm, $size, $hash, $lang, $bin, 'Indexed', $hashKind, $mtime, $parserId, $parserVer);
+            """;
+        fileCmd.Parameters.AddWithValue("$id", fileId);
+        fileCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
+        fileCmd.Parameters.AddWithValue("$path", path);
+        fileCmd.Parameters.AddWithValue("$norm", normalizedPath);
+        fileCmd.Parameters.AddWithValue("$size", size);
+        fileCmd.Parameters.AddWithValue("$hash", contentHash);
+        fileCmd.Parameters.AddWithValue("$lang", language);
+        fileCmd.Parameters.AddWithValue("$bin", isBinary ? 1 : 0);
+        fileCmd.Parameters.AddWithValue("$hashKind", contentHash.StartsWith("fp:", StringComparison.Ordinal) ? "fingerprint" : "full");
+        fileCmd.Parameters.AddWithValue("$mtime", mtime);
+        fileCmd.Parameters.AddWithValue("$parserId", parserId);
+        fileCmd.Parameters.AddWithValue("$parserVer", parserVersion);
+        await fileCmd.ExecuteNonQueryAsync();
+
+        foreach (var symbol in parseResult.Symbols)
+        {
+            using var symCmd = conn.CreateCommand();
+            symCmd.Transaction = (SqliteTransaction)tx;
+            symCmd.CommandText =
+                """
+                INSERT INTO file_symbols (id, file_id, snapshot_id, name, kind, start_line, end_line, modifier, confidence)
+                VALUES ($id, $fid, $snap, $name, $kind, $sl, $el, $mod, $conf);
+                """;
+            symCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+            symCmd.Parameters.AddWithValue("$fid", fileId);
+            symCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
+            symCmd.Parameters.AddWithValue("$name", symbol.Name);
+            symCmd.Parameters.AddWithValue("$kind", symbol.Kind.ToString());
+            symCmd.Parameters.AddWithValue("$sl", symbol.StartLine);
+            symCmd.Parameters.AddWithValue("$el", symbol.EndLine);
+            symCmd.Parameters.AddWithValue("$mod", (object?)symbol.Modifier ?? DBNull.Value);
+            symCmd.Parameters.AddWithValue("$conf", "syntactic");
+            await symCmd.ExecuteNonQueryAsync();
+        }
+
+        foreach (var import in parseResult.Imports)
+        {
+            using var impCmd = conn.CreateCommand();
+            impCmd.Transaction = (SqliteTransaction)tx;
+            impCmd.CommandText =
+                """
+                INSERT INTO file_imports (id, file_id, snapshot_id, module, imported_name, line)
+                VALUES ($id, $fid, $snap, $mod, $name, $line);
+                """;
+            impCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+            impCmd.Parameters.AddWithValue("$fid", fileId);
+            impCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
+            impCmd.Parameters.AddWithValue("$mod", import.Module);
+            impCmd.Parameters.AddWithValue("$name", (object?)import.ImportedName ?? DBNull.Value);
+            impCmd.Parameters.AddWithValue("$line", import.Line);
+            await impCmd.ExecuteNonQueryAsync();
+        }
+
+        await tx.CommitAsync();
+    }
+
+    private static async Task DeleteFileFromSnapshotAsync(SqliteConnectionFactory factory, IndexSnapshotId snapshotId, string normalizedPath)
+    {
+        await using var conn = factory.CreateOpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM files WHERE snapshot_id = $snap AND normalized_path = $path;";
+        cmd.Parameters.AddWithValue("$snap", snapshotId.Value);
+        cmd.Parameters.AddWithValue("$path", normalizedPath);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    private static async Task UpdateSnapshotFileCountAsync(SqliteConnectionFactory factory, IndexSnapshotId snapshotId, int fileCount)
+    {
+        await using var conn = factory.CreateOpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "UPDATE index_snapshots SET file_count = $count, completed_at = datetime('now') WHERE id = $id;";
+        cmd.Parameters.AddWithValue("$count", fileCount);
+        cmd.Parameters.AddWithValue("$id", snapshotId.Value);
+        await cmd.ExecuteNonQueryAsync();
+    }
 
     private static async Task InsertSnapshotAsync(SqliteConnectionFactory factory, IndexSnapshotId snapshotId, WorkspaceId workspaceId)
     {
@@ -463,7 +708,7 @@ public static class IndexCommands
         await tx.CommitAsync();
     }
 
-    private static async Task<(string id, int fileCount)?> GetActiveSnapshotAsync(SqliteConnectionFactory factory, WorkspaceId workspaceId)
+    private static async Task<(IndexSnapshotId snapshotId, int fileCount)?> GetActiveSnapshotAsync(SqliteConnectionFactory factory, WorkspaceId workspaceId)
     {
         await using var conn = factory.CreateOpenConnection();
         using var cmd = conn.CreateCommand();
@@ -471,21 +716,33 @@ public static class IndexCommands
         cmd.Parameters.AddWithValue("$ws", workspaceId.Value);
         await using var reader = await cmd.ExecuteReaderAsync();
         if (await reader.ReadAsync())
-            return (reader.GetString(0), reader.GetInt32(1));
+            return (IndexSnapshotId.Parse(reader.GetString(0)), reader.GetInt32(1));
         return null;
     }
 
-    private static async Task<Dictionary<string, long>> GetIndexedFileSizesAsync(SqliteConnectionFactory factory, WorkspaceId workspaceId)
+    private static async Task<Dictionary<string, IndexedFileEntry>> GetIndexedFileEntriesAsync(SqliteConnectionFactory factory, WorkspaceId workspaceId)
     {
-        var result = new Dictionary<string, long>();
+        var result = new Dictionary<string, IndexedFileEntry>(StringComparer.Ordinal);
         await using var conn = factory.CreateOpenConnection();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT f.normalized_path, f.size FROM files f INNER JOIN index_snapshots s ON f.snapshot_id = s.id WHERE s.workspace_id = $ws AND s.status = 'Active';";
+        cmd.CommandText = """
+            SELECT f.normalized_path, f.size, f.mtime, f.content_hash
+            FROM files f
+            INNER JOIN index_snapshots s ON f.snapshot_id = s.id
+            WHERE s.workspace_id = $ws AND s.status = 'Active';
+            """;
         cmd.Parameters.AddWithValue("$ws", workspaceId.Value);
         await using var reader = await cmd.ExecuteReaderAsync();
         while (await reader.ReadAsync())
         {
-            result[reader.GetString(0)] = reader.GetInt64(1);
+            var path = reader.GetString(0);
+            result[path] = new IndexedFileEntry
+            {
+                VirtualPath = path,
+                Size = reader.GetInt64(1),
+                Mtime = reader.IsDBNull(2) ? null : reader.GetString(2),
+                ContentHash = reader.IsDBNull(3) ? null : reader.GetString(3),
+            };
         }
         return result;
     }
