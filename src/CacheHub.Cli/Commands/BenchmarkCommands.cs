@@ -28,6 +28,10 @@ public static class BenchmarkCommands
 
     private static int List()
     {
+        Console.WriteLine("⚠️ DEMO ONLY — Benchmark tasks are simulated, not real experiments.");
+        Console.WriteLine("   Results from 'benchmark run' and 'benchmark report' cannot be used as");
+        Console.WriteLine("   evidence of Token optimization or task success rate.");
+        Console.WriteLine();
         Console.WriteLine($"Benchmark Tasks ({BenchmarkTaskSet.Tasks.Count}):");
         Console.WriteLine(new string('-', 80));
         Console.WriteLine($"{"ID",-12} {"Lang",-12} {"Task",-40} {"Files"}");
@@ -41,6 +45,11 @@ public static class BenchmarkCommands
 
     private static int Run(string[] args)
     {
+        Console.Error.WriteLine("⚠️ DEMO ONLY — This benchmark uses simulated data, not a real Context Engine run.");
+        Console.Error.WriteLine("   Selected files are set to RequiredFiles (ground truth), not actually selected by ContextEngine.");
+        Console.Error.WriteLine("   Results CANNOT be used as evidence of Token optimization or phase gate approval.");
+        Console.Error.WriteLine();
+
         var taskId = args.FirstOrDefault(a => a.StartsWith("--task=", StringComparison.OrdinalIgnoreCase))?["--task=".Length..];
         var outputJson = args.Contains("--output=json", StringComparer.OrdinalIgnoreCase);
 
@@ -60,7 +69,7 @@ public static class BenchmarkCommands
 
         var gt = BenchmarkTaskSet.GetGroundTruth(taskId);
 
-        // Simulate a run: CacheHub selects the required files (ideal case)
+        // SIMULATED: CacheHub "selects" the required files (ideal case, NOT real)
         var selectedFiles = task.RequiredFiles.ToList();
         var metrics = MetricsCalculator.ComputeTaskMetrics(
             taskId, 1, true, 8000, 2000, 3, selectedFiles, selectedFiles, gt);
@@ -69,6 +78,8 @@ public static class BenchmarkCommands
         {
             Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new
             {
+                demo = true,
+                warning = "Simulated data — not a real benchmark. Cannot be used for phase gate approval.",
                 taskId = metrics.TaskId,
                 run = metrics.RunNumber,
                 completed = metrics.TaskCompleted,
@@ -80,7 +91,8 @@ public static class BenchmarkCommands
         }
         else
         {
-            Console.WriteLine($"Benchmark Run: {taskId}");
+            Console.WriteLine($"⚠️ DEMO Benchmark Run: {taskId}");
+            Console.WriteLine($"  (Simulated — selectedFiles = RequiredFiles, NOT real Context Engine)");
             Console.WriteLine($"  Task: {task.TaskDescription}");
             Console.WriteLine($"  Language: {task.Language}");
             Console.WriteLine($"  Completed: {metrics.TaskCompleted}");
@@ -98,7 +110,11 @@ public static class BenchmarkCommands
 
     private static int Report()
     {
-        // Generate a phase gate report using all tasks
+        Console.Error.WriteLine("⚠️ DEMO ONLY — This report uses simulated baseline and metrics.");
+        Console.Error.WriteLine("   Phase gate status is NOT valid. Real benchmark requires R4 implementation.");
+        Console.Error.WriteLine();
+
+        // Generate a report using simulated data — phase gate is NOT valid
         var taskMetrics = BenchmarkTaskSet.Tasks.Select(t =>
         {
             var gt = BenchmarkTaskSet.GetGroundTruth(t.Id);
@@ -108,6 +124,7 @@ public static class BenchmarkCommands
 
         var aggregated = taskMetrics.Select(m => MetricsCalculator.Aggregate(m.TaskId, [m])).ToList();
 
+        // Simulated baseline — NOT real
         var baseline = BenchmarkTaskSet.Tasks.Select(t => new AggregatedMetrics
         {
             TaskId = t.Id,
@@ -123,9 +140,9 @@ public static class BenchmarkCommands
 
         var config = new BenchmarkConfig
         {
-            ModelId = "test-model",
-            AgentId = "cachehub-cli",
-            SystemPrompt = "benchmark",
+            ModelId = "demo-model",
+            AgentId = "cachehub-demo",
+            SystemPrompt = "benchmark-demo",
             RunsPerTask = 1,
             ResetBetweenRuns = true,
             ShareBuildCache = false,
@@ -137,7 +154,8 @@ public static class BenchmarkCommands
 
         var report = ReportGenerator.GenerateJson(config, aggregated, failures, phaseGate);
 
-        Console.WriteLine(report);
+        // Prepend demo warning to the JSON output
+        Console.WriteLine("{\"demo\": true, \"warning\": \"Simulated data — phase gate is NOT valid. Real benchmark requires R4 implementation.\", \"report\": " + report + "}");
         return 0;
     }
 }
