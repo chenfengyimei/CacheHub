@@ -1,28 +1,66 @@
 # CacheHub
 
+> ⚠️ **Pre-Alpha** — 本项目处于早期开发阶段，核心链路尚未完成验证，不建议用于生产环境或处理敏感代码。
+
 > 让任何 AI 编程工具每次只读取真正需要的代码。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![.NET 9](https://img.shields.io/badge/.NET-9.0-blue.svg)](https://dotnet.microsoft.com/download/dotnet/9.0)
-[![Tests: 379+](https://img.shields.io/badge/Tests-379+-brightgreen.svg)](#测试覆盖率)
+[![Status: Pre-Alpha](https://img.shields.io/badge/Status-Pre--Alpha-orange.svg)](#功能成熟度矩阵)
 
 ---
 
 ## CacheHub 是什么？
 
-CacheHub 是一个**本地代码上下文路由器**和**可选模型 API 网关**。它持续维护版本感知的项目索引，根据当前任务生成**可解释、受 Token 预算限制**的最小 Context Package（上下文包），并允许任何 AI Agent 通过稳定协议使用。
+CacheHub 是一个**本地代码上下文路由器**和**可选模型 API 网关**。它维护版本感知的项目索引，根据当前任务生成**可解释、受 Token 预算限制**的最小 Context Package（上下文包），并允许任何 AI Agent 通过稳定协议使用。
 
 **一句话**：给 AI 编程助手装上"眼睛"——让它看到整个代码库的结构，但只把真正需要的那部分代码喂给模型。
+
+### 功能成熟度矩阵
+
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| 工作区导入与管理 | ✅ Implemented | 注册本地目录为工作区 |
+| 全量索引构建（FTS5 + files 表） | ✅ Implemented | 全量扫描写入 FTS5 和元数据表 |
+| 增量索引刷新 | 🧪 Experimental | 框架已搭建，增量逻辑尚在开发 |
+| FTS5 全文搜索 | ✅ Implemented | 绑定快照的全文搜索 |
+| FTS5 接入 Context Recall | 🧪 Experimental | Recall 尚未正式使用 FTS |
+| 任务解析（英文） | ✅ Implemented | 确定性规则解析英文任务 |
+| 任务解析（中文/Unicode） | 🧪 Experimental | 中文分词尚不完整 |
+| 多源召回（路径/符号/FTS/Git Diff） | 🧪 Experimental | 符号召回和 FTS 召回尚未接入 |
+| 排序引擎 | 🧪 Experimental | 多数特征维度尚未实现 |
+| 智能分块 | 🧪 Experimental | 当前按固定行窗口切块 |
+| Token 预算管理 | 🧪 Experimental | 预算公式不完整，Tokenizer 为估算 |
+| 上下文扩展（按文件） | ✅ Implemented | 支持按文件扩展上下文 |
+| 上下文扩展（按符号） | 🧪 Experimental | symbol 参数被当作文件路径 |
+| 可解释性 | 🧪 Experimental | 展示选择理由，缺 feature breakdown |
+| 安全策略（4 级模式） | 🧪 Experimental | 策略定义存在但未在出口强制执行 |
+| 密钥扫描 | ✅ Implemented | 5 种密钥模式扫描 |
+| CLI 接入 | ✅ Implemented | 21 个命令组 |
+| Local API | 🧪 Experimental | 存在 P0 安全问题，修复中 |
+| 文件导出 | ✅ Implemented | Markdown/JSON/File 导出 |
+| Desktop Web UI | 🧪 Experimental | 基础页面可用，缺索引闭环 |
+| 可选模型 API 网关 | 🧪 Experimental | 非流式原型，存在安全问题 |
+| 代码解析（C#/TS/Python/Markdown） | 🧪 Experimental | Regex 解析器，未接入主索引 |
+| Repo Map | 🧪 Experimental | 生成器存在但预算参数未生效 |
+| Git 仓库操作 | 🧪 Experimental | clone/pull/status/diff 基础原型 |
+| Benchmark | 🧪 Experimental | 当前为模拟数据，非真实实验 |
+| Semantic Search | 📦 Scaffold | 仅接口和内存向量表 |
+| LSP | 📦 Scaffold | 生命周期伪实现 |
+| Provider/路由/预算 | 📦 Scaffold | 数据模型占位 |
+| 插件/团队/企业 | 📦 Planned | 仅 DTO 预留 |
+
+**图例**：✅ Implemented = 已实现且有测试 ｜ 🧪 Experimental = 有原型但未完成 ｜ 📦 Scaffold = 有代码骨架 ｜ 📦 Planned = 仅设计
 
 ### 解决了什么问题？
 
 | 痛点 | CacheHub 方案 |
 |------|---------------|
-| AI Agent 每次都扫全仓库，Token 浪费严重 | 版本感知索引 + 9 维排序引擎，只选真正相关的代码 |
-| 上下文太大导致模型"失忆" | Token 预算管理器，硬上限 + 安全边界 |
-| 选了什么、为什么选，黑盒不可知 | ContextExplainer，每个文件的选择理由和排除原因都可查 |
+| AI Agent 每次都扫全仓库，Token 浪费严重 | 版本感知索引 + 实验性排序引擎，选相关代码 |
+| 上下文太大导致模型"失忆" | Token 预算管理器，硬上限 + 安全边界（公式尚在完善） |
+| 选了什么、为什么选，黑盒不可知 | ContextExplainer，选择理由和排除原因可查 |
 | 每个工具的上下文方案各不相同 | Agent 无关协议（CLI / Local API / 文件导出），任何工具可接入 |
-| 密钥泄漏风险 | 4 级外发安全策略 + 5 种密钥扫描，默认本地运行 |
+| 密钥泄漏风险 | 安全策略 + 5 种密钥扫描（出口强制执行尚在开发中） |
 
 ---
 
@@ -30,24 +68,27 @@ CacheHub 是一个**本地代码上下文路由器**和**可选模型 API 网关
 
 ### 1. 版本感知索引引擎
 
-- **增量文件扫描**：异步流式枚举，深度/数量/大小限制 + 符号链接保护
-- **内容哈希**：分层哈希策略（小文件全量 SHA-256，大文件指纹）
+- **全量文件扫描**：异步流式枚举，深度/数量/大小限制 + 符号链接保护
+- **内容哈希**：分层哈希策略（小文件全量 SHA-256，大文件快速指纹）
 - **FTS5 全文检索**：版本感知的全文搜索，绑定 IndexSnapshotId
-- **文件监视器**：防抖事件队列 + 溢出检测 + 一致性校验器
-- **忽略规则引擎**：系统默认 > `.gitignore` > `.cachehubignore` > 用户规则，四层合并
+- **文件监视器**：防抖事件队列 + 溢出检测 + 一致性校验器（增量刷新尚未实现）
+- **忽略规则引擎**：系统默认 > `.gitignore` > `.cachehubignore` > 用户规则，四层合并（.gitignore 语义不完整）
+- **增量索引**：🧪 尚未实现，refresh 命令当前返回 Not yet implemented
 
 ### 2. 上下文引擎 (Context Engine)
 
-- **任务解析器**：确定性规则解析（不依赖 LLM），从自然语言任务描述中提取关键词、路径、符号
-- **多源召回**：路径匹配 / 符号匹配 / 关键词搜索 / Git Diff / 当前文件，五路召回
-- **9 维排序引擎**：minmax 归一化 + 加权评分，权重可版本化 (deterministic-v1 v3)
-- **智能分块**：语法块优先 + 行窗口回退 + 重叠控制
-- **Token 预算管理**：模型窗口 / Agent 预留 / 响应预留 / 目标 / 硬上限 / 安全边界
+- **任务解析器**：确定性规则解析（不依赖 LLM），从自然语言任务描述中提取关键词、路径、符号（当前仅支持英文）
+- **多源召回**：路径匹配 / 关键词搜索 / Git Diff / 当前文件，四路召回（符号召回和 FTS 召回尚未接入）
+- **排序引擎**：加权评分，权重可版本化（多数特征维度尚未实现）
+- **智能分块**：行窗口分块 + 重叠控制（语法块感知分块尚在开发中）
+- **Token 预算管理**：模型窗口 / Agent 预留 / 响应预留 / 目标 / 硬上限 / 安全边界（预留字段尚未参与计算）
 - **5 种选择模式**：Full / Chunks / Outline / DeterministicSummary / Metadata
-- **上下文扩展**：按文件/按符号扩展，追踪父上下文 + 增量 Token
-- **可解释性**：选择理由 / 预算驱逐原因 / 潜在遗漏检测
+- **上下文扩展**：按文件扩展，追踪父上下文 + 增量 Token（按符号扩展尚未实现）
+- **可解释性**：选择理由 / 预算驱逐原因 / 潜在遗漏检测（feature breakdown 尚不完整）
 
 ### 3. 多语言代码解析
+
+> 🧪 当前使用 Regex 解析器，尚未接入 Tree-sitter。解析结果尚未持久化到主索引。
 
 | 语言 | 解析器 | 提取内容 |
 |------|--------|----------|
@@ -59,22 +100,24 @@ CacheHub 是一个**本地代码上下文路由器**和**可选模型 API 网关
 
 - **代码关系**：语法 / 启发式 / 语义三级置信度 (0..1)
 - **确定性大纲**：按行号 + 名称稳定排序
-- **Repo Map**：预算受限的代码树 + 关键符号摘要
+- **Repo Map**：生成器存在但预算参数未生效，目录树和优先级尚未实现
 - **解析器缓存**：哈希 + ParserId + 版本键控
 
 ### 4. 安全策略
 
-- **4 级外发模式**：Standard / Restricted / PreviewRequired / Offline
+- **4 级外发模式**：Standard / Restricted / PreviewRequired / Offline（策略执行尚在开发中）
 - **密钥扫描**：API Key / 密码 / 私钥 / 连接字符串 / Bearer Token
 - **敏感文件检测**：`.env`、`.pem`、`.key`、`id_rsa`、`credentials.json` 等
-- **发送前检查**：路径 + 内容 + 模式三重检查
+- **发送前检查**：路径 + 内容 + 模式三重检查（Payload 出口强制执行尚在开发中）
 
 ### 5. 可选模型 API 网关
 
+> 🧪 Gateway 当前为非流式转发原型，存在安全问题（无认证、状态码固定 200、缓存安全边界不足），修复中。
+
 - **OpenAI 兼容**：HttpListener 回环转发
-- **安全缓存**：仅缓存安全请求（低温度、无工具、无流式）
-- **SingleFlight**：并发请求去重
-- **SSE 流式解析**：OpenAI 兼容的流式响应解析
+- **安全缓存**：仅缓存安全请求（低温度、无工具、无流式）——缓存安全边界待修复
+- **SingleFlight**：并发请求去重（存在竞态条件）
+- **SSE 流式**：尚未实现
 - **用量统计**：请求数 / 缓存命中率 / Token 节省 / 平均延迟
 
 ### 6. Agent 无关协议
@@ -299,13 +342,15 @@ cachehub context export --id=<ctx-id> --format=file
 
 ## 测试覆盖率
 
-| 类别 | 数量 |
-|------|------|
-| 单元测试 | 379 通过 |
-| 跳过（需真实 Git 环境） | 2 |
-| 端到端集成测试 | 8 |
-| 真实场景测试 | 5 |
-| **总计** | **381** |
+| 类别 | 数量 | 说明 |
+|------|------|------|
+| 单元测试 | 379 通过 | 覆盖模型和工具函数 |
+| 跳过（需真实 Git 环境） | 2 | |
+| 端到端集成测试 | 8 | 多为内存模拟，真实闭环测试待补充 |
+| 真实场景测试 | 5 | 当前为模拟数据 |
+| **总计** | **381** | |
+
+> ⚠️ 当前 E2E 和 Benchmark 测试大量使用内存模拟数据，不能完全验证真实 CLI/API/SQLite/Git 闭环。改进测试可信度是 R0-R4 阶段的目标之一。
 
 ---
 

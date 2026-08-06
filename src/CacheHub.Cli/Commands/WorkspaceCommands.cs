@@ -138,7 +138,7 @@ public static class WorkspaceCommands
     private static int HandleCapabilities()
     {
         Console.WriteLine($"{{");
-        Console.WriteLine($"  \"version\": \"0.2.0\",");
+        Console.WriteLine($"  \"version\": \"0.2.0-prealpha\",");
         Console.WriteLine($"  \"protocolVersion\": \"1.0\",");
         Console.WriteLine($"  \"capabilities\": {{");
         Console.WriteLine($"    \"workspaceImport\": true,");

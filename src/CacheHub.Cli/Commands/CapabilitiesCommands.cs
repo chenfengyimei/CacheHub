@@ -17,7 +17,7 @@ public static class CapabilitiesCommands
 
         var cd = new CapabilityDiscovery
         {
-            Version = "0.2.0",
+            Version = "0.2.0-prealpha",
             ProtocolVersion = "1.0",
             Capabilities = CapabilityFlags.With(
                 Capability.WorkspaceImport,

@@ -31,7 +31,7 @@ public static class HelpCommands
     {
         Console.WriteLine("""
             CacheHub — Local code context infrastructure
-            Version 0.2.0 | Protocol 1.0 | MIT License
+            Version 0.2.0-prealpha | Protocol 1.0 | MIT License
 
             USAGE:
                 cachehub <command> [subcommand] [options]

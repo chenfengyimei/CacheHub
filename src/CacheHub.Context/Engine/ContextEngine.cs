@@ -147,7 +147,7 @@ public sealed class ContextEngine
                 SecretScannerVersion = scannerVersion,
                 SensitiveExclusions = securityFindings.Count > 0 ? securityFindings : null,
             },
-            ContextEngineVersion = "0.2.0",
+            ContextEngineVersion = "0.2.0-prealpha",
             ChunkingStrategyVersion = ChunkingStrategy.Version,
             TokenBudgetPolicyVersion = DefaultTokenBudgetPolicy.Version,
             RepoMapVersion = request.RepoMapVersion,

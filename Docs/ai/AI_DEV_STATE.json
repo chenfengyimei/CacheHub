@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "project": "CacheHub",
-  "currentPhase": "ENHANCED",
-  "currentTask": null,
+  "currentPhase": "R0-STOPGAP",
+  "currentTask": "R0-W001: Pre-alpha marking + README feature matrix",
   "repository": {
     "branch": "main",
     "dirty": false,
@@ -11,32 +11,54 @@
   "qualityGates": {
     "build": "pass",
     "unitTests": "pass",
-    "integrationTests": "pass",
-    "securityTests": "pass",
+    "integrationTests": "partial",
+    "securityTests": "fail",
     "format": "pass"
   },
   "decisions": [
-    "MIT 许可证",
-    "ContextEngine 0.2.0: 集成 TokenizerRegistry + SecurityPolicyEnforcer",
-    "Gateway CLI: start/status/stop 命令",
-    "Detect CLI: 项目检测 + 初始化计划",
-    "安全策略: 4级外发模式 + 5种密钥扫描 + 路径拦截",
-    "Tokenizer: 3种分词器(char/word/code) + 模型注册表",
-    "Benchmark: 6个真实任务 + Ground Truth + 阶段门",
-    "E2E: 8个跨模块集成测试"
+    "MIT license",
+    "ContextEngine 0.2.0-prealpha: integrated TokenizerRegistry + SecurityPolicyEnforcer",
+    "Gateway CLI: start/status/stop commands",
+    "Security policy: 4-level outbound mode + 5 secret scanners + path interception",
+    "Tokenizer: 3 tokenizers (char/word/code) + model registry",
+    "Benchmark: 6 simulated tasks + Ground Truth (NOT real experiments)",
+    "E2E: 8 integration tests (mostly in-memory simulations)"
   ],
   "risks": [
-    "Tree-sitter 原生库打包策略待后续确定（当前用 Regex 替代）",
-    "Gateway SSE 流式转发尚未实现",
-    "LSP JSON-RPC 进程通信尚未实现",
-    "Benchmark 需要实际运行验证（当前仅框架+任务集）"
+    "P0: Local API has no authentication and allows arbitrary file read via /outline",
+    "P0: GUI has innerHTML XSS vectors combinable with unauthenticated API",
+    "P0: Symlink resolution is fake (Path.GetFullPath only)",
+    "P0: Secret scan marks but does not block payload",
+    "P0: Snapshot activation SQL cancels all workspaces' active snapshots",
+    "P0: Context Build uses random SnapshotId, not real Active Snapshot",
+    "P0: All file hashes written as sha256:pending",
+    "P0: Gateway returns 200 for all upstream errors, no auth, no streaming",
+    "P0: Benchmark results are simulated, not real experiments",
+    "P1: Index refresh not implemented",
+    "P1: Parser results not persisted to index",
+    "P1: FTS not connected to Context Recall",
+    "P1: Token budget formula incomplete (reserves not used)",
+    "P1: Task parser only supports English",
+    "P1: Ranking dimensions mostly zero",
+    "P1: Chunking returns all chunks, not relevant ones",
+    "P1: Context Expand --symbol treated as file path",
+    "P1: Context Package read/write loses fields",
+    "P1: CI is manual-only (workflow_dispatch)"
   ],
-  "blockers": [],
+  "blockers": [
+    "R0 must complete before any new feature development",
+    "All P0 issues must be resolved before pre-alpha can be lifted"
+  ],
   "nextActions": [
-    "实现 Gateway SSE 流式转发",
-    "实现 LSP JSON-RPC 进程通信",
-    "引入 Tree-sitter 替换 Regex 解析器",
-    "运行实际 Benchmark 验证阶段门"
+    "R0-W002: Implement SafePathResolver, block arbitrary path Outline",
+    "R0-W003: Local API loopback + random token + Origin/Host validation",
+    "R0-W004: Frontend XSS fix + CSP",
+    "R0-W005: Fix snapshot activation SQL",
+    "R0-W006: Context Build bind real Active Snapshot + real hash",
+    "R0-W007: Gateway security fixes",
+    "R0-W008: Security policy enforcement at Payload exit",
+    "R0-W009: CI auto-trigger + install.ps1 safety",
+    "R0-W010: Mark benchmark as demo"
   ],
-  "lastUpdated": "2026-08-06T20:30:00Z"
+  "lastUpdated": "2026-08-07T01:10:00Z"
 }

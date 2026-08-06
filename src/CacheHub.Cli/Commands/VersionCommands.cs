@@ -14,7 +14,7 @@ public static class VersionCommands
         var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0";
         var info = new
         {
-            version = "0.2.0",
+            version = "0.2.0-prealpha",
             protocolVersion = "1.0",
             sdk = $".NET {Environment.Version}",
             os = Environment.OSVersion.ToString(),

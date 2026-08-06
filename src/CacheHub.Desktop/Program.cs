@@ -89,7 +89,7 @@ static async Task<List<IndexedFileInfo>> GetIndexedFilesAsync(SqliteConnectionFa
 // === Capabilities ===
 app.MapGet("/api/v1/capabilities", () => Results.Ok(new CapabilityDiscovery
 {
-    Version = "0.2.0",
+    Version = "0.2.0-prealpha",
     ProtocolVersion = "1.0",
     Capabilities = CapabilityFlags.With(
         Capability.WorkspaceImport, Capability.ContextBuild,
