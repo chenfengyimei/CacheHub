@@ -19,7 +19,8 @@ public enum TaskOperationType
 
 /// <summary>
 /// Parsed task: extracted paths, symbols, keywords, operation type.
-/// First version is deterministic — no LLM calls.
+/// Includes Unicode/Chinese support and independent channels for
+/// code identifiers, error stacks, and paths.
 /// </summary>
 public sealed record ParsedTask
 {
@@ -34,11 +35,88 @@ public sealed record ParsedTask
 
 /// <summary>
 /// Deterministic task parser: extracts paths, symbols, keywords, and operation type from task text.
-/// Version 1: rule-based, no LLM.
+/// Version 2: Unicode/Chinese support, code identifier independent channel, Windows path support.
 /// </summary>
 public sealed partial class TaskParser
 {
-    public const string Version = "deterministic-query-v1";
+    public const string Version = "deterministic-query-v2";
+
+    // Chinese operation keywords
+    private static readonly Dictionary<string, TaskOperationType> ChineseOps = new()
+    {
+        ["修复"] = TaskOperationType.Fix,
+        ["修"] = TaskOperationType.Fix,
+        ["解决"] = TaskOperationType.Fix,
+        ["bug"] = TaskOperationType.Fix,
+        ["错误"] = TaskOperationType.Fix,
+        ["异常"] = TaskOperationType.Fix,
+        ["添加"] = TaskOperationType.Add,
+        ["新增"] = TaskOperationType.Add,
+        ["实现"] = TaskOperationType.Add,
+        ["创建"] = TaskOperationType.Add,
+        ["新建"] = TaskOperationType.Add,
+        ["重构"] = TaskOperationType.Refactor,
+        ["优化"] = TaskOperationType.Refactor,
+        ["整理"] = TaskOperationType.Refactor,
+        ["测试"] = TaskOperationType.Test,
+        ["删除"] = TaskOperationType.Delete,
+        ["移除"] = TaskOperationType.Delete,
+        ["文档"] = TaskOperationType.Document,
+        ["说明"] = TaskOperationType.Document,
+    };
+
+    // English operation keywords
+    private static readonly Dictionary<string, TaskOperationType> EnglishOps = new()
+    {
+        ["fix"] = TaskOperationType.Fix,
+        ["bug"] = TaskOperationType.Fix,
+        ["error"] = TaskOperationType.Fix,
+        ["broken"] = TaskOperationType.Fix,
+        ["add"] = TaskOperationType.Add,
+        ["create"] = TaskOperationType.Add,
+        ["implement"] = TaskOperationType.Add,
+        ["new"] = TaskOperationType.Add,
+        ["refactor"] = TaskOperationType.Refactor,
+        ["cleanup"] = TaskOperationType.Refactor,
+        ["reorganize"] = TaskOperationType.Refactor,
+        ["test"] = TaskOperationType.Test,
+        ["spec"] = TaskOperationType.Test,
+        ["review"] = TaskOperationType.Review,
+        ["audit"] = TaskOperationType.Review,
+        ["check"] = TaskOperationType.Review,
+        ["delete"] = TaskOperationType.Delete,
+        ["remove"] = TaskOperationType.Delete,
+        ["document"] = TaskOperationType.Document,
+        ["doc"] = TaskOperationType.Document,
+        ["readme"] = TaskOperationType.Document,
+    };
+
+    // Chinese stop words (common characters that carry little meaning alone)
+    private static readonly HashSet<string> ChineseStopChars =
+    [
+        "的", "了", "在", "是", "和", "与", "或", "也", "都", "不", "要",
+        "把", "被", "让", "给", "为", "对", "从", "到", "中", "上", "下",
+    ];
+
+    // English stop words
+    private static readonly HashSet<string> EnglishStopWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "the", "a", "an", "is", "are", "was", "were", "be", "been",
+        "to", "in", "on", "at", "for", "of", "with", "by", "from",
+        "and", "or", "not", "but", "if", "else", "when", "then",
+        "this", "that", "these", "those", "it", "its",
+        "function", "method", "class", "file", "code",
+        "i", "we", "you", "they", "he", "she",
+    };
+
+    private static readonly HashSet<string> CommonWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "the", "and", "for", "are", "but", "not", "you", "all", "can", "her",
+        "was", "one", "our", "out", "day", "had", "has", "his", "how", "its",
+        "may", "new", "now", "old", "see", "way", "who", "did", "get", "let",
+        "say", "she", "too", "use", "fix", "add", "update", "remove", "delete",
+        "change", "the", "should", "would", "could", "will", "shall",
+    };
 
     public ParsedTask Parse(string taskText)
     {
@@ -65,10 +143,13 @@ public sealed partial class TaskParser
     private static List<string> ExtractPaths(string text)
     {
         var paths = new List<string>();
+
+        // Match file paths: forward slash, backslash, with extensions
+        // Supports spaces and hyphens in directory names
         var matches = FilePathRegex().Matches(text);
         foreach (Match m in matches)
         {
-            var path = m.Value;
+            var path = m.Value.Replace('\\', '/').TrimStart('/');
             if (!paths.Contains(path, StringComparer.OrdinalIgnoreCase))
                 paths.Add(path);
         }
@@ -78,55 +159,95 @@ public sealed partial class TaskParser
     private static List<string> ExtractSymbols(string text)
     {
         var symbols = new List<string>();
-        // PascalCase identifiers (likely class/method names)
-        var matches = PascalCaseRegex().Matches(text);
-        foreach (Match m in matches)
+
+        // PascalCase identifiers (e.g., AuthService, TokenManager)
+        foreach (Match m in PascalCaseRegex().Matches(text))
         {
             var sym = m.Value;
-            // Filter out common words
             if (sym.Length >= 3 && !CommonWords.Contains(sym.ToLowerInvariant()))
                 symbols.Add(sym);
         }
-        // snake_case identifiers
-        var snakeMatches = SnakeCaseRegex().Matches(text);
-        foreach (Match m in snakeMatches)
+
+        // camelCase identifiers (e.g., refreshToken, getUserById)
+        foreach (Match m in CamelCaseRegex().Matches(text))
         {
             if (!symbols.Contains(m.Value, StringComparer.OrdinalIgnoreCase))
                 symbols.Add(m.Value);
         }
+
+        // snake_case identifiers (e.g., refresh_token, user_id)
+        foreach (Match m in SnakeCaseRegex().Matches(text))
+        {
+            if (!symbols.Contains(m.Value, StringComparer.OrdinalIgnoreCase))
+                symbols.Add(m.Value);
+        }
+
+        // kebab-case identifiers (e.g., auth-service, user-controller)
+        foreach (Match m in KebabCaseRegex().Matches(text))
+        {
+            if (!symbols.Contains(m.Value, StringComparer.OrdinalIgnoreCase))
+                symbols.Add(m.Value);
+        }
+
+        // Chinese code identifiers (e.g., 用户服务, 认证模块)
+        foreach (Match m in ChineseIdentifierRegex().Matches(text))
+        {
+            var sym = m.Value;
+            if (sym.Length >= 2 && !ChineseStopChars.Contains(sym))
+                symbols.Add(sym);
+        }
+
         return symbols.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     private static List<string> ExtractKeywords(string text)
     {
-        var stopWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        var keywords = new List<string>();
+
+        // English words: Unicode-aware, minimum 3 chars
+        foreach (Match m in EnglishWordRegex().Matches(text))
         {
-            "the", "a", "an", "is", "are", "was", "were", "be", "been",
-            "to", "in", "on", "at", "for", "of", "with", "by", "from",
-            "and", "or", "not", "but", "if", "else", "when", "then",
-            "this", "that", "these", "those", "it", "its",
-            "fix", "add", "update", "remove", "delete", "change",
-            "function", "method", "class", "file", "code",
-            "i", "we", "you", "they", "he", "she",
-        };
+            var word = m.Value.ToLowerInvariant();
+            if (word.Length >= 3 && !EnglishStopWords.Contains(word) && !CommonWords.Contains(word))
+                keywords.Add(word);
+        }
 
-        var words = WordRegex().Matches(text)
-            .Select(m => m.Value.ToLowerInvariant())
-            .Where(w => w.Length >= 3 && !stopWords.Contains(w))
-            .Distinct()
-            .ToList();
+        // Chinese bigrams (2-character sequences) for keyword extraction
+        // This is a simple n-gram approach — not as good as jieba but works without dependencies
+        var chineseChars = ChineseCharRegex().Matches(text);
+        if (chineseChars.Count >= 2)
+        {
+            var charSequence = new List<char>();
+            foreach (Match m in chineseChars)
+                charSequence.Add(m.Value[0]);
 
-        return words;
+            // Extract 2-grams
+            var seen = new HashSet<string>();
+            for (var i = 0; i < charSequence.Count - 1; i++)
+            {
+                var bigram = new string([charSequence[i], charSequence[i + 1]]);
+                if (!ChineseStopChars.Contains(bigram) && !seen.Contains(bigram))
+                {
+                    seen.Add(bigram);
+                    keywords.Add(bigram);
+                }
+            }
+        }
+
+        return keywords.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     private static List<string> ExtractErrorStackReferences(string text)
     {
         var refs = new List<string>();
-        var matches = StackTraceRegex().Matches(text);
-        foreach (Match m in matches)
-        {
+        // Java/C# style: at ClassName.method(File.java:123)
+        foreach (Match m in StackTraceRegex().Matches(text))
             refs.Add(m.Value);
-        }
+
+        // Python style: File "path/to/file.py", line 123, in function
+        foreach (Match m in PythonTraceRegex().Matches(text))
+            refs.Add(m.Value);
+
         return refs;
     }
 
@@ -134,44 +255,61 @@ public sealed partial class TaskParser
     {
         var lower = text.ToLowerInvariant();
 
-        if (lower.Contains("fix") || lower.Contains("bug") || lower.Contains("error") || lower.Contains("broken"))
-            return TaskOperationType.Fix;
-        if (lower.Contains("add") || lower.Contains("create") || lower.Contains("implement") || lower.Contains("new"))
-            return TaskOperationType.Add;
-        if (lower.Contains("refactor") || lower.Contains("cleanup") || lower.Contains("reorganize"))
-            return TaskOperationType.Refactor;
-        if (lower.Contains("test") || lower.Contains("spec"))
-            return TaskOperationType.Test;
-        if (lower.Contains("review") || lower.Contains("audit") || lower.Contains("check"))
-            return TaskOperationType.Review;
-        if (lower.Contains("delete") || lower.Contains("remove"))
-            return TaskOperationType.Delete;
-        if (lower.Contains("document") || lower.Contains("doc") || lower.Contains("readme"))
-            return TaskOperationType.Document;
+        // Check English keywords
+        foreach (var (keyword, opType) in EnglishOps)
+        {
+            if (lower.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                return opType;
+        }
+
+        // Check Chinese keywords
+        foreach (var (keyword, opType) in ChineseOps)
+        {
+            if (text.Contains(keyword, StringComparison.Ordinal))
+                return opType;
+        }
 
         return TaskOperationType.Unknown;
     }
 
-    private static readonly HashSet<string> CommonWords = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "the", "and", "for", "are", "but", "not", "you", "all", "can", "her",
-        "was", "one", "our", "out", "day", "had", "has", "his", "how", "its",
-        "may", "new", "now", "old", "see", "way", "who", "did", "get", "let",
-        "say", "she", "too", "use",
-    };
-
-    [GeneratedRegex(@"(?:src/|lib/|test/|tests/|app/|docs?/|config/|scripts?/|api/)?[\w/]+\.\w{1,10}")]
+    // File path: supports forward slash and backslash, spaces in dir names, hyphens
+    // Matches: src/auth/service.ts, src\auth\service.ts, my app/auth.ts, auth-service/index.js
+    [GeneratedRegex(@"(?:[\w\-./\\]+\.)+\w{1,10}(?:\s+\w+)*", RegexOptions.None, 5000)]
     private static partial Regex FilePathRegex();
 
+    // PascalCase: AuthService, TokenManager, GetUserById
     [GeneratedRegex(@"\b[A-Z][a-z]+(?:[A-Z][a-z]+)+\b")]
     private static partial Regex PascalCaseRegex();
 
+    // camelCase: refreshToken, getUserById (starts lowercase, has uppercase)
+    [GeneratedRegex(@"\b[a-z]+[A-Z][a-zA-Z]*\b")]
+    private static partial Regex CamelCaseRegex();
+
+    // snake_case: refresh_token, user_id
     [GeneratedRegex(@"\b[a-z]+(?:_[a-z]+)+\b")]
     private static partial Regex SnakeCaseRegex();
 
-    [GeneratedRegex(@"\b[a-z]{3,}\b", RegexOptions.IgnoreCase)]
-    private static partial Regex WordRegex();
+    // kebab-case: auth-service, user-controller
+    [GeneratedRegex(@"\b[a-z]+(?:-[a-z]+)+\b")]
+    private static partial Regex KebabCaseRegex();
 
+    // Chinese identifiers: 2+ consecutive CJK characters
+    [GeneratedRegex(@"[\u4e00-\u9fff]{2,}")]
+    private static partial Regex ChineseIdentifierRegex();
+
+    // English words: Unicode-aware, 3+ characters
+    [GeneratedRegex(@"[\p{L}][\p{L}\p{N}]{2,}", RegexOptions.None, 5000)]
+    private static partial Regex EnglishWordRegex();
+
+    // Individual Chinese characters
+    [GeneratedRegex(@"[\u4e00-\u9fff]")]
+    private static partial Regex ChineseCharRegex();
+
+    // Stack trace: at ClassName.method(File:line)
     [GeneratedRegex(@"at\s+[\w.<>]+\([^)]*\)")]
     private static partial Regex StackTraceRegex();
+
+    // Python trace: File "path", line N, in function
+    [GeneratedRegex(@"File\s+""[^""]+"",\s*line\s+\d+,\s*in\s+\w+")]
+    private static partial Regex PythonTraceRegex();
 }
