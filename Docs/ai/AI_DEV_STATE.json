@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "project": "CacheHub",
   "currentPhase": "V6-Beta-Closure",
-  "currentTask": "V6 Beta Closure & Evidence: 8/10 items complete. Agent Benchmark uses real Provider Usage + PayloadGenerator. GUI/Dashboard/Bootstrap fixed. Semantic Reference stores selectedFiles+filesActuallyRead. Gateway Offline defense + Blob GC. NU1903 audited. Doc encoding fixed.",
+  "currentTask": "V6 Beta Closure & Evidence: 10/10 items complete. Real worktree apply-patch/build/test for Agent Benchmark (W10). Bootstrap dir safety + Init Plan (W08). CacheKey tokenizerVersion + GUI auto-auth (W08). 875 tests, 0 warnings.",
   "repository": {
     "branch": "main",
     "dirty": false,
@@ -10,7 +10,7 @@
   },
   "qualityGates": {
     "build": "pass (0 errors, 0 warnings, warnings-as-errors enabled)",
-    "unitTests": "pass (865/867, 2 skipped)",
+    "unitTests": "pass (875/877, 2 skipped)",
     "integrationTests": "pass (real SQLite + FTS5 + Context Engine pipeline + Snapshot Clone + Agent Benchmark + Cache Invalidate)",
     "securityTests": "pass (path traversal, auth, XSS, secret scan, symlink, offline mode, unified SecurityPolicyResolver, offline hard-block before gateway, Gateway Offline final defense V6-W04)",
     "format": "pass"
@@ -37,7 +37,7 @@
     "contextualCompletion": "Production Ready — CLI + API, unified SecurityPolicyResolver, Offline hard-block, tokensSaved uses estimatedBaseline (V6-W02)",
     "securityEnforcement": "Production Ready — unified SecurityPolicyResolver, all paths load from ConfigManager, Offline blocks gateway calls + Gateway final defense (V6-W04)",
     "realBenchmark": "Production Ready — real ContextEngine, Recall@10 with Take(10), unified BPE Tokenizer, Report aggregates persisted runs.",
-    "agentBenchmark": "Beta — V6-W06: uses real Provider Usage (not local estimate), PayloadGenerator for compressed payload, per-model cost estimation. Still needs real apply-patch/build/test for true success rate.",
+    "agentBenchmark": "Beta+ — V6-W10: real git worktree apply-patch/build/test via GitWorktreePatchTester (SuccessRate from actual build/test exit code). Real Provider usage. PayloadGenerator compressed context. Per-model cost. Final external Matrix validation pending.",
     "gui": "Beta — V6-W02: URL import auto-detects bootstrap, Dashboard API returns usage stats, Bootstrap API includes index step.",
     "treeSitter": "Scaffold — regex-baseline covers 13 languages",
     "lsp": "Scaffold",
@@ -51,11 +51,13 @@
       "V6-W03: P1 Fix Semantic Reference data storage (selectedFiles+filesActuallyRead) + Skill parameter syntax",
       "V6-W04: P1 Gateway Offline final defense + Persistent Blob GC",
       "V6-W05: P1 NU1903 dependency audit — SQLitePCLRaw 3.0.0 upgrade, Microsoft.Bcl.Memory risk accepted with documentation",
-      "V6-W06: P0 Agent Benchmark — real Provider Usage + PayloadGenerator + per-model cost estimation"
+      "V6-W06: P1 Agent Benchmark — real Provider Usage + PayloadGenerator + per-model cost estimation",
+      "V6-W08: P1 Bootstrap dir safety (git remote URL verify) + CLI Init Plan output + CacheKey tokenizerVersion/semanticStoreVersion + GUI auto-auth (HttpOnly session cookie)",
+      "V6-W10: P0 Agent Benchmark real worktree apply-patch/build/test (GitWorktreePatchTester) + regression tests",
+      "V6-W11: Fix worktree test isolation + GUI Auth contract tests"
     ],
     "remaining": [
-      "V6-W07: Real Agent Benchmark Matrix (Node/Python/.NET/Unity/Go/Rust/TypeScript Monorepo × 10-20 tasks each)",
-      "V6-W08: Real apply-patch/build/test in Agent Benchmark (git worktree → patch → build → test → success)"
+      "Run real product Benchmark Matrix (Node/Python/.NET/Unity/Go/Rust/TS Monorepo x 10-20 tasks) — requires external repo setup, not a code change"
     ]
   },
   "architecture": {
@@ -72,6 +74,6 @@
     "dependencyChain": "Core ← Storage, Indexing, Gateway; Context ← Core+Storage+Indexing; Cli/Desktop ← all",
     "databaseMigrations": 10
   },
-  "testCount": 865,
+  "testCount": 875,
   "lastUpdated": "2026-08-08T01:25:00Z"
 }
