@@ -6,7 +6,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![.NET 9](https://img.shields.io/badge/.NET-9.0-blue.svg)](https://dotnet.microsoft.com/download/dotnet/9.0)
-[![Tests](https://img.shields.io/badge/Tests-856%20passed-brightgreen.svg)](#测试覆盖�?
+[![Tests](https://img.shields.io/badge/Tests-865%20passed-brightgreen.svg)](#测试覆盖�?
 [![CI](https://img.shields.io/badge/CI-3%20platforms%20%E2%9C%93-success.svg)](.github/workflows/ci.yml)
 [![Status: Pre-Alpha](https://img.shields.io/badge/Status-Pre--Alpha-orange.svg)](#功能成熟度矩�?
 
@@ -140,7 +140,7 @@ src/auth/refresh.ts  Score: 0.92  Mode: chunks  Tokens: 450
 | Web UI | ASP.NET Core 最�?API + 静态文�?|
 | Gateway | HttpListener + OpenAI 兼容协议 + SSE |
 | 发布 | 单文件自包含 (PublishSingleFile + SelfContained) |
-| 测试 | xUnit �?856 测试通过 |
+| 测试 | xUnit �?865 测试通过 |
 | 代码质量 | TreatWarningsAsErrors + Nullable + AnalysisLevel latest-recommended |
 | CI/CD | GitHub Actions �?Ubuntu + Windows + macOS 三平�?|
 | 行尾�?| .gitattributes 强制 LF（全平台一致） |
@@ -161,7 +161,7 @@ CacheHub/
 �?  ├── CacheHub.Context/           # 上下文层�?2 源召回、排序、锚点分块、预算验证、引擎、缓�?�?  ├── CacheHub.Gateway/           # 可选网关：Server、Provider 路由、SSE 流式（独立项目）
 �?  ├── CacheHub.Cli/               # CLI 入口�?1 个命令组�?5 个子命令、单文件发布
 �?  └── CacheHub.Desktop/           # Web UI：最�?API + 17 个路�?+ Bearer 认证 + 6 个页�?�?├── tests/
-�?  └── CacheHub.Tests/             # 856 测试（单�?+ 集成 + 安全 + Gate 回归 + Benchmark�?�?├── integration/                    # Agent 集成套件
+�?  └── CacheHub.Tests/             # 865 测试（单�?+ 集成 + 安全 + Gate 回归 + Benchmark�?�?├── integration/                    # Agent 集成套件
 �?  ├── skills/universal/           # Universal Skill（通用技能）
 �?  ├── protocol/                   # API 协议文档
 �?  ├── tutorials/                  # 教程
@@ -305,7 +305,7 @@ cachehub context export --id=<ctx-id> --format=file
 ## 测试覆盖�?
 | 类别 | 数量 | 说明 |
 |------|------|------|
-| 单元 + 集成测试 | 856 通过 | 覆盖全部模块 |
+| 单元 + 集成测试 | 865 通过 | 覆盖全部模块 |
 | 跳过 | 2 | 需真实 Git 环境 |
 | Gate 回归测试 | 60+ | R4-R15 阶段门验�?|
 | 真实 SQLite 集成测试 | 10+ | index→context→payload 完整闭环 |
@@ -334,7 +334,7 @@ CI �?**Ubuntu + Windows + macOS** 三平台上运行 `build + test + format`�
 ---
 
 ## 项目状�?
-CacheHub 当前处于 **Pre-Alpha** 阶段。核心链路已通过 856 个测试验证，但不建议用于生产环境或处理敏感代码�?
+CacheHub 当前处于 **Pre-Alpha** 阶段。核心链路已通过 865 个测试验证，但不建议用于生产环境或处理敏感代码�?
 **已完�?*�?- V1.0 路线�?R0-R9（安全止血 �?索引可信 �?上下文正�?�?通用协议 �?真实 Benchmark �?Gateway �?缓存 �?Semantic �?LSP �?生态）
 - V2.0 路线�?R4-R15�?8 个任务：知识召回主链 �?精准压缩 �?增量索引 �?持久缓存 �?生产 Gateway �?统一工作�?�?语义参�?�?安全强制 �?真实 Benchmark �?GUI/发布 �?Tree-sitter/LSP �?生�?企业�?- 全面审计修复�?2 个问题全部解决（11 P0 + 31 P1 + 20 P2�?- 架构重构：Gateway �?Core 拆分为独立项目，依赖链清晰化
 
