@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using CacheHub.Context.Engine;
 using CacheHub.Context.Explain;
@@ -598,7 +599,9 @@ app.MapPost("/api/v1/workspaces/{id}/export", async (string id, IWorkspaceReposi
     await File.WriteAllTextAsync(jsonPath, JsonSerializer.Serialize(workspaceJson, new JsonSerializerOptions { WriteIndented = true }));
 
     var repomapPath = Path.Combine(exportDir, "repomap.md");
-    await File.WriteAllTextAsync(repomapPath, $"# Repository Map: {ws.Name}\n\n> Export is a placeholder.\n");
+    // Generate real repo map from indexed files
+    var repomapContent = await GenerateRepoMapMarkdown(ws);
+    await File.WriteAllTextAsync(repomapPath, repomapContent);
 
     return Results.Ok(new
     {
@@ -790,6 +793,87 @@ static ICodeParser SelectParser(string filePath)
         ".md" or ".markdown" => new MarkdownParser(),
         _ => new TextParser(),
     };
+}
+
+static async Task<string> GenerateRepoMapMarkdown(Workspace ws)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine($"# Repository Map: {ws.Name}");
+    sb.AppendLine();
+    sb.AppendLine($"Root: `{ws.RootPath}`");
+    sb.AppendLine();
+
+    try
+    {
+        var ignoreEngine = new CacheHub.Indexing.IgnoreRules.IgnoreRuleEngine()
+            .WithDefaults()
+            .WithGitIgnore(System.IO.Path.Combine(ws.RootPath, ".gitignore"))
+            .WithCacheHubIgnore(System.IO.Path.Combine(ws.RootPath, ".cachehubignore"));
+
+        var enumerator = new CacheHub.Indexing.Scanning.DirectoryEnumerator();
+        var directories = new SortedSet<string>(StringComparer.Ordinal);
+        var fileCount = 0;
+
+        sb.AppendLine("## Directory Structure");
+        sb.AppendLine();
+        sb.AppendLine("```");
+
+        var rootName = System.IO.Path.GetFileName(ws.RootPath.TrimEnd(System.IO.Path.DirectorySeparatorChar));
+        sb.AppendLine($"{rootName}/");
+
+        var fileEntries = new List<(string relativePath, long size, string language)>();
+
+        await foreach (var file in enumerator.EnumerateAsync(ws.RootPath))
+        {
+            if (file.IsDirectory) continue;
+            var relativePath = CacheHub.Core.Paths.PathNormalizer.GetRelativePath(ws.RootPath, file.Path);
+            if (ignoreEngine.IsIgnored(relativePath)) continue;
+
+            var typeInfo = CacheHub.Indexing.Detection.FileTypeDetector.Detect(file.Path, file.Size);
+            if (!typeInfo.ShouldIndex) continue;
+
+            fileEntries.Add((relativePath, file.Size, typeInfo.Language));
+            fileCount++;
+
+            var dir = System.IO.Path.GetDirectoryName(relativePath)?.Replace('\\', '/') ?? "";
+            if (!string.IsNullOrEmpty(dir))
+                directories.Add(dir);
+        }
+
+        // Print directory tree
+        foreach (var dir in directories)
+        {
+            var depth = dir.Split('/').Length;
+            var indent = new string(' ', depth * 2);
+            var dirName = dir.Split('/').Last();
+            sb.AppendLine($"{indent}{dirName}/");
+        }
+
+        sb.AppendLine("```");
+        sb.AppendLine();
+        sb.AppendLine($"**Total indexed files**: {fileCount}");
+        sb.AppendLine();
+
+        // Language breakdown
+        var langGroups = fileEntries.GroupBy(f => f.language).OrderByDescending(g => g.Count());
+        if (langGroups.Any())
+        {
+            sb.AppendLine("## Language Breakdown");
+            sb.AppendLine();
+            sb.AppendLine("| Language | Files |");
+            sb.AppendLine("|----------|-------|");
+            foreach (var group in langGroups)
+            {
+                sb.AppendLine($"| {group.Key} | {group.Count()} |");
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        sb.AppendLine($"> Error generating repo map: {ex.Message}");
+    }
+
+    return sb.ToString();
 }
 
 app.Run();
