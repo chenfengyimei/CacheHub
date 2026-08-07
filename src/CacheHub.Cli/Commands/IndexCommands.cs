@@ -349,6 +349,19 @@ public static class IndexCommands
         var deletedCount = 0;
         var failedCount = 0;
 
+        // Immutable snapshot pattern: create a Building snapshot, clone data, apply changes, then atomically switch.
+        // If anything fails, Active snapshot remains untouched.
+        var oldSnapshotId = snapshotId;
+        var buildingSnapshotId = IndexSnapshotId.New();
+        await InsertSnapshotAsync(factory, buildingSnapshotId, workspace.Id);
+
+        // Clone all data from Active to Building
+        await CloneSnapshotDataAsync(factory, oldSnapshotId, buildingSnapshotId);
+        Console.Error.WriteLine($"  Cloned snapshot: {oldSnapshotId.Value} → {buildingSnapshotId.Value} (Building)");
+
+        // Use Building snapshot for all subsequent operations
+        snapshotId = buildingSnapshotId;
+
         // Phase 1: Collect all file data (read, hash, parse) into memory
         var filesToAdd = new List<(string path, string fullPath, long size, string language, bool isBinary, string mtime, string hash, string content, string parserId, string parserVersion, Core.Parsing.ParseResult parseResult)>();
         var filesToDelete = new List<string>(result.DeletedPaths);
@@ -521,7 +534,10 @@ public static class IndexCommands
         catch (Exception ex)
         {
             await batchTx.RollbackAsync();
-            Console.Error.WriteLine($"Error: Batch refresh failed, transaction rolled back: {ex.Message}");
+            // Immutable snapshot: clean up the failed Building snapshot, Active remains untouched
+            await DeleteSnapshotAsync(factory, buildingSnapshotId);
+            Console.Error.WriteLine($"Error: Batch refresh failed, Building snapshot cleaned up: {ex.Message}");
+            Console.Error.WriteLine($"  Active snapshot {oldSnapshotId.Value} remains unchanged.");
             return 1;
         }
 
@@ -547,18 +563,23 @@ public static class IndexCommands
         var newFileCount = activeSnapshot.Value.fileCount + addedCount - deletedCount;
         await UpdateSnapshotFileCountAsync(factory, snapshotId, newFileCount);
 
+        // Atomically activate Building snapshot and supersede old Active
+        await ActivateSnapshotAsync(factory, buildingSnapshotId, workspace.Id, newFileCount);
+
+        // Clean up old snapshot data (files, symbols, imports, relations, FTS)
+        await DeleteSnapshotDataAsync(factory, oldSnapshotId);
+
         Console.WriteLine($"Refresh complete:");
         Console.WriteLine($"  Added: {addedCount}");
         Console.WriteLine($"  Modified: {modifiedCount}");
         Console.WriteLine($"  Deleted: {deletedCount}");
         Console.WriteLine($"  Failed: {failedCount}");
         Console.WriteLine($"  Total files: {newFileCount}");
+        Console.WriteLine($"  Snapshot: {buildingSnapshotId.Value} (was {oldSnapshotId.Value})");
         if (ftsFailedPaths.Count > 0)
         {
             Console.WriteLine($"  ⚠️ FTS failures: {ftsFailedPaths.Count} files — full-text search may return stale results for these files");
             Console.Error.WriteLine($"  FTS failed paths: {string.Join(", ", ftsFailedPaths)}");
-            // TODO: Implement immutable snapshot pattern — create new "Building" snapshot, write all data,
-            // then atomically switch to avoid partial FTS state on active snapshot.
         }
         return 0;
     }
@@ -809,6 +830,115 @@ public static class IndexCommands
         await using var conn = factory.CreateOpenConnection();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "DELETE FROM files WHERE snapshot_id = $id; DELETE FROM index_snapshots WHERE id = $id;";
+        cmd.Parameters.AddWithValue("$id", snapshotId.Value);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>
+    /// Clones all data (files, symbols, imports, relations, FTS) from one snapshot to another.
+    /// Used by the immutable Refresh pattern to create a Building snapshot before applying changes.
+    /// </summary>
+    private static async Task CloneSnapshotDataAsync(SqliteConnectionFactory factory, IndexSnapshotId fromSnapshot, IndexSnapshotId toSnapshot)
+    {
+        await using var conn = factory.CreateOpenConnection();
+        await using var tx = await conn.BeginTransactionAsync();
+
+        // Clone files
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.Transaction = (SqliteTransaction)tx;
+            cmd.CommandText = """
+                INSERT INTO files (id, snapshot_id, path, normalized_path, size, content_hash, language, is_binary, status, hash_kind, mtime, parser_id, parser_version)
+                SELECT id, $to, path, normalized_path, size, content_hash, language, is_binary, status, hash_kind, mtime, parser_id, parser_version
+                FROM files WHERE snapshot_id = $from;
+                """;
+            cmd.Parameters.AddWithValue("$from", fromSnapshot.Value);
+            cmd.Parameters.AddWithValue("$to", toSnapshot.Value);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        // Clone symbols
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.Transaction = (SqliteTransaction)tx;
+            cmd.CommandText = """
+                INSERT INTO file_symbols (id, file_id, snapshot_id, name, kind, start_line, end_line, modifier, confidence)
+                SELECT id, file_id, $to, name, kind, start_line, end_line, modifier, confidence
+                FROM file_symbols WHERE snapshot_id = $from;
+                """;
+            cmd.Parameters.AddWithValue("$from", fromSnapshot.Value);
+            cmd.Parameters.AddWithValue("$to", toSnapshot.Value);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        // Clone imports
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.Transaction = (SqliteTransaction)tx;
+            cmd.CommandText = """
+                INSERT INTO file_imports (id, file_id, snapshot_id, module, imported_name, line)
+                SELECT id, file_id, $to, module, imported_name, line
+                FROM file_imports WHERE snapshot_id = $from;
+                """;
+            cmd.Parameters.AddWithValue("$from", fromSnapshot.Value);
+            cmd.Parameters.AddWithValue("$to", toSnapshot.Value);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        // Clone relations
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.Transaction = (SqliteTransaction)tx;
+            cmd.CommandText = """
+                INSERT INTO file_relations (id, file_id, snapshot_id, source_symbol, target_symbol, relation_type, confidence, line, source)
+                SELECT id, file_id, $to, source_symbol, target_symbol, relation_type, confidence, line, source
+                FROM file_relations WHERE snapshot_id = $from;
+                """;
+            cmd.Parameters.AddWithValue("$from", fromSnapshot.Value);
+            cmd.Parameters.AddWithValue("$to", toSnapshot.Value);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        await tx.CommitAsync();
+
+        // Clone FTS entries (separate — FTS5 virtual table, no transaction)
+        using var ftsConn = factory.CreateOpenConnection();
+        using var ftsCmd = ftsConn.CreateCommand();
+        ftsCmd.CommandText = """
+            INSERT INTO file_contents_fts (path, normalized_path, content, language, content_hash, snapshot_id)
+            SELECT path, normalized_path, content, language, content_hash, $to
+            FROM file_contents_fts WHERE snapshot_id = $from;
+            """;
+        ftsCmd.Parameters.AddWithValue("$from", fromSnapshot.Value);
+        ftsCmd.Parameters.AddWithValue("$to", toSnapshot.Value);
+        await ftsCmd.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>
+    /// Deletes all data for a snapshot (files, symbols, imports, relations, FTS, snapshot row).
+    /// Used to clean up superseded snapshots after atomic switch.
+    /// </summary>
+    private static async Task DeleteSnapshotDataAsync(SqliteConnectionFactory factory, IndexSnapshotId snapshotId)
+    {
+        await using var conn = factory.CreateOpenConnection();
+
+        // Delete FTS entries
+        using (var ftsCmd = conn.CreateCommand())
+        {
+            ftsCmd.CommandText = "DELETE FROM file_contents_fts WHERE snapshot_id = $id;";
+            ftsCmd.Parameters.AddWithValue("$id", snapshotId.Value);
+            await ftsCmd.ExecuteNonQueryAsync();
+        }
+
+        // Delete metadata tables and snapshot row
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            DELETE FROM file_symbols WHERE snapshot_id = $id;
+            DELETE FROM file_imports WHERE snapshot_id = $id;
+            DELETE FROM file_relations WHERE snapshot_id = $id;
+            DELETE FROM files WHERE snapshot_id = $id;
+            DELETE FROM index_snapshots WHERE id = $id;
+            """;
         cmd.Parameters.AddWithValue("$id", snapshotId.Value);
         await cmd.ExecuteNonQueryAsync();
     }
