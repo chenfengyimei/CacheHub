@@ -149,8 +149,13 @@ public sealed class DirectoryEnumerator(EnumerationOptions? options = null)
     {
         try
         {
+            // Use LinkTarget for cross-platform symlink detection (.NET 7+).
+            // FileAttributes.ReparsePoint only works on Windows; on Unix,
+            // GetAttributes returns the TARGET's attributes, not the link's.
             var info = new FileInfo(path);
-            return info.Attributes.HasFlag(FileAttributes.ReparsePoint);
+            if (info.LinkTarget is not null) return true;
+            var dirInfo = new DirectoryInfo(path);
+            return dirInfo.LinkTarget is not null;
         }
         catch { return false; }
     }

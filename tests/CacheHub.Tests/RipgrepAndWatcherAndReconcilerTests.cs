@@ -42,10 +42,17 @@ public class RipgrepAndWatcherAndReconcilerTests
         Thread.Sleep(200);
 
         File.WriteAllText(Path.Combine(temp.Path, "newfile.ts"), "content");
-        Thread.Sleep(500); // Wait for debounce flush
+
+        // Poll for up to 5 seconds — macOS FSEvents may have significant latency
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        IReadOnlyList<FileChangeEvent> events;
+        do
+        {
+            Thread.Sleep(100);
+            events = watcher.DequeueAll();
+        } while (events.Count == 0 && DateTime.UtcNow < deadline);
 
         watcher.Stop();
-        var events = watcher.DequeueAll();
 
         Assert.NotEmpty(events);
         Assert.Contains(events, e => e.Path.EndsWith("newfile.ts"));
