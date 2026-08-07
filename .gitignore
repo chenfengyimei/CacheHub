@@ -59,8 +59,10 @@ logs/
 *.sqlite-shm
 *.sqlite-wal
 
-# Codely CLI temp files
-.codely-cli/commit-msg.txt
+# Codely CLI transient files
+.codely-cli/auto-saves/
+.codely-cli/tmp_commit_msg.txt
+.codely-cli/tmp/
 
 # Docs build
 Docs/**/*.docx~

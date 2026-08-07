@@ -9,3 +9,5 @@
 | ADR-0001 | 使用 .NET 9 和 C# latest | Accepted | 2026-08-06 |
 | ADR-0002 | 强类型标识符使用 record 基类模式 | Accepted | 2026-08-06 |
 | ADR-0003 | Context Package Manifest/Payload 分离 | Accepted | 2026-08-06 |
+| ADR-0004 | Desktop Web UI 使用 ASP.NET Core Minimal API | Accepted | 2026-08-06 |
+| ADR-0005 | Gateway 从 Core 拆分为独立项目 | Accepted | 2026-08-07 |
