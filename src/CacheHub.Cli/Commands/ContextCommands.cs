@@ -596,6 +596,25 @@ public static class ContextCommands
         var feedbackRepo = new SqliteFeedbackRepository(factory);
         await feedbackRepo.SaveAsync(feedback);
 
+        // V5-W09: Record semantic reference on successful task completion
+        if (feedback.TaskCompleted)
+        {
+            try
+            {
+                SemanticReferenceHelper.RecordReference(
+                    appData.Root,
+                    manifest.Task.OriginalText,
+                    manifest.WorkspaceId.Value,
+                    manifest.Task.OriginalText,
+                    manifest.IndexSnapshotId.Value);
+                Console.Error.WriteLine("  Semantic reference recorded for future recall.");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"  Warning: Failed to record semantic reference: {ex.Message}");
+            }
+        }
+
         Console.Error.WriteLine($"Feedback saved for context: {ctxId}");
         Console.Error.WriteLine($"  Workspace: {manifest.WorkspaceId.Value}");
         Console.Error.WriteLine($"  Client: {feedback.ClientId ?? "unknown"}");

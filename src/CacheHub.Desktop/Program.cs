@@ -579,7 +579,7 @@ app.MapPost("/api/v1/context/{id}/expand", async (string id, ExpandApiRequest re
     });
 });
 
-app.MapPost("/api/v1/context/{id}/feedback", async (string id, FeedbackApiRequest req, IFeedbackRepository fbRepo) =>
+app.MapPost("/api/v1/context/{id}/feedback", async (string id, FeedbackApiRequest req, IFeedbackRepository fbRepo, IContextPackageRepository ctxRepo) =>
 {
     var feedback = new ContextFeedback
     {
@@ -591,6 +591,24 @@ app.MapPost("/api/v1/context/{id}/feedback", async (string id, FeedbackApiReques
     };
 
     await fbRepo.SaveAsync(feedback);
+
+    // V5-W09: Record semantic reference on successful task completion
+    if (req.TaskCompleted)
+    {
+        try
+        {
+            var manifest = await ctxRepo.FindByIdAsync(ContextPackageId.Parse(id));
+            if (manifest is not null)
+            {
+                DesktopSemanticHelper.RecordReference(
+                    manifest.Task.OriginalText,
+                    manifest.WorkspaceId.Value,
+                    manifest.Task.OriginalText,
+                    manifest.IndexSnapshotId.Value);
+            }
+        }
+        catch { /* best effort — don't fail the feedback if semantic recording fails */ }
+    }
 
     return Results.Ok(new { received = true, saved = true, contextId = id, clientId = feedback.ClientId });
 });
