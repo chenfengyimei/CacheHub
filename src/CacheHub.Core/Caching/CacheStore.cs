@@ -20,6 +20,9 @@ public interface ICacheStore
     /// <summary>Invalidates entries by dependency hash.</summary>
     void InvalidateByDependency(string dependencyHash);
 
+    /// <summary>Invalidates a single entry by key and type.</summary>
+    void InvalidateByKey(string key, CacheType type);
+
     /// <summary>Invalidates all entries of a type.</summary>
     void InvalidateType(CacheType type);
 
@@ -117,6 +120,12 @@ public sealed class MemoryCacheStore : ICacheStore, IDisposable
         // LruCache doesn't expose enumeration, so we rely on Get with dependency check
         // In practice, this would be handled by invalidating known keys
         // For now, this is a no-op — dependency changes are caught on Get
+    }
+
+    public void InvalidateByKey(string key, CacheType type)
+    {
+        _lru.Invalidate(key);
+        lock (_blobLock) { _blobs.Remove(key); }
     }
 
     public void InvalidateType(CacheType type)

@@ -147,6 +147,11 @@ public sealed class SqliteCacheStore : ICacheStore
         cmd.ExecuteNonQuery();
     }
 
+    public void InvalidateByKey(string key, CacheType type)
+    {
+        Invalidate(key, type);
+    }
+
     public void InvalidateType(CacheType type)
     {
         using var conn = _factory.CreateOpenConnection();

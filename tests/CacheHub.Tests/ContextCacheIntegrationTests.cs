@@ -1,6 +1,7 @@
 using CacheHub.Context.Cache;
 using CacheHub.Context.Engine;
 using CacheHub.Context.Recall;
+using CacheHub.Core.Caching;
 using CacheHub.Core.Context;
 using CacheHub.Core.Identifiers;
 using CacheHub.Core.Workspaces;
@@ -174,6 +175,78 @@ public class ContextCacheIntegrationTests
             var manifest2 = engine2.Build(request, () => indexedFiles, _ => "export class AuthService {}", _ => "sha256:test");
 
             Assert.Equal(manifest1.Id.Value, manifest2.Id.Value);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            foreach (var suffix in new[] { "", "-wal", "-shm" })
+            {
+                try { if (File.Exists(dbPath + suffix)) File.Delete(dbPath + suffix); } catch { }
+            }
+            try { if (Directory.Exists(blobDir)) Directory.Delete(blobDir, true); } catch { }
+        }
+    }
+
+    /// <summary>
+    /// V5-W04 (P0): After Invalidate, a new cache instance must NOT restore the old entry
+    /// from the persistent SQLite store. Previously, Put didn't set DependencyHash, so
+    /// InvalidateByDependency silently missed, and the old entry survived.
+    /// </summary>
+    [Fact]
+    public void ContextCache_PersistentStore_InvalidateByKeyRemovesEntry()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"cachehub_ctxinv_{Guid.NewGuid():N}.db");
+        var blobDir = Path.Combine(Path.GetTempPath(), $"cachehub_ctxinv_blobs_{Guid.NewGuid():N}");
+        try
+        {
+            var factory = new SqliteConnectionFactory(dbPath);
+            var runner = new MigrationRunner(factory, dbPath,
+            [
+                new Migration0001Initial(),
+                new Migration0002Fts5(),
+                new Migration0003ContextPackages(),
+                new Migration0004Feedback(),
+                new Migration0005ContextPackageDetails(),
+                new Migration0006SchemaV2(),
+                new Migration0007ContextPackageFields(),
+                new Migration0008ContextPackageFk(),
+                new Migration0009PersistentCache(),
+                new Migration0010RelationSourceColumn(),
+            ]);
+            runner.Migrate();
+
+            var store = new CacheHub.Storage.Caching.SqliteCacheStore(factory, blobDir);
+            var cache = new ContextPackageCache(store);
+
+            // Build a known CacheKey
+            var key = CacheKey.Build("test-task", "snap-001", "profile-v1", 1, 80000, 90000, "sec-v1", null);
+
+            // Put a raw JSON manifest (simulating what ContextEngine does internally)
+            var testJson = """{"id":"test-manifest-001","task":"test-task"}"""u8.ToArray();
+            store.Put(new CacheEntry
+            {
+                Key = key.FullKey,
+                Type = CacheType.Context,
+                Version = "v1",
+                CreatedAt = DateTimeOffset.UtcNow,
+                SizeBytes = testJson.Length,
+                DependencyHash = key.FullKey, // V5-W04 fix: set dependency hash
+            }, testJson);
+
+            // Verify entry exists
+            var statsBefore = store.GetStats(CacheType.Context);
+            Assert.True(statsBefore.TotalEntries >= 1);
+
+            // Invalidate via ContextPackageCache (uses InvalidateByKey + InvalidateByDependency)
+            cache.Invalidate(key);
+
+            // Store should be empty
+            var statsAfter = store.GetStats(CacheType.Context);
+            Assert.Equal(0, statsAfter.TotalEntries);
+
+            // A fresh cache instance should NOT find it
+            var cache2 = new ContextPackageCache(store);
+            Assert.Null(cache2.TryGet(key));
         }
         finally
         {

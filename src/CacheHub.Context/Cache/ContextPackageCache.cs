@@ -128,6 +128,7 @@ public sealed class ContextPackageCache
                     Version = "v1",
                     CreatedAt = DateTimeOffset.UtcNow,
                     SizeBytes = json.Length,
+                    DependencyHash = key.FullKey,
                     ProducerVersion = "schema-v" + manifest.SchemaVersion,
                 }, json);
             }
@@ -150,6 +151,8 @@ public sealed class ContextPackageCache
     public void Invalidate(CacheKey key)
     {
         _cache.Remove(key.FullKey);
+        // V5-W04 (P0): Use direct key-based invalidation (reliable) + dependency-based (belt-and-suspenders)
+        _persistentStore?.InvalidateByKey(key.FullKey, CacheType.Context);
         _persistentStore?.InvalidateByDependency(key.FullKey);
     }
 
