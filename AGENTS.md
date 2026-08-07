@@ -75,8 +75,8 @@ Agent → cachehub context export --format=markdown → paste to AI model
 ### Pattern B: Local API
 
 ```
-Agent → POST /api/v1/context/build → JSON response
-Agent → GET /api/v1/context/{id}/payload → code content
+Agent → POST http://localhost:5099/api/v1/context/build (Bearer auth) → JSON response
+Agent → GET /api/v1/context/{id}/payload (Bearer auth) → code content
 ```
 
 ### Pattern C: File Export Protocol
@@ -108,14 +108,15 @@ dotnet format CacheHub.sln --verify-no-changes
 
 ```
 src/
-  CacheHub.Core/         — Domain models, errors, identifiers, context, security, tokens
-  CacheHub.Storage/      — SQLite, 5 migrations, 3 repositories, FTS5 search
-  CacheHub.Indexing/     — Directory scanning, ignore rules, file detection, 4-language parsers, caching
-  CacheHub.Context/      — Task parser, recall, ranking, chunking, budget, selection, engine
+  CacheHub.Core/         — Domain models, errors, identifiers, context, security, tokens, Semantic/LSP contracts
+  CacheHub.Storage/      — SQLite, 9 migrations, 3 repositories, FTS5 search, persistent cache store
+  CacheHub.Indexing/     — Directory scanning, ignore rules, file detection, 4-language parsers v2.0, RepoMap, reconciler
+  CacheHub.Context/      — Task parser, 9-source recall, 7-dim ranking, anchor chunking, budget validation, engine, cache
+  CacheHub.Gateway/      — Gateway server, Provider router, SSE streaming (separated from Core)
   CacheHub.Cli/          — CLI commands (21 command groups, 55 subcommands)
-  CacheHub.Desktop/      — ASP.NET Core Web UI + Local API (17 routes, 6 pages)
+  CacheHub.Desktop/      — ASP.NET Core Web UI + Local API (17 routes, Bearer auth, 6 pages)
 tests/
-  CacheHub.Tests/        — 379+ unit tests + 8 E2E integration tests
+  CacheHub.Tests/        — 771 tests (unit + integration + security + gate regression)
 integration/             — Universal Skill, 3 Agent examples, protocol docs, tutorials
 Docs/                    — INSTALL.md, USAGE.md, ARCHITECTURE.md, ADRs, specs
 ```
