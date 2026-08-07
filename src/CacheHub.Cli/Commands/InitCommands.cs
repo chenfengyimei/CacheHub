@@ -39,6 +39,8 @@ public static class InitCommands
         new Migration0006SchemaV2(),
         new Migration0007ContextPackageFields(),
         new Migration0008ContextPackageFk(),
+        new Migration0009PersistentCache(),
+        new Migration0010RelationSourceColumn(),
         ]);
         var applied = runner.Migrate();
         steps.Add(("database", true, $"v{runner.GetCurrentVersion()}, {applied} migrations"));

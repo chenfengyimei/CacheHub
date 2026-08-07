@@ -62,6 +62,8 @@ public static class IndexCommands
         new Migration0006SchemaV2(),
         new Migration0007ContextPackageFields(),
         new Migration0008ContextPackageFk(),
+        new Migration0009PersistentCache(),
+        new Migration0010RelationSourceColumn(),
         ]);
         runner.Migrate();
 
@@ -216,8 +218,8 @@ public static class IndexCommands
                     relCmd.Transaction = (SqliteTransaction)batchTx;
                     relCmd.CommandText =
                         """
-                        INSERT INTO file_relations (id, file_id, snapshot_id, source_symbol, target_symbol, relation_type, confidence, line)
-                        VALUES ($id, $fid, $snap, $src, $tgt, $rt, $conf, $line);
+                        INSERT INTO file_relations (id, file_id, snapshot_id, source_symbol, target_symbol, relation_type, confidence, line, source)
+                        VALUES ($id, $fid, $snap, $src, $tgt, $rt, $conf, $line, $source);
                         """;
                     relCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
                     relCmd.Parameters.AddWithValue("$fid", fileId);
@@ -225,8 +227,9 @@ public static class IndexCommands
                     relCmd.Parameters.AddWithValue("$src", relation.Relation);
                     relCmd.Parameters.AddWithValue("$tgt", relation.TargetName);
                     relCmd.Parameters.AddWithValue("$rt", relation.RelationType.ToString());
-                    relCmd.Parameters.AddWithValue("$conf", relation.Source.ToString());
-                    relCmd.Parameters.AddWithValue("$line", (object?)relation.Confidence ?? DBNull.Value);
+                    relCmd.Parameters.AddWithValue("$conf", relation.Confidence.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    relCmd.Parameters.AddWithValue("$line", DBNull.Value);
+                    relCmd.Parameters.AddWithValue("$source", relation.Source);
                     await relCmd.ExecuteNonQueryAsync();
                 }
             }
@@ -291,6 +294,8 @@ public static class IndexCommands
         new Migration0006SchemaV2(),
         new Migration0007ContextPackageFields(),
         new Migration0008ContextPackageFk(),
+        new Migration0009PersistentCache(),
+        new Migration0010RelationSourceColumn(),
         ]);
         runner.Migrate();
 
@@ -484,8 +489,8 @@ public static class IndexCommands
                     using var relCmd = batchConn.CreateCommand();
                     relCmd.Transaction = (SqliteTransaction)batchTx;
                     relCmd.CommandText = """
-                        INSERT INTO file_relations (id, file_id, snapshot_id, source_symbol, target_symbol, relation_type, confidence, line)
-                        VALUES ($id, $fid, $snap, $src, $tgt, $rt, $conf, $line);
+                        INSERT INTO file_relations (id, file_id, snapshot_id, source_symbol, target_symbol, relation_type, confidence, line, source)
+                        VALUES ($id, $fid, $snap, $src, $tgt, $rt, $conf, $line, $source);
                         """;
                     relCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
                     relCmd.Parameters.AddWithValue("$fid", fileId);
@@ -493,8 +498,9 @@ public static class IndexCommands
                     relCmd.Parameters.AddWithValue("$src", relation.Relation);
                     relCmd.Parameters.AddWithValue("$tgt", relation.TargetName);
                     relCmd.Parameters.AddWithValue("$rt", relation.RelationType.ToString());
-                    relCmd.Parameters.AddWithValue("$conf", relation.Source.ToString());
-                    relCmd.Parameters.AddWithValue("$line", (object?)relation.Confidence ?? DBNull.Value);
+                    relCmd.Parameters.AddWithValue("$conf", relation.Confidence.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    relCmd.Parameters.AddWithValue("$line", DBNull.Value);
+                    relCmd.Parameters.AddWithValue("$source", relation.Source);
                     await relCmd.ExecuteNonQueryAsync();
                 }
             }

@@ -330,7 +330,7 @@ public sealed class SqliteIndexQueryService : IIndexQueryService
         await using var conn = _factory.CreateOpenConnection();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            SELECT r.relation_type, r.source_symbol, r.target_symbol, r.confidence, r.line
+            SELECT r.relation_type, r.source_symbol, r.target_symbol, r.confidence, r.line, r.source
             FROM file_relations r
             INNER JOIN files f ON r.file_id = f.id
             WHERE r.snapshot_id = $snap AND f.normalized_path = $path
@@ -348,8 +348,8 @@ public sealed class SqliteIndexQueryService : IIndexQueryService
                 RelationType = reader.GetString(0),
                 Relation = reader.GetString(1),
                 TargetName = reader.GetString(2),
-                Confidence = reader.IsDBNull(3) ? 0 : double.TryParse(reader.GetString(3), out var c) ? c : 0,
-                Source = reader.IsDBNull(4) ? "" : reader.GetInt32(4).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                Confidence = reader.IsDBNull(3) ? 0 : double.TryParse(reader.GetString(3), System.Globalization.CultureInfo.InvariantCulture, out var c) ? c : 0,
+                Source = reader.IsDBNull(5) ? "" : reader.GetString(5),
             });
         }
         return results;

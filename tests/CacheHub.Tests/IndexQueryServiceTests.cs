@@ -22,6 +22,8 @@ public class IndexQueryServiceTests
             new Migration0006SchemaV2(),
             new Migration0007ContextPackageFields(),
             new Migration0008ContextPackageFk(),
+            new Migration0009PersistentCache(),
+            new Migration0010RelationSourceColumn(),
         ]);
         runner.Migrate();
 
@@ -109,8 +111,8 @@ public class IndexQueryServiceTests
         using (var relCmd = conn.CreateCommand())
         {
             relCmd.CommandText = """
-                INSERT INTO file_relations (id, file_id, snapshot_id, source_symbol, target_symbol, relation_type, confidence, line)
-                VALUES ($id, $fid, $snap, 'UserService', './auth', 'imports', 'syntactic', 1);
+                INSERT INTO file_relations (id, file_id, snapshot_id, source_symbol, target_symbol, relation_type, confidence, line, source)
+                VALUES ($id, $fid, $snap, 'UserService', './auth', 'imports', '0.9', NULL, 'test_parser');
                 """;
             relCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
             relCmd.Parameters.AddWithValue("$fid", file2Id);
@@ -234,6 +236,8 @@ public class IndexQueryServiceTests
         var relations = await svc.GetFileRelationsAsync(snapshotId, "src/user.ts");
         Assert.NotEmpty(relations);
         Assert.Contains(relations, r => r.RelationType == "imports");
+        Assert.Contains(relations, r => r.Confidence == 0.9);
+        Assert.Contains(relations, r => r.Source == "test_parser");
     }
 
     [Fact]
