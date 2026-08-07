@@ -181,10 +181,40 @@ public sealed class OpenAiCompatibleProvider : IProvider
 
     public async Task<IReadOnlyList<ModelInfo>> ListModelsAsync(CancellationToken ct = default)
     {
-        var response = await _httpClient.GetAsync($"{BaseUrl}/v1/models", ct);
-        var body = await response.Content.ReadAsStringAsync(ct);
-        // Parse models list — simplified for baseline
-        return [];
+        try
+        {
+            var response = await _httpClient.GetAsync($"{BaseUrl}/v1/models", ct);
+            var body = await response.Content.ReadAsStringAsync(ct);
+
+            if (!response.IsSuccessStatusCode)
+                return [];
+
+            var models = new List<ModelInfo>();
+            using var doc = System.Text.Json.JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("data", out var data) && data.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var item in data.EnumerateArray())
+                {
+                    var id = item.TryGetProperty("id", out var idProp) && idProp.ValueKind == System.Text.Json.JsonValueKind.String
+                        ? idProp.GetString() ?? "unknown"
+                        : "unknown";
+                    models.Add(new ModelInfo
+                    {
+                        Id = id,
+                        DisplayName = id,
+                        ContextWindow = 128_000,
+                        SupportsTools = true,
+                        SupportsStreaming = true,
+                    });
+                }
+            }
+
+            return models;
+        }
+        catch
+        {
+            return [];
+        }
     }
 
     public async Task<ProviderResponse> SendAsync(ProviderRequest request, CancellationToken ct = default)
