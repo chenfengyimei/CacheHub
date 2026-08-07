@@ -138,20 +138,8 @@ public static class ContextCommands
             Console.Error.WriteLine($"  Git diff files: {gitDiffFiles.Count}");
         }
 
-        // Build security policy from config
-        Core.Security.SecurityPolicy? secPolicy = null;
-        if (config.Security is not null)
-        {
-            secPolicy = new Core.Security.SecurityPolicy
-            {
-                Version = "config-v1",
-                Mode = config.Security.Mode,
-                EnableSecretScan = config.Security.EnableSecretScan,
-                BlockedExtensions = config.Security.BlockedExtensions is not null
-                    ? new HashSet<string>(config.Security.BlockedExtensions, StringComparer.OrdinalIgnoreCase)
-                    : new HashSet<string>(StringComparer.OrdinalIgnoreCase),
-            };
-        }
+        // V5-W02 (P0): Use unified SecurityPolicyResolver for consistent policy across all entry points
+        var secPolicy = Core.Security.SecurityPolicyResolver.Resolve(new Core.Configuration.ConfigManager());
 
         // Build tokenizer registry
         var tokenizers = Core.Tokens.TokenizerRegistry.CreateWithDefaults();

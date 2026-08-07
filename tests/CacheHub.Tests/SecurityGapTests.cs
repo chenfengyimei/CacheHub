@@ -186,4 +186,50 @@ public class SecurityGapTests
         Assert.False(PathNormalizer.ContainsTraversal("tests/unit/test.cs"));
         Assert.False(PathNormalizer.ContainsTraversal(""));
     }
+
+    /// <summary>
+    /// V5-W02 (P0): SecurityPolicyResolver must load from config and respect Offline mode.
+    /// </summary>
+    [Fact]
+    public void SecurityPolicyResolver_NoConfig_ReturnsStandardMode()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"cachehub_sec_{Guid.NewGuid():N}");
+        try
+        {
+            var configMgr = new Core.Configuration.ConfigManager(tempDir);
+            var policy = Core.Security.SecurityPolicyResolver.Resolve(configMgr);
+            Assert.Equal(Core.Security.ExfiltrationMode.Standard, policy.Mode);
+            Assert.True(policy.EnableSecretScan);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void SecurityPolicyResolver_OfflineConfig_BlocksCloudSend()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"cachehub_sec_{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(tempDir, "config"));
+            var configPath = Path.Combine(tempDir, "config", ".cachehub-config.json");
+            File.WriteAllText(configPath, """{"version":"1","security":{"mode":"Offline","enableSecretScan":true}}""");
+
+            var configMgr = new Core.Configuration.ConfigManager(tempDir);
+            var policy = Core.Security.SecurityPolicyResolver.Resolve(configMgr);
+            Assert.Equal(Core.Security.ExfiltrationMode.Offline, policy.Mode);
+
+            // IsCloudSendAllowed must return false
+            Assert.False(Core.Security.SecurityPolicyResolver.IsCloudSendAllowed(configMgr));
+
+            var (_, enforcer) = Core.Security.SecurityPolicyResolver.CreateEnforcer(configMgr);
+            Assert.False(enforcer.IsCloudSendAllowed());
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
 }

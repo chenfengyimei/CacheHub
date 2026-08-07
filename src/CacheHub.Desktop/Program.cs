@@ -8,6 +8,7 @@ using CacheHub.Context.Parsing;
 using CacheHub.Context.Recall;
 using CacheHub.Context.Expand;
 using CacheHub.Context.Payload;
+using CacheHub.Core.Configuration;
 using CacheHub.Core.Workflow;
 using CacheHub.Core.Capabilities;
 using CacheHub.Core.Context;
@@ -781,7 +782,7 @@ app.MapGet("/api/v1/context/{id}/payload", async (string id, IContextPackageRepo
     if (ws is null) return Results.NotFound(ErrorEnvelope.From(ErrorCode.WorkspaceNotFound, "Workspace not found"));
 
     var generator = new PayloadGenerator();
-    var enforcer = new CacheHub.Core.Security.SecurityPolicyEnforcer();
+    var (_, payloadEnforcer) = CacheHub.Core.Security.SecurityPolicyResolver.CreateEnforcer();
 
     // Pre-pass: identify blocked/approval-required files before generating payload
     var blockedFiles = new List<object>();
@@ -790,7 +791,7 @@ app.MapGet("/api/v1/context/{id}/payload", async (string id, IContextPackageRepo
         var fullPath = SafeResolvePath(ws.RootPath, file.Path);
         if (fullPath is null || !File.Exists(fullPath)) continue;
         var content = await File.ReadAllTextAsync(fullPath);
-        var decision = enforcer.EvaluateFile(file.Path, content);
+        var decision = payloadEnforcer.EvaluateFile(file.Path, content);
         if (!decision.IsAllowed)
         {
             blockedFiles.Add(new
@@ -806,7 +807,7 @@ app.MapGet("/api/v1/context/{id}/payload", async (string id, IContextPackageRepo
     {
         var fullPath = SafeResolvePath(ws.RootPath, path);
         return fullPath is not null && File.Exists(fullPath) ? File.ReadAllTextAsync(fullPath).GetAwaiter().GetResult() : "";
-    }, enforcer);
+    }, payloadEnforcer);
 
     return Results.Ok(new
     {
@@ -950,6 +951,10 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
         return Results.BadRequest(ErrorEnvelope.From(ErrorCode.IndexNotFound, "No active index snapshot. Run index build first."));
 
     var indexedFiles = await querySvc.GetIndexedFilesBySnapshotAsync(activeSnapshotId);
+
+    // V5-W02 (P0): Use unified SecurityPolicyResolver
+    var (secPolicy, secEnforcer) = CacheHub.Core.Security.SecurityPolicyResolver.CreateEnforcer();
+
     var indexedFileInfos = indexedFiles.Select(f => new CacheHub.Context.Recall.IndexedFileInfo
     {
         Path = f.NormalizedPath,
@@ -966,7 +971,7 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
         Task = req.Task,
         ModelId = req.ModelId,
         CurrentFile = req.CurrentFile,
-        SecurityPolicyVersion = "sec-v1",
+        SecurityPolicyVersion = secPolicy.Version,
     };
 
     var manifest = engine.Build(
@@ -1024,12 +1029,11 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
     // Assemble prompt
     var promptAssembly = new PromptAssemblyService();
     var payloadGenerator = new PayloadGenerator();
-    var enforcer = new CacheHub.Core.Security.SecurityPolicyEnforcer();
     var payloadContent = payloadGenerator.GenerateMarkdown(manifest, path =>
     {
         var fullPath = SafeResolvePath(workspace.RootPath, path);
         return fullPath is not null && File.Exists(fullPath) ? File.ReadAllTextAsync(fullPath).GetAwaiter().GetResult() : "";
-    }, enforcer);
+    }, secEnforcer);
     var (systemPrompt, userContent) = promptAssembly.Assemble(manifest, payloadContent);
 
     // Call Gateway if requested
@@ -1039,6 +1043,14 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
 
     if (req.CallGateway && !string.IsNullOrEmpty(req.ModelId))
     {
+        // V5-W02 (P0): Hard-block gateway call if security policy is Offline
+        if (!secEnforcer.IsCloudSendAllowed())
+        {
+            modelResponse = "Gateway call blocked: security policy is Offline mode.";
+            gatewayCalled = false;
+        }
+        else
+        {
         var gatewayUrl = req.GatewayUrl ?? "http://127.0.0.1:5218";
         var gatewayToken = req.GatewayToken
             ?? Environment.GetEnvironmentVariable("CACHEHUB_GATEWAY_TOKEN")
@@ -1088,6 +1100,7 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
         {
             modelResponse = $"Gateway call failed: {ex.Message}";
         }
+        } // end else (cloud send allowed)
     }
 
     return Results.Ok(new

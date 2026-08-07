@@ -4,6 +4,7 @@ using CacheHub.Context.Engine;
 using CacheHub.Context.Payload;
 using CacheHub.Core.Context;
 using CacheHub.Core.Identifiers;
+using CacheHub.Core.Configuration;
 using CacheHub.Core.Security;
 using CacheHub.Core.Tokens;
 using CacheHub.Core.Workflow;
@@ -97,7 +98,7 @@ public static class WorkflowCommands
 
         var tokenizers = TokenizerRegistry.CreateWithDefaults();
         var cache = ContextCommands.CreateContextCache(factory);
-        var secPolicy = new SecurityPolicy { Version = "sec-v1" };
+        var (secPolicy, secEnforcer) = SecurityPolicyResolver.CreateEnforcer();
         var engine = new ContextEngine(tokenizers, secPolicy, cache);
 
         var indexedFiles = await querySvc.GetIndexedFilesBySnapshotAsync(activeSnapshotId);
@@ -117,7 +118,7 @@ public static class WorkflowCommands
             Task = task,
             ModelId = model,
             CurrentFile = currentFile,
-            SecurityPolicyVersion = "sec-v1",
+            SecurityPolicyVersion = secPolicy.Version,
         };
 
         var manifest = engine.Build(
@@ -171,12 +172,20 @@ public static class WorkflowCommands
 
         var promptAssembly = new PromptAssemblyService();
         var payloadGenerator = new PayloadGenerator();
-        var enforcer = new SecurityPolicyEnforcer(secPolicy);
+        var enforcer = secEnforcer;
         var payloadContent = payloadGenerator.GenerateMarkdown(manifest, path => ResolveFileContent(workspace.RootPath, path), enforcer);
         var (systemPrompt, userContent) = promptAssembly.Assemble(manifest, payloadContent);
 
         if (callGateway && !string.IsNullOrEmpty(model))
         {
+            // V5-W02 (P0): Hard-block gateway call if security policy is Offline
+            if (!secEnforcer.IsCloudSendAllowed())
+            {
+                Console.Error.WriteLine("  ⛔ Gateway call blocked: security policy is Offline mode.");
+                Console.Error.WriteLine("  To enable cloud send, change security.mode in .cachehub-config.json.");
+            }
+            else
+            {
             var gatewayUrl = GetOpt(args, "--gateway-url") ?? "http://127.0.0.1:5218";
             var gatewayToken = GetOpt(args, "--gateway-token")
                 ?? Environment.GetEnvironmentVariable("CACHEHUB_GATEWAY_TOKEN")
@@ -215,6 +224,7 @@ public static class WorkflowCommands
                 Console.Error.WriteLine($"  Gateway call failed: {ex.Message}");
                 Console.Error.WriteLine("  Returning context without model response.");
             }
+            } // end else (cloud send allowed)
         }
 
         var output = new
