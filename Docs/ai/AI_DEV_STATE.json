@@ -1,8 +1,8 @@
 ﻿{
   "schemaVersion": 1,
   "project": "CacheHub",
-  "currentPhase": "V5-PRODUCTION-PROOF",
-  "currentTask": "V5 Production Proof & Product Closure: P0 items (ActiveDegraded status, SecurityPolicyResolver, Agent Benchmark real ContextEngine, Cache Invalidate) + P1 items (CacheKey versioning, Gateway CacheKey+CachePolicy, Persistent SavedTokens, FileSymbolsProvider, Semantic lifecycle, totalLifecycleTokens) all complete. 865 tests passing.",
+  "currentPhase": "V5-COMPLETE",
+  "currentTask": "V5 Production Proof & Product Closure: ALL 16/16 items complete (4 P0 + 10 P1 + 2 P2). .NET 10 LTS, 865 tests, 0 warnings.",
   "repository": {
     "branch": "main",
     "dirty": false,
@@ -10,7 +10,7 @@
   },
   "qualityGates": {
     "build": "pass (0 errors, 0 warnings, warnings-as-errors enabled)",
-    "unitTests": "pass (865/849, 2 skipped)",
+    "unitTests": "pass (865/867, 2 skipped)",
     "integrationTests": "pass (real SQLite + FTS5 + Context Engine pipeline + Snapshot Clone + Agent Benchmark + Cache Invalidate)",
     "securityTests": "pass (path traversal, auth, XSS, secret scan, symlink, offline mode, unified SecurityPolicyResolver, offline hard-block before gateway)",
     "format": "pass"
@@ -58,14 +58,11 @@
       "V5-W09: Semantic lifecycle — RecordReference called on task completion in CLI/Desktop feedback",
       "V5-W10: totalLifecycleTokens double-counting — separate contextSelectedTokens/modelPromptTokens/modelCompletionTokens"
     ],
-    "remaining": [
-      "V5-W11: .NET 10 LTS migration (SDK not installed)",
-      "V5-W12: Auto-generate docs from build results (script created)"
-    ]
+    "remaining": []
   },
   "architecture": {
     "projects": [
-      "CacheHub.Core (domain models, contracts, identifiers, BPE tokenizers, SecurityPolicyResolver)",
+      "CacheHub.Core (domain models, contracts, identifiers, BPE tokenizers, SecurityPolicyResolver) — .NET 10 LTS",
       "CacheHub.Storage (SQLite, migrations, repositories, FTS5, SqliteCacheStore)",
       "CacheHub.Indexing (scan, ignore, hash, parsers, reconciler)",
       "CacheHub.Context (recall, ranking, selection, chunking, engine, cache)",

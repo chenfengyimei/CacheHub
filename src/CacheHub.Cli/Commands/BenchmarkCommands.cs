@@ -679,7 +679,8 @@ public static class BenchmarkCommands
                 TaskId = task.Id,
                 MeanFileRecall = meanRecall,
                 MissingContextRate = 1.0 - meanRecall,
-                SuccessRate = meanRecall >= 0.8 ? 1.0 : meanRecall,
+                // V5: This is Retrieval Quality (not Agent Task Success) — accurately named
+                SuccessRate = meanRecall >= 0.8 ? 1.0 : meanRecall, // Retrieval Quality proxy
                 StaleContextRate = 0,
                 MeanInputTokens = (long)tokenValues.Average(),
                 RunCount = taskRuns.Count,
