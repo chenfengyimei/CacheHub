@@ -41,24 +41,51 @@ public sealed class PayloadGenerator
                 var decision = securityEnforcer.EvaluateFile(file.Path, content);
                 if (!decision.IsAllowed)
                 {
-                    // Denied or ApprovalRequired — skip content, don't output
                     continue;
                 }
             }
 
-            var chunks = _chunker.Chunk(file.Path, content, file.Mode, chunkBudget);
-
-            foreach (var chunk in chunks)
+            // R5-W006: Use Manifest ranges (immutable PayloadPlan) when available
+            // instead of re-chunking, to prevent Manifest/Payload divergence
+            if (file.Ranges is not null && file.Ranges.Count > 0)
             {
-                items.Add(new PayloadItem
+                var lines = content.Split('\n');
+                foreach (var range in file.Ranges)
                 {
-                    Path = file.Path,
-                    Mode = file.Mode,
-                    Content = chunk.Content,
-                    StartLine = chunk.StartLine > 0 ? chunk.StartLine : null,
-                    EndLine = chunk.EndLine > 0 ? chunk.EndLine : null,
-                });
-                totalTokens += chunk.EstimatedTokens;
+                    var startIdx = Math.Max(0, range.StartLine - 1);
+                    var endIdx = Math.Min(lines.Length - 1, range.EndLine - 1);
+                    if (startIdx > endIdx) continue;
+                    var rangeContent = string.Join('\n', lines.Skip(startIdx).Take(endIdx - startIdx + 1));
+                    var tokens = ChunkingStrategy.EstimateTokens(rangeContent);
+
+                    items.Add(new PayloadItem
+                    {
+                        Path = file.Path,
+                        Mode = file.Mode,
+                        Content = rangeContent,
+                        StartLine = range.StartLine,
+                        EndLine = range.EndLine,
+                    });
+                    totalTokens += tokens;
+                }
+            }
+            else
+            {
+                // Fallback: re-chunk when no ranges in Manifest (backward compat)
+                var chunks = _chunker.Chunk(file.Path, content, file.Mode, chunkBudget);
+
+                foreach (var chunk in chunks)
+                {
+                    items.Add(new PayloadItem
+                    {
+                        Path = file.Path,
+                        Mode = file.Mode,
+                        Content = chunk.Content,
+                        StartLine = chunk.StartLine > 0 ? chunk.StartLine : null,
+                        EndLine = chunk.EndLine > 0 ? chunk.EndLine : null,
+                    });
+                    totalTokens += chunk.EstimatedTokens;
+                }
             }
         }
 
