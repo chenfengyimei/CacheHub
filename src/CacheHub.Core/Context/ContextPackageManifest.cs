@@ -122,6 +122,12 @@ public sealed record BudgetInfo
 
     [JsonPropertyName("tokenizerVersion")]
     public string? TokenizerVersion { get; init; }
+
+    /// <summary>
+    /// True if the token estimate used a rough fallback (chars/4) rather than a model-specific tokenizer.
+    /// </summary>
+    [JsonPropertyName("isEstimated")]
+    public bool IsEstimated { get; init; }
 }
 
 public sealed record SelectedFile

@@ -127,6 +127,7 @@ public sealed class ContextEngine
                 ActualEstimate = selected.TotalEstimatedTokens,
                 Tokenizer = tokenizer.Id,
                 TokenizerVersion = tokenizer.Version,
+                IsEstimated = tokenizer.Id == "char-estimate",
             },
             SelectedFiles = selected.SelectedFiles.Select(f => new Core.Context.SelectedFile
             {
