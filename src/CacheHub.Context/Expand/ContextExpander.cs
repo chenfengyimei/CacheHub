@@ -163,4 +163,62 @@ public sealed class ContextExpander
             ExpansionType = "symbol",
         };
     }
+
+    /// <summary>
+    /// R5-W007: Creates a revision ContextPackageManifest from an expansion result.
+    /// The new manifest has ParentPackageId set to the original, includes the expanded files,
+    /// and records the incremental token count.
+    /// </summary>
+    public ContextPackageManifest CreateRevision(
+        ContextPackageManifest parentManifest,
+        ExpansionResult expansion)
+    {
+        var newSelected = parentManifest.SelectedFiles.ToList();
+        foreach (var item in expansion.AddedItems)
+        {
+            newSelected.Add(new SelectedFile
+            {
+                Path = item.Path,
+                ContentHash = parentManifest.SelectedFiles
+                    .FirstOrDefault(f => f.Path == item.Path)?.ContentHash ?? "sha256:expanded",
+                Mode = item.Mode,
+                Score = 0.0, // Expanded files have no ranking score
+                Reasons = [$"扩展: {expansion.Reason}"],
+                Ranges = item.StartLine.HasValue && item.EndLine.HasValue
+                    ? [new LineRange { StartLine = item.StartLine.Value, EndLine = item.EndLine.Value }]
+                    : null,
+            });
+        }
+
+        return new ContextPackageManifest
+        {
+            Id = Core.Identifiers.ContextPackageId.New(),
+            SchemaVersion = parentManifest.SchemaVersion,
+            WorkspaceId = parentManifest.WorkspaceId,
+            IndexSnapshotId = parentManifest.IndexSnapshotId,
+            Task = parentManifest.Task,
+            Ranking = parentManifest.Ranking,
+            Budget = new BudgetInfo
+            {
+                ModelContextWindow = parentManifest.Budget.ModelContextWindow,
+                AgentReservedTokens = parentManifest.Budget.AgentReservedTokens,
+                ResponseReservedTokens = parentManifest.Budget.ResponseReservedTokens,
+                ContextTarget = parentManifest.Budget.ContextTarget,
+                ContextHardLimit = parentManifest.Budget.ContextHardLimit,
+                SafetyMargin = parentManifest.Budget.SafetyMargin,
+                ActualEstimate = parentManifest.Budget.ActualEstimate + expansion.AdditionalTokens,
+                Tokenizer = parentManifest.Budget.Tokenizer,
+                TokenizerVersion = parentManifest.Budget.TokenizerVersion,
+                IsEstimated = parentManifest.Budget.IsEstimated,
+            },
+            SelectedFiles = newSelected,
+            ExcludedCandidates = parentManifest.ExcludedCandidates,
+            Safety = parentManifest.Safety,
+            ContextEngineVersion = parentManifest.ContextEngineVersion,
+            ChunkingStrategyVersion = parentManifest.ChunkingStrategyVersion,
+            TokenBudgetPolicyVersion = parentManifest.TokenBudgetPolicyVersion,
+            CreatedAt = DateTimeOffset.UtcNow,
+            ParentPackageId = parentManifest.Id,
+        };
+    }
 }
