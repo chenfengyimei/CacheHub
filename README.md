@@ -30,21 +30,24 @@ CacheHub 解决这个问题：它在本地维护版本感知的代码索引，�
 
 市面上不缺"给 AI 喂代码"的工具，但 CacheHub 有几个独特的设计决策：
 
-### 🧠 9 源可组合召回引擎
+### 🧠 12 源可组合召回引擎
 
-不是一个简单的全文搜索。CacheHub 同时从 9 个独立召回源获取候选文件：
+不是一个简单的全文搜索。CacheHub 同时从 12 个独立召回源获取候选文件：
 
 | 召回源 | 作用 |
 |--------|------|
-| **FTS5 正文搜索** | BM25 排序，命中行高亮，Snippet 提取 |
+| **FTS5 正文搜索** | BM25 排序，命中行号定位，Snippet 提取 |
 | **符号精确匹配** | 查询 file_symbols 表，匹配类名/方法名/属性名 |
 | **Import 关系扩展** | 从命中文件向导入者扩展一层 |
-| **Relation 调用关系** | 启发式调用/被调用关系图扩展 |
+| **Relation 调用关系** | file_relations 表查询，调用链/被调用链扩展 |
 | **测试文件关联** | 源文件 ↔ 测试文件确定性映射 |
 | **配置文件关联** | 组件 ↔ 配置文件映射 |
 | **RepoMap 结构** | 目录树重要性评分 + 预算裁剪 |
 | **Git Diff** | 当前变更文件优先召回 |
 | **当前文件** | 编辑器上下文 |
+| **路径匹配** | 任务文本中提取的文件路径直接匹配 |
+| **语义参考** | 历史任务/错误/反馈的词汇相似度参考 |
+| **目录降级** | 无直接候选时的入口文件兜底 |
 
 每个候选文件携带 `SourceEvidence`，可追溯到数据库中的实际证据——不是黑盒。
 
@@ -114,7 +117,7 @@ src/auth/refresh.ts  Score: 0.92  Mode: chunks  Tokens: 450
 | 增量索引刷新 | ✅ Implemented | FTS 单文件 Delete/Upsert，内容哈希检测变异 |
 | FTS5 全文搜索 + Context Recall | ✅ Implemented | QueryCompiler 转义 + BM25 + 命中行锚点 |
 | 任务解析（中英文） | ✅ Implemented | Unicode 分词 + 中文 n-gram + 代码标识符独立通道 |
-| 9 源可组合召回 | ✅ Implemented | IRecallSource 接口 + SourceEvidence 追溯 |
+| 12 源可组合召回 | ✅ Implemented | IRecallSource 接口 + SourceEvidence 追溯 + ScoreHint 排序 |
 | 7 维排序引擎 | ✅ Implemented | 只启用已实现维度 + 归一化 + 效率信号 |
 | 锚点驱动的智能分块 | ✅ Implemented | LineAnchor 贯穿召回→排序→选择→分块 |
 | Token 预算管理 | ✅ Implemented | ValidateOrThrow 构建前验证 + reserves 参与公式 |
@@ -128,18 +131,20 @@ src/auth/refresh.ts  Score: 0.92  Mode: chunks  Tokens: 450
 | Desktop Web UI | ✅ Implemented | 导入→索引→Context→预览→导出闭环 |
 | 代码解析（C#/TS/Python/Markdown） | ✅ Implemented | Regex v2.0 + 结果持久化到主索引 |
 | Repo Map | ✅ Implemented | 真实目录树 + 重要性评分 + 预算裁剪 |
-| 可选模型 API 网关 | ✅ Implemented | SSE 流式 + 状态码透传 + SingleFlight + Byte LRU |
-| 持久化缓存 | ✅ Implemented | SqliteCacheStore + 依赖哈希失效 + TTL + 损坏隔离 |
-| ContextPackageCache | ✅ Implemented | 接入 ContextEngine.Build，相同请求返回缓存 |
-| 上下文与模型统一工作流 | ✅ Implemented | ContextualCompletion 协议 + PromptAssemblyService |
-| 真实 ITokenizer 接入 | ✅ Implemented | SelectionEngine/ChunkingStrategy 使用真实 token 计数 |
+| 可选模型 API 网关 | ✅ Implemented | SSE 流式 + 状态码透传 + SingleFlight + Byte LRU + 持久化缓存 |
+| 持久化缓存 | ✅ Implemented | SqliteCacheStore 接入 Context + Gateway，依赖哈希失效 + TTL |
+| ContextPackageCache | ✅ Implemented | 接入 ContextEngine.Build，CacheKey 包含所有因子 |
+| 上下文与模型统一工作流 | ✅ Implemented | CLI `workflow completion` + API 端点 + PromptAssemblyService |
+| 真实 ITokenizer 接入 | ✅ Implemented | CodeTokenizer 默认 + 全链路传递(Selection→Chunking) |
+| 多 Provider Fallback | ✅ Implemented | 4 端点(Chat/Models/Responses/Streaming)均支持 429/5xx 自动切换 |
+| Responses API 流式 | ✅ Implemented | stream:true SSE passthrough + Chat SSE Usage 解析 |
+| 安全出口统一 | ✅ Implemented | CLI/Desktop/FileExport 3 条路径全部强制 SecurityPolicyEnforcer |
 | Git 仓库操作 | ✅ Implemented | clone/pull/status/diff + LFS 修复 + 凭据脱敏 |
 | 文件导出 | ✅ Implemented | Markdown/JSON/File + Plan/Apply 分离 + 真实 RepoMap |
-| 语义参考缓存 | 🧪 Experimental | SemanticMode Off/Reference/StrictExperimental |
-| Benchmark | 🧪 Experimental | 20 任务/5 类仓库 + 真实 Context Engine 度量 |
+| 语义参考缓存 | 🧪 Experimental | FNV-1a 稳定哈希 + 接入 RecallPipeline + Snapshot/ContentHash 绑定 |
+| Benchmark | 🧪 Experimental | CLI 使用真实 ContextEngine 度量 Recall@10/TokenReduction |
 | Tree-sitter | 📦 Scaffold | regex fallback 始终可用 |
 | LSP | 📦 Scaffold | 帧读取器 + 请求关联 + 审批模型就绪 |
-| Provider 路由/预算 | 📦 Scaffold | OpenAI-compatible 基线 + 健康检查 |
 | 插件/团队/企业 | 📦 Planned | 签名验证 + 权限隔离 + 企业策略模型已预留 |
 
 **图例**：✅ Implemented = 已实现且有测试 ｜ 🧪 Experimental = 有原型需更多验证 ｜ 📦 Scaffold = 有代码骨架 ｜ 📦 Planned = 仅设计
@@ -179,7 +184,7 @@ CacheHub/
 │   ├── CacheHub.Core/              # 领域核心：模型、错误、标识符、安全、Tokenizer
 │   ├── CacheHub.Storage/           # 存储层：SQLite、9 个迁移、3 个仓储、FTS5、CacheStore
 │   ├── CacheHub.Indexing/          # 索引层：扫描、忽略规则、4 语言解析器 v2.0、RepoMap、Reconciler
-│   ├── CacheHub.Context/           # 上下文层：9 源召回、7 维排序、锚点分块、预算验证、引擎、缓存
+│   ├── CacheHub.Context/           # 上下文层：12 源召回、排序、锚点分块、预算验证、引擎、缓存
 │   ├── CacheHub.Gateway/           # 可选网关：Server、Provider 路由、SSE 流式（独立项目）
 │   ├── CacheHub.Cli/               # CLI 入口：21 个命令组、55 个子命令、单文件发布
 │   └── CacheHub.Desktop/           # Web UI：最小 API + 17 个路由 + Bearer 认证 + 6 个页面
