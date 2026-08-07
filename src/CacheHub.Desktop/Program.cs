@@ -8,6 +8,7 @@ using CacheHub.Context.Parsing;
 using CacheHub.Context.Recall;
 using CacheHub.Context.Expand;
 using CacheHub.Context.Payload;
+using CacheHub.Core.Workflow;
 using CacheHub.Core.Capabilities;
 using CacheHub.Core.Context;
 using CacheHub.Core.Errors;
@@ -893,12 +894,128 @@ static async Task<string> GenerateRepoMapMarkdown(Workspace ws)
     return sb.ToString();
 }
 
+// === Unified Workflow: Contextual Completion ===
+app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompletionApiRequest req, ContextEngine engine, IWorkspaceRepository wsRepo, IContextPackageRepository ctxRepo, SqliteConnectionFactory factory) =>
+{
+    if (string.IsNullOrEmpty(req.WorkspaceId) || string.IsNullOrEmpty(req.Task))
+        return Results.BadRequest(ErrorEnvelope.From(ErrorCode.InvalidArgument, "WorkspaceId and Task are required"));
+
+    var workspace = await wsRepo.FindByIdAsync(WorkspaceId.Parse(req.WorkspaceId));
+    if (workspace is null)
+        return Results.NotFound(ErrorEnvelope.From(ErrorCode.WorkspaceNotFound, "Workspace not found"));
+
+    var querySvc = new CacheHub.Storage.Query.SqliteIndexQueryService(factory);
+    var activeSnapshotId = await querySvc.GetActiveSnapshotIdAsync(workspace.Id.Value);
+    if (activeSnapshotId is null)
+        return Results.BadRequest(ErrorEnvelope.From(ErrorCode.IndexNotFound, "No active index snapshot. Run index build first."));
+
+    var indexedFiles = await querySvc.GetIndexedFilesBySnapshotAsync(activeSnapshotId);
+    var indexedFileInfos = indexedFiles.Select(f => new CacheHub.Context.Recall.IndexedFileInfo
+    {
+        Path = f.NormalizedPath,
+        NormalizedPath = f.NormalizedPath,
+        Language = f.Language,
+        Size = f.Size,
+        ContentHash = f.ContentHash,
+    }).ToList();
+
+    var buildRequest = new ContextBuildRequest
+    {
+        WorkspaceId = workspace.Id,
+        IndexSnapshotId = activeSnapshotId,
+        Task = req.Task,
+        ModelId = req.ModelId,
+        CurrentFile = req.CurrentFile,
+        SecurityPolicyVersion = "sec-v1",
+    };
+
+    var manifest = engine.Build(
+        buildRequest,
+        () => indexedFileInfos,
+        path =>
+        {
+            var fullPath = SafeResolvePath(workspace.RootPath, path);
+            return fullPath is not null && File.Exists(fullPath) ? File.ReadAllTextAsync(fullPath).GetAwaiter().GetResult() : "";
+        },
+        path => ResolveFileHashFromDb(factory, activeSnapshotId, path, workspace.RootPath),
+        ftsSearch: keyword =>
+        {
+            var results = querySvc.SearchFtsAsync(activeSnapshotId, keyword, 50).GetAwaiter().GetResult();
+            return results.Select(r => new CacheHub.Context.Recall.FtsMatch(r.Path, r.Language, r.Snippet, r.RankScore, r.HitLine)).ToList();
+        },
+        symbolSearch: symbol =>
+        {
+            var results = querySvc.SearchSymbolsAsync(activeSnapshotId, symbol).GetAwaiter().GetResult();
+            return results.Select(r => r.NormalizedPath).ToList();
+        },
+        importSearch: symbol =>
+        {
+            var results = querySvc.GetFilesByImportedSymbolAsync(activeSnapshotId, symbol).GetAwaiter().GetResult();
+            return results.ToList();
+        },
+        symbolSearchDetailed: symbol =>
+        {
+            var results = querySvc.SearchSymbolsAsync(activeSnapshotId, symbol).GetAwaiter().GetResult();
+            return results.Select(r => new CacheHub.Context.Recall.SymbolHit
+            {
+                NormalizedPath = r.NormalizedPath,
+                Name = r.Name,
+                Kind = r.Kind,
+                StartLine = r.StartLine,
+                EndLine = r.EndLine,
+                ExactMatch = r.ExactMatch,
+            }).ToList();
+        },
+        relationSearch: filePath =>
+        {
+            var results = querySvc.GetFileRelationsAsync(activeSnapshotId, filePath).GetAwaiter().GetResult();
+            return results.Select(r => new CacheHub.Context.Recall.RelationHit
+            {
+                TargetName = r.TargetName,
+                RelationType = r.RelationType,
+                Relation = r.Relation,
+                Confidence = r.Confidence,
+            }).ToList();
+        });
+
+    await ctxRepo.SaveAsync(manifest);
+
+    // Assemble prompt
+    var promptAssembly = new PromptAssemblyService();
+    var payloadGenerator = new PayloadGenerator();
+    var enforcer = new CacheHub.Core.Security.SecurityPolicyEnforcer();
+    var payloadContent = payloadGenerator.GenerateMarkdown(manifest, path =>
+    {
+        var fullPath = SafeResolvePath(workspace.RootPath, path);
+        return fullPath is not null && File.Exists(fullPath) ? File.ReadAllTextAsync(fullPath).GetAwaiter().GetResult() : "";
+    }, enforcer);
+    var (systemPrompt, userContent) = promptAssembly.Assemble(manifest, payloadContent);
+
+    return Results.Ok(new
+    {
+        manifest = new
+        {
+            id = manifest.Id.Value,
+            workspaceId = manifest.WorkspaceId.Value,
+            task = manifest.Task.OriginalText,
+            selectedFiles = manifest.SelectedFiles.Count,
+            actualTokens = manifest.Budget.ActualEstimate,
+            targetTokens = manifest.Budget.ContextTarget,
+        },
+        systemPrompt,
+        userContent,
+        gatewayCalled = false,
+        totalLifecycleTokens = manifest.Budget.ActualEstimate,
+    });
+});
+
 app.Run();
 
 record ImportRequest(string Path, string? Name);
 record ContextBuildApiRequest(string WorkspaceId, string Task);
 record ExpandApiRequest(string? Symbol, string? File, string? Reason);
 record FeedbackApiRequest(string? ClientId, bool TaskCompleted, bool MissingContextReported, IReadOnlyList<string>? FilesActuallyRead);
+record ContextualCompletionApiRequest(string WorkspaceId, string Task, string? ModelId, string? CurrentFile, bool CallGateway);
 
 // Make Program class accessible for integration testing
 public partial class Program { }

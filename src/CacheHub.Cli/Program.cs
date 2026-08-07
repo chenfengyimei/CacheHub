@@ -72,5 +72,6 @@ return args[0] switch
     "hash" => await HashCommands.HandleAsync(args.AsSpan(1).ToArray()),
     "scan" => ScanCommands.Handle(args.AsSpan(1).ToArray()),
     "init" => await InitCommands.HandleAsync(args.AsSpan(1).ToArray()),
+    "workflow" => await WorkflowCommands.HandleAsync(args.AsSpan(1).ToArray()),
     _ => 1,
 };
