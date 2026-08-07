@@ -41,6 +41,51 @@ public class GatewayAgentModelExecutorTests
             executor.GenerateAsync("s", "u", CancellationToken.None));
     }
 
+    // V6 (review #17): custom per-model pricing via constructor override changes cost
+    [Fact]
+    public async Task GenerateAsync_PriceOverride_ChangesEstimatedCost()
+    {
+        using var gateway = new MockGateway();
+
+        // gpt-4o-mini built-in: 0.15/0.60 per 1M. Mock returns 42/7 tokens.
+        var defaultExec = new GatewayAgentModelExecutor(
+            $"http://127.0.0.1:{gateway.Port}", "t", "gpt-4o-mini");
+        var defaultResp = await defaultExec.GenerateAsync("s", "u", CancellationToken.None);
+
+        // Custom 10x input pricing
+        using var gateway2 = new MockGateway();
+        var overrideExec = new GatewayAgentModelExecutor(
+            $"http://127.0.0.1:{gateway2.Port}", "t", "gpt-4o-mini",
+            overrideInputPer1M: 1.5, overrideOutputPer1M: 6.0);
+        var overrideResp = await overrideExec.GenerateAsync("s", "u", CancellationToken.None);
+
+        // 1.5/0.15 = 10x input, 6.0/0.60 = 10x output → override cost should be 10x default
+        Assert.True(defaultResp.Cost.HasValue && overrideResp.Cost.HasValue);
+        Assert.InRange(overrideResp.Cost.Value / defaultResp.Cost.Value, 9.0, 11.0);
+    }
+
+    // V6 (review #17): pricing override from env var CACHEHUB_MODEL_PRICE
+    [Fact]
+    public async Task GenerateAsync_EnvPricingOverride_ChangesCost()
+    {
+        using var gateway = new MockGateway();
+        var oldEnv = Environment.GetEnvironmentVariable("CACHEHUB_MODEL_PRICE");
+        Environment.SetEnvironmentVariable("CACHEHUB_MODEL_PRICE", "25.0,100.0"); // 10x built-in gpt-4o-mini
+        try
+        {
+            var executor = new GatewayAgentModelExecutor(
+                $"http://127.0.0.1:{gateway.Port}", "t", "gpt-4o-mini");
+            var resp = await executor.GenerateAsync("s", "u", CancellationToken.None);
+
+            Assert.True(resp.Cost.HasValue);
+            // 25.0/0.15 ≈ 166.7x input, 100/0.6 ≈ 166.7x output
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CACHEHUB_MODEL_PRICE", oldEnv);
+        }
+    }
+
     /// <summary>
     /// Minimal OpenAI-compatible mock gateway using HttpListener on an ephemeral port.
     /// Default response reports usage so the executor can parse tokens.

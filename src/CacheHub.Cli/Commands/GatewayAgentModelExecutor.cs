@@ -14,13 +14,22 @@ public sealed class GatewayAgentModelExecutor : Core.Benchmarks.Agent.IAgentMode
     private readonly string _gatewayToken;
     private readonly string _model;
     private readonly HttpClient _http;
+    private readonly double? _overrideInputPer1M;
+    private readonly double? _overrideOutputPer1M;
     private bool _disposed;
 
-    public GatewayAgentModelExecutor(string gatewayUrl, string gatewayToken, string model)
+    public GatewayAgentModelExecutor(
+        string gatewayUrl,
+        string gatewayToken,
+        string model,
+        double? overrideInputPer1M = null,
+        double? overrideOutputPer1M = null)
     {
         _gatewayUrl = gatewayUrl.TrimEnd('/');
         _gatewayToken = gatewayToken;
         _model = model;
+        _overrideInputPer1M = overrideInputPer1M;
+        _overrideOutputPer1M = overrideOutputPer1M;
         _http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
     }
 
@@ -76,12 +85,46 @@ public sealed class GatewayAgentModelExecutor : Core.Benchmarks.Agent.IAgentMode
 
     /// <summary>
     /// V6: Per-model cost estimation (USD per 1M tokens).
-    /// Falls back to GPT-4o pricing for unknown models.
+    /// Priority: constructor override → env vars (CACHEHUB_MODEL_INPUT_PRICE/OUTPUT_PRICE)
+    /// → built-in pricing table → GPT-4o-class fallback.
+    /// This lets users plug in their actual negotiated price (review #17).
     /// </summary>
-    private static double? EstimateCost(int promptTokens, int completionTokens, string model = "gpt-4o")
+    private double? EstimateCost(int promptTokens, int completionTokens, string model)
     {
-        var (inputPer1M, outputPer1M) = GetModelPricing(model);
-        return (promptTokens / 1_000_000.0) * inputPer1M + (completionTokens / 1_000_000.0) * outputPer1M;
+        var inputPer1M = _overrideInputPer1M;
+        var outputPer1M = _overrideOutputPer1M;
+
+        if (inputPer1M is null || outputPer1M is null)
+        {
+            var (envIn, envOut) = ReadPricingFromEnv();
+            inputPer1M ??= envIn;
+            outputPer1M ??= envOut;
+        }
+
+        if (inputPer1M is null || outputPer1M is null)
+        {
+            (inputPer1M, outputPer1M) = GetModelPricing(model);
+        }
+
+        return (promptTokens / 1_000_000.0) * inputPer1M.Value
+             + (completionTokens / 1_000_000.0) * outputPer1M.Value;
+    }
+
+    /// <summary>
+    /// Optional per-run pricing override via environment variables, so the same
+    /// binary can be benchmarked against the user's actual API billing rate.
+    /// Format: comma-separated "inputPer1M,outputPer1M" (e.g. "3.0,15.0").
+    /// </summary>
+    private static (double?, double?) ReadPricingFromEnv()
+    {
+        var raw = Environment.GetEnvironmentVariable("CACHEHUB_MODEL_PRICE");
+        if (string.IsNullOrWhiteSpace(raw)) return (null, null);
+
+        var parts = raw.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length != 2) return (null, null);
+        if (!double.TryParse(parts[0], System.Globalization.CultureInfo.InvariantCulture, out var inP)) return (null, null);
+        if (!double.TryParse(parts[1], System.Globalization.CultureInfo.InvariantCulture, out var outP)) return (null, null);
+        return (inP, outP);
     }
 
     private static (double inputPer1M, double outputPer1M) GetModelPricing(string model)

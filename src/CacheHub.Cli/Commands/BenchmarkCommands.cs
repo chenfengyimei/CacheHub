@@ -66,6 +66,8 @@ public static class BenchmarkCommands
             Console.WriteLine("  --real-test             Apply patch to git worktree + run real build/test");
             Console.WriteLine("                          (SuccessRate from actual test exit code)");
             Console.WriteLine("  --test-command=<cmd>    Build/test command for --real-test (default: dotnet test)");
+            Console.WriteLine("  --price=<in,out>        Override model pricing in USD per 1M tokens,");
+            Console.WriteLine("                          e.g. --price=3.0,15.0 for Claude (review #17)");
             return 1;
         }
 
@@ -343,6 +345,8 @@ public static class BenchmarkCommands
         // V6: Real test — apply patch to git worktree and run build/test command
         var realTest = HasFlag(args, "--real-test");
         var testCommand = GetOpt(args, "--test-command") ?? "dotnet test";
+        // V6: Optional per-run pricing override "inputPer1M,outputPer1M" (review #17)
+        var priceOverride = GetOpt(args, "--price");
 
         if (string.IsNullOrEmpty(wsId))
         {
@@ -389,7 +393,26 @@ public static class BenchmarkCommands
         var tokenizers = TokenizerRegistry.CreateWithDefaults();
         var tokenizer = tokenizers.Default;
 
-        var executor = new GatewayAgentModelExecutor(gatewayUrl, gatewayToken, model);
+        // Parse optional --price "inPer1M,outPer1M"
+        double? overrideIn = null, overrideOut = null;
+        if (!string.IsNullOrEmpty(priceOverride))
+        {
+            var parts = priceOverride.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 2 &&
+                double.TryParse(parts[0], System.Globalization.CultureInfo.InvariantCulture, out var inP) &&
+                double.TryParse(parts[1], System.Globalization.CultureInfo.InvariantCulture, out var outP))
+            {
+                overrideIn = inP;
+                overrideOut = outP;
+                Console.Error.WriteLine($"  Using custom pricing: ${overrideIn.Value:F2}/1M input, ${overrideOut.Value:F2}/1M output");
+            }
+            else
+            {
+                Console.Error.WriteLine("  Warning: Invalid --price format (expected \"inputPer1M,outputPer1M\"). Using built-in pricing.");
+            }
+        }
+
+        var executor = new GatewayAgentModelExecutor(gatewayUrl, gatewayToken, model, overrideIn, overrideOut);
         var agentRunner = new Core.Benchmarks.Agent.AgentBenchmarkRunner(executor, tokenizer, maxRounds);
 
         // CacheHub branch: use REAL ContextEngine to build context (NOT RequiredFiles).
