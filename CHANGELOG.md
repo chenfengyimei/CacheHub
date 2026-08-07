@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Closing the gap between "module exists" and "module is on the production main chain."
 
+#### P2: Parser Enhancements (Cross-Language Structural Accuracy)
+- **Python method/function distinction**: Class indent stack tracks nested classes. `def` inside class body → `SymbolKind.Method`, module-level `def` → `SymbolKind.Function`.
+- **TypeScript export default**: ExportRegex supports optional `default` keyword for `export default class/function/...`.
+- **Relation persistence fidelity**: `CodeRelation` gains `SourceSymbol` and `Line` fields. `file_relations.source_symbol` now stores actual source symbol name (was relation type string). `line` now persisted (was always NULL).
+- **Go parser v1.0**: Functions/methods (receiver distinction), import blocks, type declarations (struct/interface/type alias), const/var, interface embedding relations.
+- **Rust parser v1.0**: Functions/methods (impl block distinction), use declarations, struct/enum/trait/impl declarations, implements relations, const/static.
+- **Java parser v1.0**: class/interface/enum with extends/implements, imports (incl. static), methods with modifiers, fields/constants (static final → Constant).
+- **C/C++ parser v1.0**: #include, #define, class/struct with inheritance, enum, namespace, typedef, function/method distinction (class body tracking).
+- **PHP parser v1.0**: use statements (with alias), class/interface/trait/enum, function/method distinction, extends/implements, const declarations.
+- **Language coverage**: 9 programming languages now have dedicated regex parsers (C#/TS/JS/Python/Go/Rust/Java/C/C++/PHP) + Markdown. Previously only 3 (C#/TS/Python).
+
 #### V3 Remaining Items Fixed
 - **Immutable snapshot for Refresh**: Refresh no longer modifies Active snapshot directly. Creates Building snapshot, clones all data, applies changes, then atomically switches Building→Active. If DB transaction fails, Building is cleaned up and Active remains untouched. FTS failures no longer corrupt Active state.
 - **SqliteCacheStore wired into Gateway**: GatewayConfig.CacheStore property. GatewayServer uses ICacheStore for cache check/store with fallback to in-memory. GatewayCommands creates SqliteCacheStore with persistent cache.db + blob storage. Gateway cache survives restarts.

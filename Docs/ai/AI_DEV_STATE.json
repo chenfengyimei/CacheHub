@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "project": "CacheHub",
-  "currentPhase": "V3-TRUE-CLOSURE-COMPLETE",
-  "currentTask": "V3 fully complete: all P0 (3/3), all P1 (16/16), plus 4 remaining items: Immutable snapshot for Refresh (Building→Active atomic switch), SqliteCacheStore wired into Gateway (persistent cache), Benchmark CLI uses real ContextEngine (no more DEMO), Semantic bound to Snapshot/ContentHash (stale prevention). 789 tests passing.",
+  "currentPhase": "V3-COMPLETE + P2-PARSERS",
+  "currentTask": "V3 complete (23 P0/P1 fixes) + P2 parser enhancements: 9 language regex parsers (C#/TS/JS/Python/Go/Rust/Java/C/C++/PHP), Python method/function distinction, TS export default, relation persistence SourceSymbol+Line fix. 817 tests passing.",
   "repository": {
     "branch": "main",
     "dirty": false,
@@ -10,7 +10,7 @@
   },
   "qualityGates": {
     "build": "pass (0 errors, 0 warnings, warnings-as-errors enabled)",
-    "unitTests": "pass (789/791, 2 skipped)",
+    "unitTests": "pass (817/819, 2 skipped)",
     "integrationTests": "pass (real SQLite + FTS5 + Context Engine pipeline)",
     "securityTests": "pass (path traversal, auth, XSS, secret scan, symlink, offline mode, unified export enforcement)",
     "format": "pass"
@@ -95,6 +95,6 @@
     "databaseMigrations": 10
   },
   "totalAuditIssuesFixed": 62,
-  "testCount": 789,
+  "testCount": 817,
   "lastUpdated": "2026-08-07T18:00:00Z"
 }
