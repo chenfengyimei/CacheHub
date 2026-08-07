@@ -275,4 +275,47 @@ public class ParserFixtureTests
         Assert.Equal("2.0", parser.Version);
         Assert.Equal("python-regex-baseline", parser.Id);
     }
+
+    [Fact]
+    public void Python_ShouldDistinguishMethodFromModuleFunction()
+    {
+        var code = """
+            def module_helper():
+                return 1
+
+            class Service:
+                def handle(self):
+                    return module_helper()
+
+            def another_top():
+                pass
+            """;
+        var result = new PythonRegexParser().Parse(code, "test.py");
+
+        // Module-level functions → SymbolKind.Function
+        Assert.Contains(result.Symbols, s => s.Name == "module_helper" && s.Kind == SymbolKind.Function);
+        Assert.Contains(result.Symbols, s => s.Name == "another_top" && s.Kind == SymbolKind.Function);
+        Assert.DoesNotContain(result.Symbols, s => s.Name == "module_helper" && s.Kind == SymbolKind.Method);
+
+        // Method inside class → SymbolKind.Method
+        Assert.Contains(result.Symbols, s => s.Name == "handle" && s.Kind == SymbolKind.Method);
+        Assert.DoesNotContain(result.Symbols, s => s.Name == "handle" && s.Kind == SymbolKind.Function);
+    }
+
+    [Fact]
+    public void Python_NestedClassMethods_RemainMethods()
+    {
+        var code = """
+            class Outer:
+                class Inner:
+                    def inner_method(self):
+                        pass
+                def outer_method(self):
+                    pass
+            """;
+        var result = new PythonRegexParser().Parse(code, "test.py");
+
+        Assert.Contains(result.Symbols, s => s.Name == "inner_method" && s.Kind == SymbolKind.Method);
+        Assert.Contains(result.Symbols, s => s.Name == "outer_method" && s.Kind == SymbolKind.Method);
+    }
 }

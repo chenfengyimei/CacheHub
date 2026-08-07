@@ -38,6 +38,10 @@ public sealed partial class PythonRegexParser : ICodeParser
         var calls = new List<CallExpression>();
         var relations = new List<CodeRelation>();
 
+        // Stack of enclosing class indents to correctly handle nested classes.
+        // A def is a method if it's indented deeper than its nearest enclosing class.
+        var classIndentStack = new Stack<int>();
+
         for (var i = 0; i < lines.Length; i++)
         {
             var line = lines[i].TrimEnd('\r');
@@ -107,6 +111,11 @@ public sealed partial class PythonRegexParser : ICodeParser
             if (classMatch.Success)
             {
                 var className = classMatch.Groups[1].Value;
+                var classIndent = GetIndent(line);
+                // Pop inner classes that are dedented relative to this new class.
+                while (classIndentStack.Count > 0 && classIndent <= classIndentStack.Peek())
+                    classIndentStack.Pop();
+                classIndentStack.Push(classIndent);
                 symbols.Add(new CodeSymbol
                 {
                     Name = className,
@@ -142,15 +151,27 @@ public sealed partial class PythonRegexParser : ICodeParser
             var funcMatch = FunctionRegex().Match(line);
             if (funcMatch.Success)
             {
+                var indent = GetIndent(line);
+                // Pop class scopes this def is dedented from (a def at/below a class indent
+                // belongs to an outer scope, not that class).
+                while (classIndentStack.Count > 0 && indent <= classIndentStack.Peek())
+                    classIndentStack.Pop();
+                // A def indented deeper than the nearest enclosing class is a method.
+                var isMethod = classIndentStack.Count > 0 && indent > classIndentStack.Peek();
                 symbols.Add(new CodeSymbol
                 {
                     Name = funcMatch.Groups[1].Value,
-                    Kind = SymbolKind.Function,
+                    Kind = isMethod ? SymbolKind.Method : SymbolKind.Function,
                     StartLine = i + 1,
                     EndLine = FindBlockEnd(lines, i),
+                    Modifier = isMethod ? "method" : null,
                 });
                 continue;
             }
+
+            // Pop class scopes that this line is dedented from.
+            while (classIndentStack.Count > 0 && GetIndent(line) <= classIndentStack.Peek())
+                classIndentStack.Pop();
 
             // decorator
             var decoMatch = DecoratorRegex().Match(line);
