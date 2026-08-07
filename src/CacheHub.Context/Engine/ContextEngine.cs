@@ -95,7 +95,7 @@ public sealed class ContextEngine
         var parsedTask = _taskParser.Parse(request.Task);
         var candidates = _recall.Recall(parsedTask, indexedFilesProvider(), request.GitDiffFiles, request.CurrentFile, ftsSearch, symbolSearch, importSearch, recallOptions, symbolSearchDetailed);
         var ranked = _ranking.Rank(candidates, profile, parsedTask, request.CurrentFile);
-        var selected = _selection.Select(ranked, budget, contentProvider, hashProvider);
+        var selected = _selection.Select(ranked, budget, contentProvider, hashProvider, tokenizer);
 
         // Security scan on selected files
         var securityPassed = true;

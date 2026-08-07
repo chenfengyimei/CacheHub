@@ -1,6 +1,7 @@
 using CacheHub.Core.Context;
 using CacheHub.Context.Ranking;
 using CacheHub.Context.Recall;
+using CacheHub.Core.Tokens;
 
 namespace CacheHub.Context.Chunking;
 
@@ -39,16 +40,19 @@ public sealed class ChunkingStrategy
 
     /// <summary>
     /// Chunks a file's content based on the selection mode and token budget.
+    /// When tokenizer is provided, uses real token counting instead of chars/4 estimate.
     /// </summary>
     public IReadOnlyList<FileChunk> Chunk(
         string filePath,
         string content,
         SelectionMode mode,
         int maxTokens,
-        IReadOnlyList<LineAnchor>? anchors = null)
+        IReadOnlyList<LineAnchor>? anchors = null,
+        ITokenizer? tokenizer = null)
     {
         var lines = content.Split('\n');
-        var totalTokens = EstimateTokens(content);
+        int CountTokens(string text) => tokenizer?.CountTokens(text) ?? EstimateTokens(text);
+        var totalTokens = CountTokens(content);
 
         return mode switch
         {

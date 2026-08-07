@@ -2,6 +2,7 @@ using CacheHub.Context.Budget;
 using CacheHub.Context.Chunking;
 using CacheHub.Context.Ranking;
 using CacheHub.Core.Context;
+using CacheHub.Core.Tokens;
 
 namespace CacheHub.Context.Selection;
 
@@ -52,25 +53,29 @@ public sealed class SelectionEngine
 
     /// <summary>
     /// Selects files from ranked candidates within the token budget.
+    /// When tokenizer is provided, uses real token counting instead of chars/4 estimate.
     /// </summary>
     public SelectionResult Select(
         IReadOnlyList<RankedCandidate> rankedCandidates,
         TokenBudget budget,
         Func<string, string> contentProvider,
-        Func<string, string> hashProvider)
+        Func<string, string> hashProvider,
+        ITokenizer? tokenizer = null)
     {
         var selected = new List<SelectedFileItem>();
         var excluded = new List<ExcludedFileItem>();
         var totalTokens = 0;
         var effectiveBudget = budget.EffectiveBudget;
 
+        int CountTokens(string text) => tokenizer?.CountTokens(text) ?? ChunkingStrategy.EstimateTokens(text);
+
         foreach (var candidate in rankedCandidates)
         {
             var content = contentProvider(candidate.Path);
-            var tokens = ChunkingStrategy.EstimateTokens(content);
+            var tokens = CountTokens(content);
             var mode = DetermineMode(candidate, tokens, budget);
 
-            var (actualTokens, ranges) = ApplyMode(candidate.Path, content, mode, effectiveBudget - totalTokens, candidate.Anchors);
+            var (actualTokens, ranges) = ApplyMode(candidate.Path, content, mode, effectiveBudget - totalTokens, candidate.Anchors, tokenizer);
 
             // CTX-P1-004: Reject ghost files — 0-token files with empty content
             if (actualTokens == 0 && mode != SelectionMode.Metadata)
@@ -177,9 +182,10 @@ public sealed class SelectionEngine
 
     private (int tokens, IReadOnlyList<LineRange>? ranges) ApplyMode(
         string path, string content, SelectionMode mode, int remainingBudget,
-        IReadOnlyList<Recall.LineAnchor>? anchors = null)
+        IReadOnlyList<Recall.LineAnchor>? anchors = null,
+        ITokenizer? tokenizer = null)
     {
-        var chunks = _chunker.Chunk(path, content, mode, remainingBudget, anchors);
+        var chunks = _chunker.Chunk(path, content, mode, remainingBudget, anchors, tokenizer);
 
         if (chunks.Count == 0) return (0, null);
 
