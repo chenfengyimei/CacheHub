@@ -140,11 +140,13 @@ public sealed class SqliteCacheStore : ICacheStore
 
     public void InvalidateByDependency(string dependencyHash)
     {
+        var blobPaths = CollectBlobPaths("dependency_hash = $dep", ("$dep", dependencyHash));
         using var conn = _factory.CreateOpenConnection();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "DELETE FROM cache_entries WHERE dependency_hash = $dep;";
         cmd.Parameters.AddWithValue("$dep", dependencyHash);
         cmd.ExecuteNonQuery();
+        DeleteBlobs(blobPaths);
     }
 
     public void InvalidateByKey(string key, CacheType type)
@@ -154,21 +156,26 @@ public sealed class SqliteCacheStore : ICacheStore
 
     public void InvalidateType(CacheType type)
     {
+        var blobPaths = CollectBlobPaths("cache_type = $type", ("$type", type.ToString()));
         using var conn = _factory.CreateOpenConnection();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "DELETE FROM cache_entries WHERE cache_type = $type;";
         cmd.Parameters.AddWithValue("$type", type.ToString());
         cmd.ExecuteNonQuery();
+        DeleteBlobs(blobPaths);
     }
 
     public void Invalidate(string key, CacheType type)
     {
+        var blobPaths = CollectBlobPaths("key = $key AND cache_type = $type",
+            ("$key", key), ("$type", type.ToString()));
         using var conn = _factory.CreateOpenConnection();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "DELETE FROM cache_entries WHERE key = $key AND cache_type = $type;";
         cmd.Parameters.AddWithValue("$key", key);
         cmd.Parameters.AddWithValue("$type", type.ToString());
         cmd.ExecuteNonQuery();
+        DeleteBlobs(blobPaths);
     }
 
     public CacheStats GetStats(CacheType type)
@@ -216,6 +223,75 @@ public sealed class SqliteCacheStore : ICacheStore
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "DELETE FROM cache_entries; DELETE FROM cache_stats;";
         cmd.ExecuteNonQuery();
+
+        // V6: Clean up all orphaned blob files
+        DeleteAllBlobs();
+    }
+
+    /// <summary>
+    /// V6: Collects blob paths for entries matching the given WHERE clause, so they can be deleted after the DB delete.
+    /// </summary>
+    private List<string> CollectBlobPaths(string whereClause, params (string Name, object Value)[] parameters)
+    {
+        if (_blobDirectory is null) return [];
+
+        var paths = new List<string>();
+        using var conn = _factory.CreateOpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"SELECT blob_path FROM cache_entries WHERE {whereClause};";
+        foreach (var (name, value) in parameters)
+            cmd.Parameters.AddWithValue(name, value);
+
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            if (!reader.IsDBNull(0))
+            {
+                var path = reader.GetString(0);
+                if (!string.IsNullOrEmpty(path))
+                    paths.Add(path);
+            }
+        }
+        return paths;
+    }
+
+    /// <summary>
+    /// V6: Deletes blob files that are no longer referenced by any cache entry.
+    /// </summary>
+    private void DeleteBlobs(List<string> blobPaths)
+    {
+        if (_blobDirectory is null || blobPaths.Count == 0) return;
+
+        foreach (var path in blobPaths)
+        {
+            try
+            {
+                // Only delete if no other cache entry references this blob (content-addressed)
+                using var conn = _factory.CreateOpenConnection();
+                using var checkCmd = conn.CreateCommand();
+                checkCmd.CommandText = "SELECT COUNT(*) FROM cache_entries WHERE blob_path = $path;";
+                checkCmd.Parameters.AddWithValue("$path", path);
+                var count = (long)checkCmd.ExecuteScalar()!;
+                if (count == 0 && File.Exists(path))
+                    File.Delete(path);
+            }
+            catch { /* best effort — don't fail the invalidation if blob cleanup fails */ }
+        }
+    }
+
+    /// <summary>
+    /// V6: Deletes all blob files (used by Clear()).
+    /// </summary>
+    private void DeleteAllBlobs()
+    {
+        if (_blobDirectory is null || !Directory.Exists(_blobDirectory)) return;
+
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(_blobDirectory, "*.blob"))
+                File.Delete(file);
+        }
+        catch { /* best effort */ }
     }
 
     private void IncrementStat(CacheType type, string column)

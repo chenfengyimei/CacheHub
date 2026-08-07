@@ -184,6 +184,18 @@ public sealed class GatewayServer : IDisposable
 
     private async Task HandleChatCompletionsAsync(HttpListenerRequest req, HttpListenerResponse resp, CancellationToken ct)
     {
+        // V6: Final Offline defense — block provider forwarding at the Gateway level
+        if (_config.IsOfflineMode)
+        {
+            resp.StatusCode = 403;
+            resp.ContentType = "application/json";
+            var offlineBytes = System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+                ErrorEnvelope.From(ErrorCode.SecurityPolicyViolation, "Gateway blocked: security.mode = Offline. No cloud requests allowed.")));
+            resp.ContentLength64 = offlineBytes.Length;
+            await resp.OutputStream.WriteAsync(offlineBytes, ct);
+            return;
+        }
+
         using var reader = new StreamReader(req.InputStream);
         var requestBody = await reader.ReadToEndAsync(ct);
 
@@ -577,6 +589,18 @@ public sealed class GatewayServer : IDisposable
     /// </summary>
     private async Task HandleResponsesAsync(HttpListenerRequest req, HttpListenerResponse resp, CancellationToken ct)
     {
+        // V6: Final Offline defense — block provider forwarding at the Gateway level
+        if (_config.IsOfflineMode)
+        {
+            resp.StatusCode = 403;
+            resp.ContentType = "application/json";
+            var offlineBytes = System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+                ErrorEnvelope.From(ErrorCode.SecurityPolicyViolation, "Gateway blocked: security.mode = Offline. No cloud requests allowed.")));
+            resp.ContentLength64 = offlineBytes.Length;
+            await resp.OutputStream.WriteAsync(offlineBytes, ct);
+            return;
+        }
+
         using var reader = new StreamReader(req.InputStream);
         var requestBody = await reader.ReadToEndAsync(ct);
 

@@ -36,6 +36,9 @@ public sealed record GatewayConfig
         "X-RateLimit-Remaining", "X-RateLimit-Reset",
     ];
 
+    /// <summary>V6: When true (security.mode = Offline), Gateway blocks all provider forwarding.</summary>
+    public bool IsOfflineMode { get; init; }
+
     /// <summary>All providers in order: primary + fallbacks.</summary>
     public IReadOnlyList<(string BaseUrl, string ApiKey)> GetAllProviders()
     {

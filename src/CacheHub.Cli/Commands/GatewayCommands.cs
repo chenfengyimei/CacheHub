@@ -1,4 +1,5 @@
 using CacheHub.Core.Caching;
+using CacheHub.Core.Security;
 using CacheHub.Gateway;
 using CacheHub.Gateway.Server;
 using CacheHub.Storage;
@@ -85,6 +86,10 @@ public static class GatewayCommands
             Console.Error.WriteLine($"  Warning: Persistent cache unavailable ({ex.Message}), using in-memory cache");
         }
 
+        // V6: Check security policy — block Gateway provider forwarding in Offline mode
+        var (secPolicy, secEnforcer) = SecurityPolicyResolver.CreateEnforcer();
+        var isOffline = secPolicy.Mode == CacheHub.Core.Security.ExfiltrationMode.Offline;
+
         var config = new GatewayConfig
         {
             ProviderBaseUrl = baseUrl,
@@ -92,12 +97,15 @@ public static class GatewayCommands
             Port = portNum,
             CacheStore = cacheStore,
             FallbackProviders = LoadFallbackProviders(appData),
+            IsOfflineMode = isOffline,
         };
 
         Console.Error.WriteLine($"Starting CacheHub Gateway on http://127.0.0.1:{config.Port}");
         Console.Error.WriteLine($"  Provider: {config.ProviderBaseUrl}");
         Console.Error.WriteLine($"  Cache: {config.EnableCache}");
         Console.Error.WriteLine($"  SingleFlight: {config.EnableSingleFlight}");
+        if (isOffline)
+            Console.Error.WriteLine("  ⚠ Security mode: Offline — provider forwarding blocked");
         Console.Error.WriteLine("  Press Ctrl+C to stop.");
 
         using var cts = new CancellationTokenSource();
