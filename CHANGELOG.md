@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.0-prealpha] — 2026-08-07
 
+### Architecture Refactor (2026-08-07)
+
+Closed the final 2 P2 architecture issues. All 62 audit issues now fully resolved (0 OPEN).
+
+#### ARCH-P2-002: Indexing-Storage Dependency Cleanup
+- Removed unused `CacheHub.Storage` project reference from `CacheHub.Indexing.csproj` (zero code-level dependency existed)
+- Added direct `Storage` reference to `CacheHub.Cli.csproj` and `CacheHub.Context.csproj` (where Storage types are actually used)
+- Dependency chain clarified: `Core ← Storage`, `Core ← Indexing` (no transitive Storage)
+
+#### ARCH-P2-001: Gateway Separation from Core
+- New `CacheHub.Gateway` project created (references only Core, no Storage/Context/Indexing)
+- Moved 5 files from `Core/Gateway/` and `Core/Providers/` to `CacheHub.Gateway/`:
+  - `GatewayModels.cs`, `Server/GatewayServer.cs`, `Streaming/SseStreamParser.cs`
+  - `ProviderModels.cs`, `ProviderRouter.cs`
+- Namespaces updated: `Core.Gateway` → `Gateway`, `Core.Providers` → `Gateway.Providers`
+- CLI and Tests projects reference new `CacheHub.Gateway` project
+- `.editorconfig` updated with Gateway analyzer suppressions
+- Core now contains only domain models, contracts, and small scaffold modules (Semantic, LSP)
+
 ### Final P1 Gap Closure (2026-08-07)
 
 Closed the last 4 PARTIALLY FIXED P1 issues. All 22 P1 issues now fully resolved (0 OPEN, 0 PARTIAL).
