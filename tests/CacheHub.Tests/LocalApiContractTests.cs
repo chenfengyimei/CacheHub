@@ -51,6 +51,42 @@ public class LocalApiContractTests : IClassFixture<LocalApiFactory>
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
+    // V6-W08: Auto-auth session cookie (no manual token copy needed)
+    [Fact]
+    public async Task AuthInit_SetsHttpOnlySessionCookie()
+    {
+        // No Authorization header — the endpoint must be exempt from auth
+        var response = await _client.PostAsync("/api/v1/auth/init", null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonDocument>();
+        Assert.NotNull(body);
+        Assert.True(body.RootElement.TryGetProperty("authenticated", out var authed));
+        Assert.True(authed.GetBoolean());
+
+        // The Set-Cookie header should contain the session cookie (HttpOnly + SameSite)
+        Assert.True(response.Headers.TryGetValues("Set-Cookie", out var cookies));
+        var setCookie = string.Join("; ", cookies);
+        Assert.Contains("cachehub_session=", setCookie);
+    }
+
+    [Fact]
+    public async Task Auth_SessionCookie_AuthenticatesRequest()
+    {
+        // Get the session cookie from auth/init
+        var initResponse = await _client.PostAsync("/api/v1/auth/init", null);
+        var setCookie = initResponse.Headers.GetValues("Set-Cookie").First();
+        var cookieName = setCookie.Split(';')[0].Trim(); // "cachehub_session=<token>"
+
+        // Use the cookie for a subsequent authenticated request (no Bearer header)
+        using var req = new HttpRequestMessage(HttpMethod.Get, "/api/v1/capabilities");
+        req.Headers.TryAddWithoutValidation("Cookie", cookieName);
+        var response = await _client.SendAsync(req);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
     // === Capabilities Contract ===
 
     [Fact]

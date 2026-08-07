@@ -26,7 +26,10 @@ public sealed class GitWorktreePatchTester : IDisposable
             throw new InvalidOperationException("Source repo must be a git repository");
 
         _worktreePath = Path.Combine(Path.GetTempPath(), "cachehub-bench-" + Guid.NewGuid().ToString("N")[..12]);
-        Directory.CreateDirectory(_worktreePath);
+        // Do NOT pre-create the directory — `git worktree add` requires the target to not exist.
+        // If a stale dir remains, clean it up first.
+        if (Directory.Exists(_worktreePath))
+            Directory.Delete(_worktreePath, recursive: true);
 
         var psi = new ProcessStartInfo
         {
