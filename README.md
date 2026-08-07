@@ -129,7 +129,7 @@ src/auth/refresh.ts  Score: 0.92  Mode: chunks  Tokens: 450
 | 路径安全 | ✅ Implemented | SafePathResolver 跨平台 symlink 逃逸检测 |
 | CLI 接入 | ✅ Implemented | 21 个命令组 + 统一 ErrorEnvelope |
 | Desktop Web UI | ✅ Implemented | 导入→索引→Context→预览→导出闭环 |
-| 代码解析（C#/TS/Python/Markdown） | ✅ Implemented | Regex v2.0 + 结果持久化到主索引 |
+| 代码解析（8 种语言） | ✅ Implemented | C#/TS/JS/Python/Go/Rust/Java/C/C++ + Markdown，Regex + 结果持久化 |
 | Repo Map | ✅ Implemented | 真实目录树 + 重要性评分 + 预算裁剪 |
 | 可选模型 API 网关 | ✅ Implemented | SSE 流式 + 状态码透传 + SingleFlight + Byte LRU + 持久化缓存 |
 | 持久化缓存 | ✅ Implemented | SqliteCacheStore 接入 Context + Gateway，依赖哈希失效 + TTL |
