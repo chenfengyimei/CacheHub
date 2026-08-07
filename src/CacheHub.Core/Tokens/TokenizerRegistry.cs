@@ -16,6 +16,55 @@ public interface ITokenizer
 }
 
 /// <summary>
+/// Real BPE tokenizer backed by Microsoft.ML.Tokenizers (cl100k_base / o200k_base).
+/// Provides actual model token counts instead of the chars/4 or CodeTokenizer estimate.
+/// </summary>
+public sealed class BpeTokenizer : ITokenizer
+{
+    private readonly Microsoft.ML.Tokenizers.Tokenizer _tokenizer;
+    private readonly string _bpeTag;
+
+    /// <summary>Shared OpenAI cl100k_base tokenizer (GPT-3.5/GPT-4).</summary>
+    private static readonly Lazy<Microsoft.ML.Tokenizers.Tokenizer> Cl100K = new(() =>
+        Microsoft.ML.Tokenizers.TiktokenTokenizer.CreateForModel("gpt-4"));
+
+    /// <summary>Shared OpenAI o200k_base tokenizer (GPT-4o/o1/o3).</summary>
+    private static readonly Lazy<Microsoft.ML.Tokenizers.Tokenizer> O200K = new(() =>
+        Microsoft.ML.Tokenizers.TiktokenTokenizer.CreateForModel("gpt-4o"));
+
+    public BpeTokenizer(BpeModel model = BpeModel.Cl100k)
+    {
+        _bpeTag = model == BpeModel.O200k ? "o200k" : "cl100k";
+        _tokenizer = model == BpeModel.O200k ? O200K.Value : Cl100K.Value;
+    }
+
+    public string Id => $"bpe-{_bpeTag}";
+    public string Version => "1.0";
+
+    public int CountTokens(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return 0;
+        return _tokenizer.CountTokens(text);
+    }
+
+    public int CountTokensForMessages(IReadOnlyList<string> messages)
+    {
+        if (messages.Count == 0) return 0;
+        // Approximate message overhead: ~4 tokens per message boundary + 3 base
+        var baseTokens = 3;
+        var overhead = messages.Count * 4;
+        return baseTokens + overhead + messages.Sum(CountTokens);
+    }
+}
+
+/// <summary>BPE model variants supported by BpeTokenizer.</summary>
+public enum BpeModel
+{
+    Cl100k,
+    O200k,
+}
+
+/// <summary>
 /// Rough char-based tokenizer (chars / 4).
 /// Used as fallback when no model-specific tokenizer is available.
 /// </summary>
@@ -110,24 +159,28 @@ public sealed class TokenizerRegistry
     {
         var registry = new TokenizerRegistry();
 
-        // OpenAI models — GPT-4/3.5 use cl100k_base BPE, ~3.5 chars/token for English code
-        registry.Register("gpt-4", new CodeTokenizer());
-        registry.Register("gpt-3.5", new CodeTokenizer());
-        registry.Register("gpt-4o", new CodeTokenizer());
-        registry.Register("o1", new CodeTokenizer());
-        registry.Register("o3", new CodeTokenizer());
+        // OpenAI GPT-4/3.5 — cl100k_base BPE
+        var cl100k = new BpeTokenizer(BpeModel.Cl100k);
+        registry.Register("gpt-4", cl100k);
+        registry.Register("gpt-3.5", cl100k);
 
-        // Anthropic Claude — ~3.5 chars/token for code
-        registry.Register("claude", new CodeTokenizer());
+        // OpenAI GPT-4o/o1/o3 — o200k_base BPE
+        var o200k = new BpeTokenizer(BpeModel.O200k);
+        registry.Register("gpt-4o", o200k);
+        registry.Register("o1", o200k);
+        registry.Register("o3", o200k);
 
-        // Google Gemini — ~4 chars/token
-        registry.Register("gemini", new CodeTokenizer());
+        // Anthropic Claude — cl100k_base is a reasonable approximation
+        registry.Register("claude", cl100k);
 
-        // DeepSeek — similar to GPT
-        registry.Register("deepseek", new CodeTokenizer());
+        // Google Gemini — cl100k_base approximation
+        registry.Register("gemini", cl100k);
 
-        // Qwen — Chinese-heavy, ~2.5 chars/token
-        registry.Register("qwen", new CodeTokenizer());
+        // DeepSeek — cl100k_base approximation
+        registry.Register("deepseek", cl100k);
+
+        // Qwen — cl100k_base approximation
+        registry.Register("qwen", cl100k);
 
         return registry;
     }
