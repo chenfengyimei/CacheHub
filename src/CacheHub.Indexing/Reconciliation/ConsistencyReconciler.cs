@@ -1,4 +1,5 @@
 using CacheHub.Core.Paths;
+using CacheHub.Indexing.Hashing;
 using CacheHub.Indexing.States;
 
 namespace CacheHub.Indexing.Reconciliation;
@@ -39,7 +40,8 @@ public sealed record IndexedFileEntry
 public sealed class ConsistencyReconciler
 {
     /// <summary>
-    /// Reconciles the index against disk. Compares relative paths, sizes, and modification times.
+    /// Reconciles the index against disk. Compares relative paths, sizes, mtime,
+    /// and content hash for same-size files to detect same-size mutations.
     /// </summary>
     /// <param name="rootPath">Workspace root path (absolute)</param>
     /// <param name="indexedFiles">Indexed files keyed by VirtualPath (relative, forward-slash)</param>
@@ -63,7 +65,7 @@ public sealed class ConsistencyReconciler
             {
                 added.Add(virtualPath);
             }
-            else if (IsModified(indexedEntry, diskEntry))
+            else if (IsModified(indexedEntry, diskEntry, rootPath))
             {
                 modified.Add(virtualPath);
             }
@@ -97,10 +99,10 @@ public sealed class ConsistencyReconciler
     }
 
     /// <summary>
-    /// Checks if a file has been modified by comparing size and mtime.
-    /// Same-size mutations are detected via mtime comparison.
+    /// Checks if a file has been modified by comparing size, mtime, and content hash.
+    /// Same-size mutations are detected via content hash comparison.
     /// </summary>
-    private static bool IsModified(IndexedFileEntry indexed, DiskFileEntry disk)
+    private static bool IsModified(IndexedFileEntry indexed, DiskFileEntry disk, string rootPath)
     {
         // Size change is definitive
         if (indexed.Size != disk.Size)
@@ -109,11 +111,31 @@ public sealed class ConsistencyReconciler
         // Mtime comparison (if available)
         if (!string.IsNullOrEmpty(indexed.Mtime) && !string.IsNullOrEmpty(disk.Mtime))
         {
-            return !string.Equals(indexed.Mtime, disk.Mtime, StringComparison.Ordinal);
+            if (!string.Equals(indexed.Mtime, disk.Mtime, StringComparison.Ordinal))
+                return true;
         }
 
-        // If mtime is not available, a same-size file is considered unchanged
-        // (fingerprint check would be needed for certainty, but that requires reading the file)
+        // Same size + same mtime: verify via content hash if we have a stored hash
+        if (!string.IsNullOrEmpty(indexed.ContentHash) && indexed.ContentHash != "pending")
+        {
+            var fullPath = Path.Combine(rootPath, disk.VirtualPath.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(fullPath))
+            {
+                try
+                {
+                    var currentHash = FileHasher.ComputeFullHashAsync(fullPath).GetAwaiter().GetResult();
+                    return !string.Equals(indexed.ContentHash, currentHash, StringComparison.Ordinal);
+                }
+                catch
+                {
+                    // If we can't read the file, treat as modified to be safe
+                    return true;
+                }
+            }
+            return true; // File doesn't exist on disk
+        }
+
+        // No stored hash: same-size + same-mtime is considered unchanged
         return false;
     }
 

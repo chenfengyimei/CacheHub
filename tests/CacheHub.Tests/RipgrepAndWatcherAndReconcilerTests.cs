@@ -168,6 +168,72 @@ public class RipgrepAndWatcherAndReconcilerTests
         Assert.False(result.IsConsistent);
     }
 
+    [Fact]
+    public async Task ConsistencyReconciler_ShouldDetectSameSizeSameMtimeMutation_ViaContentHash()
+    {
+        using var temp = new TempDir();
+        var filePath = Path.Combine(temp.Path, "samecontent.ts");
+        File.WriteAllText(filePath, "export const x = 1;"); // Original content
+
+        // Compute the real hash and mtime
+        var info = new FileInfo(filePath);
+        var realMtime = info.LastWriteTimeUtc.ToString("O");
+        var realHash = await CacheHub.Indexing.Hashing.FileHasher
+            .ComputeFullHashAsync(filePath);
+
+        // Now overwrite with same-size content (same byte count, different content)
+        // "export const x = 1;" is 20 chars; "export const y = 2;" is also 20 chars
+        File.WriteAllText(filePath, "export const y = 2;");
+
+        // Reset mtime to match the indexed value (simulates same-size + same-mtime)
+        File.SetLastWriteTimeUtc(filePath, info.LastWriteTimeUtc);
+
+        var indexed = new Dictionary<string, IndexedFileEntry>
+        {
+            ["samecontent.ts"] = new IndexedFileEntry
+            {
+                VirtualPath = "samecontent.ts",
+                Size = 20,           // Same size
+                Mtime = realMtime,    // Same mtime
+                ContentHash = realHash, // But old hash
+            }
+        };
+
+        var result = ConsistencyReconciler.Reconcile(temp.Path, indexed);
+
+        Assert.Equal(1, result.ModifiedFiles);
+        Assert.False(result.IsConsistent);
+    }
+
+    [Fact]
+    public async Task ConsistencyReconciler_ShouldReportUnchangedWhenHashMatches()
+    {
+        using var temp = new TempDir();
+        var filePath = Path.Combine(temp.Path, "stable.ts");
+        File.WriteAllText(filePath, "export const stable = true;");
+
+        var info = new FileInfo(filePath);
+        var realMtime = info.LastWriteTimeUtc.ToString("O");
+        var realHash = await CacheHub.Indexing.Hashing.FileHasher
+            .ComputeFullHashAsync(filePath);
+
+        var indexed = new Dictionary<string, IndexedFileEntry>
+        {
+            ["stable.ts"] = new IndexedFileEntry
+            {
+                VirtualPath = "stable.ts",
+                Size = info.Length,
+                Mtime = realMtime,
+                ContentHash = realHash,
+            }
+        };
+
+        var result = ConsistencyReconciler.Reconcile(temp.Path, indexed);
+
+        Assert.Equal(0, result.ModifiedFiles);
+        Assert.True(result.IsConsistent);
+    }
+
     private sealed class TempDir : IDisposable
     {
         public string Path { get; }
