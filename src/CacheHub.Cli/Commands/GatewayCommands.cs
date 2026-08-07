@@ -36,9 +36,25 @@ public static class GatewayCommands
         var apiKey = Environment.GetEnvironmentVariable("CACHEHUB_PROVIDER_KEY")
                      ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
 
+        // V6: Fall back to GUI-saved provider config (review #33 round-trip closure).
+        // If --provider-url absent, read what the Desktop Settings provider UI saved.
+        var cm = new CacheHub.Core.Configuration.ConfigManager();
+        var storedConfig = cm.Load();
+        var storedGw = storedConfig.Gateway;
+        if (string.IsNullOrEmpty(baseUrl) && storedGw?.ProviderUrl is not null && storedGw.ProviderUrl.Length > 0)
+        {
+            baseUrl = storedGw.ProviderUrl.TrimEnd('/');
+            Console.Error.WriteLine($"  Using GUI-saved provider URL: {baseUrl}");
+        }
+        if (port == "5218" && storedGw?.Port > 0)
+        {
+            port = storedGw.Port.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
         if (string.IsNullOrEmpty(baseUrl))
         {
             Console.Error.WriteLine("Error: --provider-url=<url> is required");
+            Console.Error.WriteLine("  (Or configure the provider once via the Desktop GUI Settings → Gateway/Provider.)");
             Console.Error.WriteLine("Example: cachehub gateway start --provider-url=https://api.openai.com");
             Console.Error.WriteLine("  Set API key via: CACHEHUB_PROVIDER_KEY or OPENAI_API_KEY environment variable");
             return 1;
