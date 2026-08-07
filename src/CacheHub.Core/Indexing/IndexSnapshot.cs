@@ -9,6 +9,7 @@ public enum SnapshotStatus
 {
     Building,
     Active,
+    ActiveDegraded,
     Superseded,
     Failed,
     Cancelled,

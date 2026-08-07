@@ -156,7 +156,7 @@ static async Task<List<IndexedFileInfo>> GetIndexedFilesAsync(SqliteConnectionFa
         SELECT f.normalized_path, f.size, f.language, f.content_hash
         FROM files f
         INNER JOIN index_snapshots s ON f.snapshot_id = s.id
-        WHERE s.workspace_id = $ws AND s.status = 'Active';
+        WHERE s.workspace_id = $ws AND s.status IN ('Active', 'ActiveDegraded');
         """;
     cmd.Parameters.AddWithValue("$ws", workspaceId);
     await using var reader = await cmd.ExecuteReaderAsync();
@@ -179,7 +179,7 @@ static async Task<IndexSnapshotId?> GetActiveSnapshotIdAsync(SqliteConnectionFac
 {
     await using var conn = factory.CreateOpenConnection();
     using var cmd = conn.CreateCommand();
-    cmd.CommandText = "SELECT id FROM index_snapshots WHERE workspace_id = $ws AND status = 'Active' LIMIT 1;";
+    cmd.CommandText = "SELECT id FROM index_snapshots WHERE workspace_id = $ws AND status IN ('Active', 'ActiveDegraded') LIMIT 1;";
     cmd.Parameters.AddWithValue("$ws", workspaceId);
     var result = await cmd.ExecuteScalarAsync();
     return result is string id ? IndexSnapshotId.Parse(id) : null;
@@ -424,7 +424,7 @@ app.MapPost("/api/v1/workspaces/{id}/index", async (string id, IWorkspaceReposit
             await using var activateTx = await activateConn.BeginTransactionAsync();
             using var supCmd = activateConn.CreateCommand();
             supCmd.Transaction = (SqliteTransaction)activateTx;
-            supCmd.CommandText = "UPDATE index_snapshots SET status = 'Superseded' WHERE status = 'Active' AND workspace_id = $ws;";
+            supCmd.CommandText = "UPDATE index_snapshots SET status = 'Superseded' WHERE status IN ('Active', 'ActiveDegraded') AND workspace_id = $ws;";
             supCmd.Parameters.AddWithValue("$ws", ws.Id.Value);
             await supCmd.ExecuteNonQueryAsync();
 
@@ -674,7 +674,7 @@ app.MapGet("/api/v1/search", async (string? q, string? workspace, int? limit, Sq
     {
         await using var conn = factory.CreateOpenConnection();
         using var snapCmd = conn.CreateCommand();
-        snapCmd.CommandText = "SELECT id FROM index_snapshots WHERE workspace_id = $ws AND status = 'Active' LIMIT 1;";
+        snapCmd.CommandText = "SELECT id FROM index_snapshots WHERE workspace_id = $ws AND status IN ('Active', 'ActiveDegraded') LIMIT 1;";
         snapCmd.Parameters.AddWithValue("$ws", wsId);
         await using var snapReader = await snapCmd.ExecuteReaderAsync();
         if (await snapReader.ReadAsync())

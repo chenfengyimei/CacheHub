@@ -120,6 +120,102 @@ public class SnapshotActivationRegressionTests
         }
     }
 
+    /// <summary>
+    /// V5-W01 (P0): ActiveDegraded snapshots must be found by all queries that previously
+    /// only looked for status = 'Active'. When FTS build fails, the snapshot becomes
+    /// ActiveDegraded, but context/search/benchmark must still work.
+    /// </summary>
+    [Fact]
+    public async Task ActiveDegraded_Snapshot_IsVisibleToQueries()
+    {
+        var dbPath = GetTempDbPath();
+        try
+        {
+            var factory = SetupFactory(dbPath);
+            var wsId = "ws_deg001";
+            await InsertWorkspaceAsync(factory, wsId, "DegradedProject");
+            var snapId = "snap_deg001";
+            await InsertSnapshotAsync(factory, snapId, wsId, "ActiveDegraded");
+
+            // The production query pattern: status IN ('Active', 'ActiveDegraded')
+            await using var conn = factory.CreateOpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText =
+                "SELECT id FROM index_snapshots WHERE workspace_id = $ws AND status IN ('Active', 'ActiveDegraded') LIMIT 1;";
+            cmd.Parameters.AddWithValue("$ws", wsId);
+            var result = await cmd.ExecuteScalarAsync();
+            Assert.NotNull(result);
+            Assert.Equal(snapId, result);
+
+            // The OLD query pattern (status = 'Active') should NOT find it
+            using var oldCmd = conn.CreateCommand();
+            oldCmd.CommandText =
+                "SELECT id FROM index_snapshots WHERE workspace_id = $ws AND status = 'Active' LIMIT 1;";
+            oldCmd.Parameters.AddWithValue("$ws", wsId);
+            var oldResult = await oldCmd.ExecuteScalarAsync();
+            Assert.Null(oldResult);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            TryDelete(dbPath);
+        }
+    }
+
+    /// <summary>
+    /// V5-W01 (P0): When activating a new snapshot, both 'Active' and 'ActiveDegraded'
+    /// previous snapshots must be superseded.
+    /// </summary>
+    [Fact]
+    public async Task ActivateSnapshot_SupersedesBothActiveAndActiveDegraded()
+    {
+        var dbPath = GetTempDbPath();
+        try
+        {
+            var factory = SetupFactory(dbPath);
+            var wsId = "ws_deg002";
+            await InsertWorkspaceAsync(factory, wsId, "MixedStatusProject");
+
+            // Workspace has an ActiveDegraded snapshot (FTS failed previously)
+            var oldSnap = "snap_deg_old";
+            await InsertSnapshotAsync(factory, oldSnap, wsId, "ActiveDegraded");
+
+            // New build completes — activate new snapshot
+            await using var conn = factory.CreateOpenConnection();
+            await using var tx = await conn.BeginTransactionAsync();
+
+            // Fixed: supersede both Active AND ActiveDegraded
+            using var deactivateCmd = conn.CreateCommand();
+            deactivateCmd.Transaction = (SqliteTransaction)tx;
+            deactivateCmd.CommandText =
+                "UPDATE index_snapshots SET status = 'Superseded' WHERE status IN ('Active', 'ActiveDegraded') AND workspace_id = $ws;";
+            deactivateCmd.Parameters.AddWithValue("$ws", wsId);
+            var rowsAffected = await deactivateCmd.ExecuteNonQueryAsync();
+            Assert.Equal(1, rowsAffected); // The ActiveDegraded one
+
+            var newSnap = "snap_deg_new";
+            using var activateCmd = conn.CreateCommand();
+            activateCmd.Transaction = (SqliteTransaction)tx;
+            activateCmd.CommandText =
+                """
+                UPDATE index_snapshots SET status = 'Active', file_count = 5, completed_at = datetime('now')
+                WHERE id = $id;
+                """;
+            activateCmd.Parameters.AddWithValue("$id", newSnap);
+            await activateCmd.ExecuteNonQueryAsync();
+            await tx.CommitAsync();
+
+            // Old ActiveDegraded snapshot should now be Superseded
+            var oldStatus = await GetSnapshotStatusAsync(factory, oldSnap);
+            Assert.Equal("Superseded", oldStatus);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            TryDelete(dbPath);
+        }
+    }
+
     private static async Task InsertWorkspaceAsync(SqliteConnectionFactory factory, string id, string name)
     {
         await using var conn = factory.CreateOpenConnection();

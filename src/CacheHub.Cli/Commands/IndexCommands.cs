@@ -1058,11 +1058,11 @@ public static class IndexCommands
         await using var conn = factory.CreateOpenConnection();
         await using var tx = await conn.BeginTransactionAsync();
 
-        // Deactivate only this workspace's active snapshot (not other workspaces')
+        // Deactivate only this workspace's current snapshot(s) — both Active and ActiveDegraded
         using var deactivateCmd = conn.CreateCommand();
         deactivateCmd.Transaction = (SqliteTransaction)tx;
         deactivateCmd.CommandText =
-            "UPDATE index_snapshots SET status = 'Superseded' WHERE status = 'Active' AND workspace_id = $ws;";
+            "UPDATE index_snapshots SET status = 'Superseded' WHERE status IN ('Active', 'ActiveDegraded') AND workspace_id = $ws;";
         deactivateCmd.Parameters.AddWithValue("$ws", workspaceId.Value);
         await deactivateCmd.ExecuteNonQueryAsync();
 
@@ -1085,7 +1085,7 @@ public static class IndexCommands
     {
         await using var conn = factory.CreateOpenConnection();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id, file_count FROM index_snapshots WHERE workspace_id = $ws AND status = 'Active' LIMIT 1;";
+        cmd.CommandText = "SELECT id, file_count FROM index_snapshots WHERE workspace_id = $ws AND status IN ('Active', 'ActiveDegraded') LIMIT 1;";
         cmd.Parameters.AddWithValue("$ws", workspaceId.Value);
         await using var reader = await cmd.ExecuteReaderAsync();
         if (await reader.ReadAsync())
@@ -1102,7 +1102,7 @@ public static class IndexCommands
             SELECT f.normalized_path, f.size, f.mtime, f.content_hash
             FROM files f
             INNER JOIN index_snapshots s ON f.snapshot_id = s.id
-            WHERE s.workspace_id = $ws AND s.status = 'Active';
+            WHERE s.workspace_id = $ws AND s.status IN ('Active', 'ActiveDegraded');
             """;
         cmd.Parameters.AddWithValue("$ws", workspaceId.Value);
         await using var reader = await cmd.ExecuteReaderAsync();

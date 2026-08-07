@@ -96,7 +96,7 @@ public static class SearchCommands
     {
         await using var conn = factory.CreateOpenConnection();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id FROM index_snapshots WHERE workspace_id = $ws AND status = 'Active' LIMIT 1;";
+        cmd.CommandText = "SELECT id FROM index_snapshots WHERE workspace_id = $ws AND status IN ('Active', 'ActiveDegraded') LIMIT 1;";
         cmd.Parameters.AddWithValue("$ws", workspaceId);
         await using var reader = await cmd.ExecuteReaderAsync();
         if (await reader.ReadAsync())
