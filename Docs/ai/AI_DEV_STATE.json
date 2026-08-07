@@ -1,9 +1,8 @@
-{
+﻿{
   "schemaVersion": 1,
   "project": "CacheHub",
-  "currentPhase": "V4-PRODUCTION-TRUTH-CLOSURE-COMPLETE",
-  "currentPhase": "V4-PRODUCTION-TRUTH-CLOSURE-COMPLETE",
-  "currentTask": "V4 Production Truth Closure: 13/13 items complete. All P0+P1+P2 items fixed + Reverse Relation Recall + /v1/models fallback + BPE Tokenizer + Agent Benchmark framework + benchmark agent --compare (CacheHub vs Baseline). 842 tests passing.",
+  "currentPhase": "V5-PRODUCTION-PROOF",
+  "currentTask": "V5 Production Proof & Product Closure: P0 items (ActiveDegraded status, SecurityPolicyResolver, Agent Benchmark real ContextEngine, Cache Invalidate) + P1 items (CacheKey versioning, Gateway CacheKey+CachePolicy, Persistent SavedTokens, FileSymbolsProvider, Semantic lifecycle, totalLifecycleTokens) all complete. 847 tests passing.",
   "repository": {
     "branch": "main",
     "dirty": false,
@@ -11,9 +10,9 @@
   },
   "qualityGates": {
     "build": "pass (0 errors, 0 warnings, warnings-as-errors enabled)",
-    "unitTests": "pass (842/844, 2 skipped)",
-    "integrationTests": "pass (real SQLite + FTS5 + Context Engine pipeline + Snapshot Clone + Agent Benchmark)",
-    "securityTests": "pass (path traversal, auth, XSS, secret scan, symlink, offline mode, unified export enforcement)",
+    "unitTests": "pass (847/849, 2 skipped)",
+    "integrationTests": "pass (real SQLite + FTS5 + Context Engine pipeline + Snapshot Clone + Agent Benchmark + Cache Invalidate)",
+    "securityTests": "pass (path traversal, auth, XSS, secret scan, symlink, offline mode, unified SecurityPolicyResolver, offline hard-block before gateway)",
     "format": "pass"
   },
   "moduleStatus": {
@@ -21,74 +20,63 @@
     "ftsRecall": "Production Ready — BM25 rank + hit line, ScoreHint consumed by RankingEngine, normalized correctly (inverted min-max)",
     "symbolRecall": "Production Ready — line-range anchors in Selection",
     "importRecall": "Production Ready — ImportRelationRecallSource in pipeline",
-    "relationRecall": "Production Ready — Forward + Reverse relation recall in main chain (who calls X? via GetFilesByRelationTargetAsync)",
+    "relationRecall": "Production Ready — Forward + Reverse relation recall with FileSymbolsProvider (V5-W08 fixed: uses GetFileSymbolsAsync by path, not SymbolSearchDetailed)",
     "repoMap": "Component Implemented — directory adjacency, not mature code structure graph",
-    "anchorCompression": "Production Ready — Symbol Anchor precise, FTS Anchor uses hit line ±20",
+    "anchorCompression": "Production Ready — Symbol Anchor precise, FTS Anchor uses hit line ±20, snippet <mark> highlight positioning",
     "tokenBudget": "Production Ready — ValidateOrThrow, PayloadPlan immutable; BPE tokenizer (cl100k_base + o200k_base) for real model token counts",
     "contextPackage": "Production Ready — full round-trip persistence",
-    "incrementalIndex": "Production Ready — Immutable snapshot Refresh with ID mapping (P0 fixed), FTS single-file ops, Degraded status on FTS failure",
-    "contextPackageCache": "Integrated — ContextPackageCache wired in CLI/Desktop (in-memory, CLI ephemeral per process)",
+    "incrementalIndex": "Production Ready — Immutable snapshot Refresh with ID mapping, FTS single-file ops, ActiveDegraded status visible to all queries (V5-W01 fixed)",
+    "contextPackageCache": "Production Ready — Persistent SQLite cache (SqliteCacheStore), cross-process hit, InvalidateByKey fixed (V5-W04), CacheKey versioned with engine/chunking/parser/budget/repomap versions (V5-W05)",
     "sqlitePersistentCache": "Production Ready — SqliteCacheStore wired into Gateway main chain with blob storage",
-    "gatewayRawCache": "Production Ready — persistent SQLite + in-memory fallback, CachedTokensSaved tracks real prompt tokens",
+    "gatewayRawCache": "Production Ready — persistent SQLite + in-memory fallback, CacheKey includes provider fingerprint (V5-W06), temperature==0 only for response cache (V5-W06), CachedTokensSaved tracks real prompt tokens from persistent store (V5-W07)",
     "sseChatCompletions": "Production Ready — SSE streaming, status passthrough, Usage extraction, correct latency tracking",
     "responsesApi": "Production Ready — streaming + non-streaming",
     "singleProviderProxy": "Production Ready — Bearer auth, loopback, SingleFlight, concurrency limit",
-    "multiProviderFallback": "Production Ready — ProviderRouter + FallbackProviders in GatewayServer + config file support + /v1/models fallback",
-    "semanticReference": "Production Ready — LocalHashEmbedding (FNV-1a), PersistentVectorStore, wired into CLI/Desktop semanticSearch callback, Reference-only mode",
-    "contextualCompletion": "Production Ready — CLI + API entry points, Gateway call implemented (Context→Prompt→Gateway→Model closed)",
-    "securityEnforcement": "Production Ready — all export paths enforce SecurityPolicyEnforcer",
-    "realBenchmark": "Production Ready — real ContextEngine, Recall@10 with Take(10), unified Tokenizer (BPE), Report aggregates persisted runs",
-    "agentBenchmark": "Production Ready — `cachehub benchmark agent` via Gateway + --compare (CacheHub vs Baseline full-repo), task→model→patch→cost, token/rounds/cost comparison",
+    "multiProviderFallback": "Production Ready — ProviderRouter + FallbackProviders + config file + /v1/models fallback",
+    "semanticReference": "Production Ready — LocalHashEmbedding (FNV-1a), PersistentVectorStore, wired into CLI/Desktop semanticSearch, RecordReference called on task completion (V5-W09), Reference-only mode",
+    "contextualCompletion": "Production Ready — CLI + API entry points, Gateway call with unified SecurityPolicyResolver (V5-W02), Offline hard-block, token breakdown without double-counting (V5-W10)",
+    "securityEnforcement": "Production Ready — unified SecurityPolicyResolver (V5-W02), all paths load from ConfigManager, Offline blocks gateway calls",
+    "realBenchmark": "Production Ready — real ContextEngine, Recall@10 with Take(10), unified BPE Tokenizer, Report aggregates persisted runs",
+    "agentBenchmark": "Beta — real ContextEngine output (V5-W03 fixed: no longer uses RequiredFiles), ContainsSubstantiveCode evaluation, real model calls via Gateway. Still needs real apply-patch/build/test for true success rate.",
     "treeSitter": "Scaffold — regex-baseline covers 13 languages",
     "lsp": "Scaffold",
     "crossPlatformCI": "Integrated — ubuntu/windows/macos matrix, push+PR triggers",
     "ignoreRules": "Production Ready — Build/Refresh/Verify share unified IgnoreRuleEngine"
   },
-  "v4Progress": {
+  "v5Progress": {
     "p0Fixed": [
-      "CloneSnapshotDataAsync ID mapping (no more UNIQUE constraint)",
-      "Refresh integration tests (3 tests)"
+      "V5-W01: ActiveDegraded snapshot status model — all queries use status IN ('Active','ActiveDegraded')",
+      "V5-W02: Unified SecurityPolicyResolver — CLI/Workflow/Desktop all load from ConfigManager, Offline hard-blocks gateway",
+      "V5-W03: Agent Benchmark uses real ContextEngine — no longer feeds RequiredFiles directly, ContainsSubstantiveCode evaluation",
+      "V5-W04: Context Cache Invalidate — Put sets DependencyHash, InvalidateByKey + InvalidateByDependency dual deletion"
     ],
     "p1Fixed": [
-      "BM25 normalization direction (inverted min-max)",
-      "Benchmark Recall@10 Take(10) + unified Tokenizer + Report real data",
-      "Workflow→Gateway→Model closure (CLI + Desktop)",
-      "Semantic Reference wired to CLI/Desktop semanticSearch",
-      "Gateway multi-Provider config file (providers.json + env: prefix)",
-      "FTS failure ActiveDegraded status",
-      "Verify IgnoreRuleEngine unified",
-      "Reverse Relation Recall (who calls X? via GetFilesByRelationTargetAsync)",
-      "/v1/models endpoint 429/5xx fallback",
-      "BPE Tokenizer (cl100k_base + o200k_base via Microsoft.ML.Tokenizers)",
-      "Agent Benchmark framework (task→model→patch→test→cost loop)"
+      "V5-W05: CacheKey versioning — model-specific tokenizer, engine/chunking/parser/budget/repomap versions",
+      "V5-W06: Gateway CacheKey + safe CachePolicy — provider fingerprint, temperature==0 only",
+      "V5-W07: Persistent Gateway Cache SavedTokens — CachedGatewayResponse envelope with usage metadata",
+      "V5-W08: Reverse Relation FileSymbolsProvider — uses GetFileSymbolsAsync by path",
+      "V5-W09: Semantic lifecycle — RecordReference called on task completion in CLI/Desktop feedback",
+      "V5-W10: totalLifecycleTokens double-counting — separate contextSelectedTokens/modelPromptTokens/modelCompletionTokens"
     ],
-    "p2Fixed": [
-      "Gateway Streaming latency + CachedTokensSaved tracking"
-    ],
-    "remaining": []
-  },
-  "auditFixes": {
-    "totalIssues": 62,
-    "p0Fixed": 11,
-    "p1Fixed": 31,
-    "p2Fixed": 20,
-    "openIssues": 0
+    "remaining": [
+      "V5-W11: .NET 10 LTS migration (SDK not installed)",
+      "V5-W12: Auto-generate docs from build results (script created)"
+    ]
   },
   "architecture": {
     "projects": [
-      "CacheHub.Core (domain models, contracts, identifiers, BPE tokenizers)",
-      "CacheHub.Storage (SQLite, migrations, repositories, FTS5)",
+      "CacheHub.Core (domain models, contracts, identifiers, BPE tokenizers, SecurityPolicyResolver)",
+      "CacheHub.Storage (SQLite, migrations, repositories, FTS5, SqliteCacheStore)",
       "CacheHub.Indexing (scan, ignore, hash, parsers, reconciler)",
       "CacheHub.Context (recall, ranking, selection, chunking, engine, cache)",
       "CacheHub.Gateway (server, provider, SSE, router, multi-provider config — separated from Core)",
       "CacheHub.Cli (CLI entry, 21 command groups)",
       "CacheHub.Desktop (Web UI, Minimal API, 17 routes)",
-      "CacheHub.Tests (842 tests)"
+      "CacheHub.Tests (847 tests)"
     ],
     "dependencyChain": "Core ← Storage, Indexing, Gateway; Context ← Core+Storage+Indexing; Cli/Desktop ← all",
     "databaseMigrations": 10
   },
-  "totalAuditIssuesFixed": 62,
-  "testCount": 842,
-  "lastUpdated": "2026-08-07T23:15:00Z"
+  "testCount": 847,
+  "lastUpdated": "2026-08-08T00:50:00Z"
 }
