@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using CacheHub.Desktop;
 using CacheHub.Context.Cache;
 using CacheHub.Context.Engine;
 using CacheHub.Context.Explain;
@@ -93,6 +94,7 @@ builder.Services.AddSingleton<ContextPackageCache>(_ =>
     }
 });
 builder.Services.AddSingleton<ContextEngine>();
+builder.Services.AddSingleton<UsageStatsService>();
 
 // Security: force loopback binding only
 builder.WebHost.UseUrls("http://127.0.0.1:5099");
@@ -213,6 +215,155 @@ static string ResolveFileHashFromDb(SqliteConnectionFactory factory, IndexSnapsh
     return "sha256:pending";
 }
 
+// V6: Extracted indexing logic — shared by /index and /bootstrap endpoints
+static async Task IndexWorkspaceAsync(SqliteConnectionFactory factory, Workspace ws, IndexSnapshotId snapshotId)
+{
+    var ignoreEngine = new CacheHub.Indexing.IgnoreRules.IgnoreRuleEngine()
+        .WithDefaults()
+        .WithGitIgnore(System.IO.Path.Combine(ws.RootPath, ".gitignore"))
+        .WithCacheHubIgnore(System.IO.Path.Combine(ws.RootPath, ".cachehubignore"));
+
+    var enumerator = new CacheHub.Indexing.Scanning.DirectoryEnumerator();
+
+    var filesToIndex = new List<(string relativePath, string fullPath, long size, string language, bool isBinary, string hash, string content)>();
+
+    await foreach (var file in enumerator.EnumerateAsync(ws.RootPath))
+    {
+        if (file.IsDirectory) continue;
+        var relativePath = CacheHub.Core.Paths.PathNormalizer.GetRelativePath(ws.RootPath, file.Path);
+        if (ignoreEngine.IsIgnored(relativePath)) continue;
+
+        var typeInfo = CacheHub.Indexing.Detection.FileTypeDetector.Detect(file.Path, file.Size);
+        if (!typeInfo.ShouldIndex) continue;
+
+        var hash = await CacheHub.Indexing.Hashing.FileHasher.HashAsync(file.Path, file.Size);
+        var content = await System.IO.File.ReadAllTextAsync(file.Path);
+
+        filesToIndex.Add((relativePath, file.Path, file.Size, typeInfo.Language, typeInfo.IsBinary, hash.Hash, content));
+    }
+
+    // Batch write: single connection, single transaction for atomicity
+    await using var batchConn = factory.CreateOpenConnection();
+    await using var batchTx = await batchConn.BeginTransactionAsync();
+
+    try
+    {
+        foreach (var (relativePath, fullPath, size, language, isBinary, hash, content) in filesToIndex)
+        {
+            var parser = SelectParser(relativePath);
+            var parseResult = parser.Parse(content, relativePath);
+
+            using var fileCmd = batchConn.CreateCommand();
+            fileCmd.Transaction = (SqliteTransaction)batchTx;
+            fileCmd.CommandText = """
+                INSERT INTO files (id, snapshot_id, path, normalized_path, size, content_hash, language, is_binary, status, hash_kind, parser_id, parser_version)
+                VALUES ($id, $snap, $path, $norm, $size, $hash, $lang, $bin, 'Indexed', $hashKind, $parserId, $parserVer);
+                """;
+            var fileId = Guid.NewGuid().ToString("N");
+            fileCmd.Parameters.AddWithValue("$id", fileId);
+            fileCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
+            fileCmd.Parameters.AddWithValue("$path", relativePath);
+            fileCmd.Parameters.AddWithValue("$norm", relativePath);
+            fileCmd.Parameters.AddWithValue("$size", size);
+            fileCmd.Parameters.AddWithValue("$hash", hash);
+            fileCmd.Parameters.AddWithValue("$lang", language);
+            fileCmd.Parameters.AddWithValue("$bin", isBinary ? 1 : 0);
+            fileCmd.Parameters.AddWithValue("$hashKind", hash.StartsWith("fp:", StringComparison.Ordinal) ? "fingerprint" : "full");
+            fileCmd.Parameters.AddWithValue("$parserId", parser.Id);
+            fileCmd.Parameters.AddWithValue("$parserVer", parser.Version);
+            await fileCmd.ExecuteNonQueryAsync();
+
+            foreach (var symbol in parseResult.Symbols)
+            {
+                using var symCmd = batchConn.CreateCommand();
+                symCmd.Transaction = (SqliteTransaction)batchTx;
+                symCmd.CommandText = """
+                    INSERT INTO file_symbols (id, file_id, snapshot_id, name, kind, start_line, end_line, modifier, confidence)
+                    VALUES ($id, $fid, $snap, $name, $kind, $sl, $el, $mod, $conf);
+                    """;
+                symCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+                symCmd.Parameters.AddWithValue("$fid", fileId);
+                symCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
+                symCmd.Parameters.AddWithValue("$name", symbol.Name);
+                symCmd.Parameters.AddWithValue("$kind", symbol.Kind.ToString());
+                symCmd.Parameters.AddWithValue("$sl", symbol.StartLine);
+                symCmd.Parameters.AddWithValue("$el", symbol.EndLine);
+                symCmd.Parameters.AddWithValue("$mod", (object?)symbol.Modifier ?? DBNull.Value);
+                symCmd.Parameters.AddWithValue("$conf", "syntactic");
+                await symCmd.ExecuteNonQueryAsync();
+            }
+
+            foreach (var import in parseResult.Imports)
+            {
+                using var impCmd = batchConn.CreateCommand();
+                impCmd.Transaction = (SqliteTransaction)batchTx;
+                impCmd.CommandText = """
+                    INSERT INTO file_imports (id, file_id, snapshot_id, module, imported_name, line)
+                    VALUES ($id, $fid, $snap, $mod, $name, $line);
+                    """;
+                impCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+                impCmd.Parameters.AddWithValue("$fid", fileId);
+                impCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
+                impCmd.Parameters.AddWithValue("$mod", import.Module);
+                impCmd.Parameters.AddWithValue("$name", (object?)import.ImportedName ?? DBNull.Value);
+                impCmd.Parameters.AddWithValue("$line", import.Line);
+                await impCmd.ExecuteNonQueryAsync();
+            }
+
+            foreach (var relation in parseResult.Relations)
+            {
+                using var relCmd = batchConn.CreateCommand();
+                relCmd.Transaction = (SqliteTransaction)batchTx;
+                relCmd.CommandText = """
+                    INSERT INTO file_relations (id, file_id, snapshot_id, source_symbol, target_symbol, relation_type, confidence, line, source)
+                    VALUES ($id, $fid, $snap, $src, $tgt, $rt, $conf, $line, $source);
+                    """;
+                relCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+                relCmd.Parameters.AddWithValue("$fid", fileId);
+                relCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
+                relCmd.Parameters.AddWithValue("$src", string.IsNullOrEmpty(relation.SourceSymbol) ? relation.Relation : relation.SourceSymbol);
+                relCmd.Parameters.AddWithValue("$tgt", relation.TargetName);
+                relCmd.Parameters.AddWithValue("$rt", relation.RelationType.ToString());
+                relCmd.Parameters.AddWithValue("$conf", relation.Confidence.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                relCmd.Parameters.AddWithValue("$line", relation.Line > 0 ? relation.Line : DBNull.Value);
+                relCmd.Parameters.AddWithValue("$source", relation.Source);
+                await relCmd.ExecuteNonQueryAsync();
+            }
+        }
+
+        await batchTx.CommitAsync();
+    }
+    catch (Exception)
+    {
+        await batchTx.RollbackAsync();
+        throw;
+    }
+
+    // FTS indexing (separate — FTS5 virtual tables don't support DDL in DML transactions)
+    var fts = new CacheHub.Storage.Search.Fts5Index(factory);
+    foreach (var (relativePath, _, _, language, _, hash, content) in filesToIndex)
+    {
+        await fts.IndexFileAsync(snapshotId, relativePath, relativePath, content, language, hash);
+    }
+
+    // Activate snapshot (workspace-scoped)
+    await using var activateConn = factory.CreateOpenConnection();
+    await using var activateTx = await activateConn.BeginTransactionAsync();
+    using var supCmd = activateConn.CreateCommand();
+    supCmd.Transaction = (SqliteTransaction)activateTx;
+    supCmd.CommandText = "UPDATE index_snapshots SET status = 'Superseded' WHERE status IN ('Active', 'ActiveDegraded') AND workspace_id = $ws;";
+    supCmd.Parameters.AddWithValue("$ws", ws.Id.Value);
+    await supCmd.ExecuteNonQueryAsync();
+
+    using var setActiveCmd = activateConn.CreateCommand();
+    setActiveCmd.Transaction = (SqliteTransaction)activateTx;
+    setActiveCmd.CommandText = "UPDATE index_snapshots SET status = 'Active', file_count = $count, completed_at = datetime('now') WHERE id = $id;";
+    setActiveCmd.Parameters.AddWithValue("$count", filesToIndex.Count);
+    setActiveCmd.Parameters.AddWithValue("$id", snapshotId.Value);
+    await setActiveCmd.ExecuteNonQueryAsync();
+    await activateTx.CommitAsync();
+}
+
 // === Capabilities ===
 app.MapGet("/api/v1/capabilities", () => Results.Ok(new CapabilityDiscovery
 {
@@ -269,7 +420,7 @@ app.MapPost("/api/v1/workspaces/bootstrap", async (BootstrapApiRequest req, IWor
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.DoNotVerify),
         "CacheHub", "repos", repoName);
 
-    // Clone
+    // Step 1: Clone
     var git = new CacheHub.Core.Repository.GitProcessWrapper();
     var clonePlan = new CacheHub.Core.Repository.ClonePlan
     {
@@ -284,22 +435,56 @@ app.MapPost("/api/v1/workspaces/bootstrap", async (BootstrapApiRequest req, IWor
     if (!cloneResult.Success)
         return Results.BadRequest(ErrorEnvelope.From(ErrorCode.ProviderError, $"Clone failed: {cloneResult.ErrorMessage}"));
 
-    // Detect
+    // Step 2: Detect
     var detectEngine = new CacheHub.Indexing.Detection.ProjectDetectionEngine();
     var detection = detectEngine.Detect(dest);
+    var initPlan = detectEngine.GeneratePlan(detection);
 
-    // Import
+    // Step 3: Import
     var workspace = Workspace.CreateValidated(req.Name ?? repoName, dest);
     await repo.InsertAsync(workspace);
+
+    // Step 4: Build index (reuse the same indexing logic as /index endpoint)
+    var snapshotId = IndexSnapshotId.New();
+    await using var initConn = factory.CreateOpenConnection();
+    using var snapCmd = initConn.CreateCommand();
+    snapCmd.CommandText = "INSERT INTO index_snapshots (id, workspace_id, status, file_count) VALUES ($id, $ws, 'Building', 0);";
+    snapCmd.Parameters.AddWithValue("$id", snapshotId.Value);
+    snapCmd.Parameters.AddWithValue("$ws", workspace.Id.Value);
+    await snapCmd.ExecuteNonQueryAsync();
+    await initConn.DisposeAsync();
+
+    // Run indexing in background
+    _ = Task.Run(async () =>
+    {
+        try
+        {
+            await IndexWorkspaceAsync(factory, workspace, snapshotId);
+            await repo.UpdateStatusAsync(workspace.Id, WorkspaceStatus.Ready);
+        }
+        catch (Exception)
+        {
+            await using var failConn = factory.CreateOpenConnection();
+            using var failCmd = failConn.CreateCommand();
+            failCmd.CommandText = "UPDATE index_snapshots SET status = 'Failed' WHERE id = $id;";
+            failCmd.Parameters.AddWithValue("$id", snapshotId.Value);
+            await failCmd.ExecuteNonQueryAsync();
+        }
+    });
 
     return Results.Ok(new
     {
         bootstrapped = true,
         workspaceId = workspace.Id.Value,
+        snapshotId = snapshotId.Value,
         path = dest,
         components = detection.Components.Select(c => new { language = c.Language, framework = c.Framework, path = c.Path }).ToList(),
         isMonorepo = detection.IsMonorepo,
-        nextStep = $"POST /api/v1/workspaces/{workspace.Id.Value}/index to build the index",
+        missingTools = initPlan.MissingTools,
+        recommendedActions = initPlan.Actions.Select(a => new { command = a.Command, purpose = a.Purpose, risks = a.Risks }).ToList(),
+        requiresApproval = initPlan.Actions.Where(a => a.MayRunScripts || a.WritesToDisk).Select(a => a.Command).ToList(),
+        status = "Building",
+        message = "Index build started. Poll /api/v1/workspaces/{id}/status for progress.",
     });
 });
 
@@ -338,152 +523,7 @@ app.MapPost("/api/v1/workspaces/{id}/index", async (string id, IWorkspaceReposit
     {
         try
         {
-            var ignoreEngine = new CacheHub.Indexing.IgnoreRules.IgnoreRuleEngine()
-                .WithDefaults()
-                .WithGitIgnore(System.IO.Path.Combine(ws.RootPath, ".gitignore"))
-                .WithCacheHubIgnore(System.IO.Path.Combine(ws.RootPath, ".cachehubignore"));
-
-            var enumerator = new CacheHub.Indexing.Scanning.DirectoryEnumerator();
-
-            // Collect files first, then batch-write in a single transaction
-            var filesToIndex = new List<(string relativePath, string fullPath, long size, string language, bool isBinary, string hash, string content)>();
-
-            await foreach (var file in enumerator.EnumerateAsync(ws.RootPath))
-            {
-                if (file.IsDirectory) continue;
-                var relativePath = CacheHub.Core.Paths.PathNormalizer.GetRelativePath(ws.RootPath, file.Path);
-                if (ignoreEngine.IsIgnored(relativePath)) continue;
-
-                var typeInfo = CacheHub.Indexing.Detection.FileTypeDetector.Detect(file.Path, file.Size);
-                if (!typeInfo.ShouldIndex) continue;
-
-                var hash = await CacheHub.Indexing.Hashing.FileHasher.HashAsync(file.Path, file.Size);
-                var content = await System.IO.File.ReadAllTextAsync(file.Path);
-
-                filesToIndex.Add((relativePath, file.Path, file.Size, typeInfo.Language, typeInfo.IsBinary, hash.Hash, content));
-            }
-
-            // Batch write: single connection, single transaction for atomicity
-            await using var batchConn = factory.CreateOpenConnection();
-            await using var batchTx = await batchConn.BeginTransactionAsync();
-
-            try
-            {
-                foreach (var (relativePath, fullPath, size, language, isBinary, hash, content) in filesToIndex)
-                {
-                    var parser = SelectParser(relativePath);
-                    var parseResult = parser.Parse(content, relativePath);
-
-                    using var fileCmd = batchConn.CreateCommand();
-                    fileCmd.Transaction = (SqliteTransaction)batchTx;
-                    fileCmd.CommandText = """
-                        INSERT INTO files (id, snapshot_id, path, normalized_path, size, content_hash, language, is_binary, status, hash_kind, parser_id, parser_version)
-                        VALUES ($id, $snap, $path, $norm, $size, $hash, $lang, $bin, 'Indexed', $hashKind, $parserId, $parserVer);
-                        """;
-                    var fileId = Guid.NewGuid().ToString("N");
-                    fileCmd.Parameters.AddWithValue("$id", fileId);
-                    fileCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
-                    fileCmd.Parameters.AddWithValue("$path", relativePath);
-                    fileCmd.Parameters.AddWithValue("$norm", relativePath);
-                    fileCmd.Parameters.AddWithValue("$size", size);
-                    fileCmd.Parameters.AddWithValue("$hash", hash);
-                    fileCmd.Parameters.AddWithValue("$lang", language);
-                    fileCmd.Parameters.AddWithValue("$bin", isBinary ? 1 : 0);
-                    fileCmd.Parameters.AddWithValue("$hashKind", hash.StartsWith("fp:", StringComparison.Ordinal) ? "fingerprint" : "full");
-                    fileCmd.Parameters.AddWithValue("$parserId", parser.Id);
-                    fileCmd.Parameters.AddWithValue("$parserVer", parser.Version);
-                    await fileCmd.ExecuteNonQueryAsync();
-
-                    foreach (var symbol in parseResult.Symbols)
-                    {
-                        using var symCmd = batchConn.CreateCommand();
-                        symCmd.Transaction = (SqliteTransaction)batchTx;
-                        symCmd.CommandText = """
-                            INSERT INTO file_symbols (id, file_id, snapshot_id, name, kind, start_line, end_line, modifier, confidence)
-                            VALUES ($id, $fid, $snap, $name, $kind, $sl, $el, $mod, $conf);
-                            """;
-                        symCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
-                        symCmd.Parameters.AddWithValue("$fid", fileId);
-                        symCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
-                        symCmd.Parameters.AddWithValue("$name", symbol.Name);
-                        symCmd.Parameters.AddWithValue("$kind", symbol.Kind.ToString());
-                        symCmd.Parameters.AddWithValue("$sl", symbol.StartLine);
-                        symCmd.Parameters.AddWithValue("$el", symbol.EndLine);
-                        symCmd.Parameters.AddWithValue("$mod", (object?)symbol.Modifier ?? DBNull.Value);
-                        symCmd.Parameters.AddWithValue("$conf", "syntactic");
-                        await symCmd.ExecuteNonQueryAsync();
-                    }
-
-                    foreach (var import in parseResult.Imports)
-                    {
-                        using var impCmd = batchConn.CreateCommand();
-                        impCmd.Transaction = (SqliteTransaction)batchTx;
-                        impCmd.CommandText = """
-                            INSERT INTO file_imports (id, file_id, snapshot_id, module, imported_name, line)
-                            VALUES ($id, $fid, $snap, $mod, $name, $line);
-                            """;
-                        impCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
-                        impCmd.Parameters.AddWithValue("$fid", fileId);
-                        impCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
-                        impCmd.Parameters.AddWithValue("$mod", import.Module);
-                        impCmd.Parameters.AddWithValue("$name", (object?)import.ImportedName ?? DBNull.Value);
-                        impCmd.Parameters.AddWithValue("$line", import.Line);
-                        await impCmd.ExecuteNonQueryAsync();
-                    }
-
-                    foreach (var relation in parseResult.Relations)
-                    {
-                        using var relCmd = batchConn.CreateCommand();
-                        relCmd.Transaction = (SqliteTransaction)batchTx;
-                        relCmd.CommandText = """
-                            INSERT INTO file_relations (id, file_id, snapshot_id, source_symbol, target_symbol, relation_type, confidence, line, source)
-                            VALUES ($id, $fid, $snap, $src, $tgt, $rt, $conf, $line, $source);
-                            """;
-                        relCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
-                        relCmd.Parameters.AddWithValue("$fid", fileId);
-                        relCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
-                        relCmd.Parameters.AddWithValue("$src", string.IsNullOrEmpty(relation.SourceSymbol) ? relation.Relation : relation.SourceSymbol);
-                        relCmd.Parameters.AddWithValue("$tgt", relation.TargetName);
-                        relCmd.Parameters.AddWithValue("$rt", relation.RelationType.ToString());
-                        relCmd.Parameters.AddWithValue("$conf", relation.Confidence.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                        relCmd.Parameters.AddWithValue("$line", relation.Line > 0 ? relation.Line : DBNull.Value);
-                        relCmd.Parameters.AddWithValue("$source", relation.Source);
-                        await relCmd.ExecuteNonQueryAsync();
-                    }
-                }
-
-                await batchTx.CommitAsync();
-            }
-            catch (Exception)
-            {
-                await batchTx.RollbackAsync();
-                throw;
-            }
-
-            // FTS indexing (separate — FTS5 virtual tables don't support DDL in DML transactions)
-            var fts = new CacheHub.Storage.Search.Fts5Index(factory);
-            foreach (var (relativePath, _, _, language, _, hash, content) in filesToIndex)
-            {
-                await fts.IndexFileAsync(snapshotId, relativePath, relativePath, content, language, hash);
-            }
-
-            // Activate snapshot (workspace-scoped)
-            await using var activateConn = factory.CreateOpenConnection();
-            await using var activateTx = await activateConn.BeginTransactionAsync();
-            using var supCmd = activateConn.CreateCommand();
-            supCmd.Transaction = (SqliteTransaction)activateTx;
-            supCmd.CommandText = "UPDATE index_snapshots SET status = 'Superseded' WHERE status IN ('Active', 'ActiveDegraded') AND workspace_id = $ws;";
-            supCmd.Parameters.AddWithValue("$ws", ws.Id.Value);
-            await supCmd.ExecuteNonQueryAsync();
-
-            using var setActiveCmd = activateConn.CreateCommand();
-            setActiveCmd.Transaction = (SqliteTransaction)activateTx;
-            setActiveCmd.CommandText = "UPDATE index_snapshots SET status = 'Active', file_count = $count, completed_at = datetime('now') WHERE id = $id;";
-            setActiveCmd.Parameters.AddWithValue("$count", filesToIndex.Count);
-            setActiveCmd.Parameters.AddWithValue("$id", snapshotId.Value);
-            await setActiveCmd.ExecuteNonQueryAsync();
-            await activateTx.CommitAsync();
-
+            await IndexWorkspaceAsync(factory, ws, snapshotId);
             await repo.UpdateStatusAsync(ws.Id, WorkspaceStatus.Ready);
         }
         catch (Exception)
@@ -810,8 +850,8 @@ app.MapGet("/api/v1/outline", async (string workspaceId, string path, IWorkspace
     });
 });
 
-// === Stats ===
-app.MapGet("/api/v1/stats", async (SqliteConnectionFactory factory) =>
+// === Stats (V6: unified dashboard data — workspace stats + usage stats) ===
+app.MapGet("/api/v1/stats", async (SqliteConnectionFactory factory, UsageStatsService usageStats) =>
 {
     var wsRepo = new SqliteWorkspaceRepository(factory);
     var ctxRepo = new SqliteContextPackageRepository(factory);
@@ -827,8 +867,19 @@ app.MapGet("/api/v1/stats", async (SqliteConnectionFactory factory) =>
         totalTokens += contexts.Sum(c => c.Budget.ActualEstimate);
     }
 
+    var usage = usageStats.GetStats();
+
     return Results.Ok(new
     {
+        // Usage stats (for Dashboard)
+        totalRequests = usage.TotalRequests,
+        cacheHits = usage.CacheHits,
+        cacheHitRate = usage.CacheHitRate,
+        totalPromptTokens = usage.TotalPromptTokens,
+        totalCompletionTokens = usage.TotalCompletionTokens,
+        cachedTokensSaved = usage.CachedTokensSaved,
+        avgLatencyMs = usage.AvgLatencyMs,
+        // Workspace stats
         workspaces = workspaces.Count,
         contextPackages = totalContexts,
         totalEstimatedTokens = totalTokens,
@@ -1001,7 +1052,7 @@ static async Task<string> GenerateRepoMapMarkdown(Workspace ws)
 }
 
 // === Unified Workflow: Contextual Completion ===
-app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompletionApiRequest req, ContextEngine engine, IWorkspaceRepository wsRepo, IContextPackageRepository ctxRepo, SqliteConnectionFactory factory) =>
+app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompletionApiRequest req, ContextEngine engine, IWorkspaceRepository wsRepo, IContextPackageRepository ctxRepo, SqliteConnectionFactory factory, UsageStatsService usageStats) =>
 {
     if (string.IsNullOrEmpty(req.WorkspaceId) || string.IsNullOrEmpty(req.Task))
         return Results.BadRequest(ErrorEnvelope.From(ErrorCode.InvalidArgument, "WorkspaceId and Task are required"));
@@ -1186,6 +1237,22 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
         } // end else (cloud send allowed)
     }
 
+    // V6: Fix tokensSaved — use estimated baseline (total indexed file tokens) vs actual model prompt
+    var estimatedBaselineTokens = indexedFileInfos.Sum(f => f.Size) / 4; // ~4 chars per token
+    var estimatedContextSaved = Math.Max(0, estimatedBaselineTokens - modelPromptTokens);
+
+    // V6: Record usage stats for Dashboard
+    if (req.CallGateway)
+    {
+        var cacheHit = false; // TODO: track from gateway response
+        usageStats.RecordRequest(
+            modelPromptTokens,
+            modelCompletionTokens,
+            cacheHit,
+            (int)estimatedContextSaved,
+            0); // latency tracked externally if needed
+    }
+
     return Results.Ok(new
     {
         manifest = new
@@ -1206,7 +1273,9 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
         modelPromptTokens,
         modelCompletionTokens,
         modelTotalTokens,
-        tokensSaved = manifest.Budget.ContextTarget - modelPromptTokens,
+        // V6: Fixed — estimated baseline (all indexed files) vs actual model prompt
+        estimatedBaselineTokens,
+        tokensSaved = estimatedContextSaved,
     });
 });
 

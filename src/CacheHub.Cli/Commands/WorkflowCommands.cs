@@ -228,7 +228,9 @@ public static class WorkflowCommands
                         modelPromptTokens = promptTokens,
                         modelCompletionTokens = completionTokens,
                         modelTotalTokens = totalTokens,
-                        tokensSaved = manifest.Budget.ContextTarget - promptTokens,
+                        // V6: Fixed — estimated baseline (all indexed files) vs actual model prompt
+                        estimatedBaselineTokens = indexedFileInfos.Sum(f => f.Size) / 4,
+                        tokensSaved = Math.Max(0, (int)(indexedFileInfos.Sum(f => f.Size) / 4) - promptTokens),
                     };
 
                     Console.WriteLine(JsonSerializer.Serialize(gatewayOutput, _jsonOpts));

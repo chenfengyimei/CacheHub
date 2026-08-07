@@ -95,8 +95,9 @@ public sealed class ProjectDetectionEngine
             }
         }
 
-        var isMonorepo = components.Count > 1 &&
-            components.Select(c => c.Language).Distinct().Count() >= 2;
+        // V6: A monorepo is any repo with multiple independent component roots,
+        // regardless of whether they use the same language (e.g. apps/web + apps/admin + packages/ui all TypeScript).
+        var isMonorepo = components.Count > 1;
 
         return new DetectionResult
         {

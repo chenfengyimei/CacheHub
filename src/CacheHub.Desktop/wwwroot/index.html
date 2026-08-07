@@ -367,16 +367,44 @@ async function loadWorkspaces() {
 }
 
 async function importWorkspace() {
-    const path = document.getElementById('import-path').value;
-    const name = document.getElementById('import-name').value;
+    const path = document.getElementById('import-path').value.trim();
+    const name = document.getElementById('import-name').value.trim();
     if (!path) { toast('Path is required'); return; }
-    await api('/api/v1/workspaces/import', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ path, name: name || null })
-    });
+
+    // V6: Detect URL vs local path
+    const isUrl = /^https?:\/\/(github\.com|gitee\.com|gitlab\.com|bitbucket\.org)/i.test(path);
+
+    if (isUrl) {
+        // URL → bootstrap (clone→detect→import→index)
+        toast('Bootstrapping from URL: clone→detect→import→index...');
+        try {
+            const result = await api('/api/v1/workspaces/bootstrap', {
+                method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ url: path, name: name || null })
+            });
+            if (result.bootstrapped) {
+                toast('Bootstrap started: ' + esc(result.workspaceId.slice(0, 8)) + '… Index building...');
+                // Poll for index completion
+                if (result.workspaceId && result.snapshotId) {
+                    addJob(result.workspaceId, result.snapshotId, 'Bootstrap Index');
+                    pollIndexStatus(result.workspaceId, result.snapshotId);
+                }
+            } else {
+                toast('Bootstrap failed: ' + esc(result.error || 'unknown error'));
+            }
+        } catch (e) {
+            toast('Bootstrap failed: ' + esc(e.message || 'error'));
+        }
+    } else {
+        // Local path → import
+        await api('/api/v1/workspaces/import', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ path, name: name || null })
+        });
+        toast('Workspace imported');
+    }
     document.getElementById('import-path').value = '';
     document.getElementById('import-name').value = '';
-    toast('Workspace imported');
     loadWorkspaces();
 }
 
