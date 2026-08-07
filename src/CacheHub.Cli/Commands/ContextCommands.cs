@@ -6,6 +6,7 @@ using CacheHub.Context.Recall;
 using CacheHub.Core.Context;
 using CacheHub.Core.Feedback;
 using CacheHub.Core.Identifiers;
+using CacheHub.Core.Security;
 using CacheHub.Core.Workspaces;
 using CacheHub.Storage;
 using CacheHub.Storage.Database;
@@ -308,10 +309,12 @@ public static class ContextCommands
 
             var exportAppData = new AppDataDirectory();
             var exporter = new FileExporter(exportAppData);
+            var enforcer = new SecurityPolicyEnforcer();
             var exportDir = await exporter.ExportAsync(
                 manifest,
                 path => ResolveFileContent(ws.RootPath, path),
-                manifest.WorkspaceId.Value);
+                manifest.WorkspaceId.Value,
+                enforcer);
 
             Console.Error.WriteLine($"Exported to: {exportDir}");
             Console.WriteLine($"{{ \"exportDir\": \"{exportDir.Replace('\\', '/')}\", \"files\": [\"workspace.json\", \"latest-context.manifest.json\", \"latest-context.md\", \"repomap.md\"] }}");
@@ -325,7 +328,8 @@ public static class ContextCommands
                 return 1;
             }
             var generator = new PayloadGenerator();
-            var markdown = generator.GenerateMarkdown(manifest, path => ResolveFileContent(ws.RootPath, path));
+            var enforcer = new SecurityPolicyEnforcer();
+            var markdown = generator.GenerateMarkdown(manifest, path => ResolveFileContent(ws.RootPath, path), enforcer);
             Console.WriteLine(markdown);
         }
 

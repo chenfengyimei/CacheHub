@@ -1,6 +1,7 @@
 using CacheHub.Context.Payload;
 using CacheHub.Core.Context;
 using CacheHub.Core.Identifiers;
+using CacheHub.Core.Security;
 using CacheHub.Storage;
 
 namespace CacheHub.Context.Export;
@@ -35,16 +36,18 @@ public sealed class FileExporter
 
     /// <summary>
     /// Exports a context package to the CacheHub data directory (always safe).
+    /// Security enforcer is required to ensure all exported content is policy-checked.
     /// </summary>
     public async Task<string> ExportAsync(
         ContextPackageManifest manifest,
         Func<string, string> contentProvider,
-        string? workspaceId = null)
+        string? workspaceId = null,
+        SecurityPolicyEnforcer? securityEnforcer = null)
     {
         var exportDir = GetExportDir(workspaceId ?? manifest.WorkspaceId.Value);
         Directory.CreateDirectory(exportDir);
 
-        await WriteContextFilesAsync(exportDir, manifest, contentProvider);
+        await WriteContextFilesAsync(exportDir, manifest, contentProvider, securityEnforcer);
         return exportDir;
     }
 
@@ -106,12 +109,13 @@ public sealed class FileExporter
         ExportPlan plan,
         string repositoryRoot,
         ContextPackageManifest manifest,
-        Func<string, string> contentProvider)
+        Func<string, string> contentProvider,
+        SecurityPolicyEnforcer? securityEnforcer = null)
     {
         Directory.CreateDirectory(plan.TargetDirectory);
 
         // Write context files
-        await WriteContextFilesAsync(plan.TargetDirectory, manifest, contentProvider);
+        await WriteContextFilesAsync(plan.TargetDirectory, manifest, contentProvider, securityEnforcer);
 
         // Apply .gitignore changes (with backup)
         if (plan.GitignoreAddition is not null)
@@ -150,7 +154,7 @@ public sealed class FileExporter
         return System.Text.Json.JsonSerializer.Deserialize<ContextPackageManifest>(json, _jsonOpts);
     }
 
-    private async Task WriteContextFilesAsync(string dir, ContextPackageManifest manifest, Func<string, string> contentProvider)
+    private async Task WriteContextFilesAsync(string dir, ContextPackageManifest manifest, Func<string, string> contentProvider, SecurityPolicyEnforcer? securityEnforcer = null)
     {
         // 1. workspace.json
         var workspaceJson = new
@@ -169,9 +173,9 @@ public sealed class FileExporter
         await File.WriteAllTextAsync(
             Path.Combine(dir, "latest-context.manifest.json"), manifestJson);
 
-        // 3. latest-context.md
+        // 3. latest-context.md — security enforcer ensures blocked files are filtered
         var generator = new PayloadGenerator();
-        var markdown = generator.GenerateMarkdown(manifest, contentProvider);
+        var markdown = generator.GenerateMarkdown(manifest, contentProvider, securityEnforcer);
         await File.WriteAllTextAsync(
             Path.Combine(dir, "latest-context.md"), markdown);
 
