@@ -649,9 +649,15 @@ public static class IndexCommands
             return 1;
         }
 
-        // Run consistency check using VirtualPath + size + mtime
+        // Build ignore rules — same as Build/Refresh for consistency
+        var ignoreEngine = new IgnoreRuleEngine()
+            .WithDefaults()
+            .WithGitIgnore(Path.Combine(workspace.RootPath, ".gitignore"))
+            .WithCacheHubIgnore(Path.Combine(workspace.RootPath, ".cachehubignore"));
+
+        // Run consistency check using the same ignore rules as Build/Refresh
         var indexedFiles = await GetIndexedFileEntriesAsync(factory, workspace.Id);
-        var result = ConsistencyReconciler.Reconcile(workspace.RootPath, indexedFiles);
+        var result = ConsistencyReconciler.Reconcile(workspace.RootPath, indexedFiles, ignoreEngine: ignoreEngine);
 
         Console.WriteLine($"Verification result:");
         Console.WriteLine($"  Total checked: {result.TotalChecked}");
