@@ -1,5 +1,6 @@
 using CacheHub.Core.Paths;
 using CacheHub.Indexing.Hashing;
+using CacheHub.Indexing.IgnoreRules;
 using CacheHub.Indexing.States;
 
 namespace CacheHub.Indexing.Reconciliation;
@@ -45,13 +46,15 @@ public sealed class ConsistencyReconciler
     /// </summary>
     /// <param name="rootPath">Workspace root path (absolute)</param>
     /// <param name="indexedFiles">Indexed files keyed by VirtualPath (relative, forward-slash)</param>
-    /// <param name="ignorePatterns">Optional ignore patterns (directory/file names)</param>
+    /// <param name="ignorePatterns">Optional ignore patterns (directory/file names, legacy weak matching)</param>
+    /// <param name="ignoreEngine">Optional full IgnoreRuleEngine for glob/negation-aware filtering</param>
     public static ReconciliationResult Reconcile(
         string rootPath,
         IReadOnlyDictionary<string, IndexedFileEntry> indexedFiles,
-        IReadOnlySet<string>? ignorePatterns = null)
+        IReadOnlySet<string>? ignorePatterns = null,
+        IgnoreRuleEngine? ignoreEngine = null)
     {
-        var diskFiles = ScanDisk(rootPath, ignorePatterns);
+        var diskFiles = ScanDisk(rootPath, ignorePatterns, ignoreEngine);
 
         var added = new List<string>();
         var modified = new List<string>();
@@ -185,8 +188,9 @@ public sealed class ConsistencyReconciler
 
     /// <summary>
     /// Scans disk and returns files keyed by VirtualPath (relative, forward-slash).
+    /// Uses IgnoreRuleEngine for glob-aware filtering when available, falls back to segment matching.
     /// </summary>
-    private static Dictionary<string, DiskFileEntry> ScanDisk(string rootPath, IReadOnlySet<string>? ignorePatterns)
+    private static Dictionary<string, DiskFileEntry> ScanDisk(string rootPath, IReadOnlySet<string>? ignorePatterns, IgnoreRuleEngine? ignoreEngine)
     {
         var result = new Dictionary<string, DiskFileEntry>(StringComparer.Ordinal);
         var normalizedRoot = rootPath.Replace('\\', '/').TrimEnd('/');
@@ -200,8 +204,11 @@ public sealed class ConsistencyReconciler
                 ? normalized[normalizedRoot.Length..].TrimStart('/')
                 : normalized;
 
-            // Check ignore patterns
-            if (ignorePatterns is not null && IsIgnored(relativePath, ignorePatterns))
+            // Check ignore rules: prefer IgnoreRuleEngine (glob/negation-aware), fall back to segment matching
+            if (ignoreEngine is not null && ignoreEngine.IsIgnored(relativePath))
+                continue;
+
+            if (ignoreEngine is null && ignorePatterns is not null && IsIgnored(relativePath, ignorePatterns))
                 continue;
 
             try

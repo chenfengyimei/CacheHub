@@ -328,8 +328,8 @@ public static class IndexCommands
         // Get current indexed files
         var indexedFiles = await GetIndexedFileEntriesAsync(factory, workspace.Id);
 
-        // Reconcile against disk
-        var result = ConsistencyReconciler.Reconcile(workspace.RootPath, indexedFiles);
+        // Reconcile against disk — pass ignore engine for consistent filtering
+        var result = ConsistencyReconciler.Reconcile(workspace.RootPath, indexedFiles, ignoreEngine: ignoreEngine);
 
         Console.WriteLine($"  Changes detected:");
         Console.WriteLine($"    Added: {result.AddedFiles}");
@@ -355,6 +355,9 @@ public static class IndexCommands
 
         foreach (var path in result.AddedPaths)
         {
+            // Re-check ignore rules to ensure consistency with Build
+            if (ignoreEngine.IsIgnored(path)) continue;
+
             try
             {
                 var fullPath = Path.Combine(workspace.RootPath, path.Replace('/', Path.DirectorySeparatorChar));
@@ -380,6 +383,14 @@ public static class IndexCommands
 
         foreach (var path in result.ModifiedPaths)
         {
+            // Re-check ignore rules — a file may have been added to .gitignore since last build
+            if (ignoreEngine.IsIgnored(path))
+            {
+                // Treat as deleted (remove from index) since it's now ignored
+                filesToDelete.Add(path);
+                continue;
+            }
+
             try
             {
                 var fullPath = Path.Combine(workspace.RootPath, path.Replace('/', Path.DirectorySeparatorChar));
