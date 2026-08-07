@@ -151,6 +151,9 @@ public sealed class PersistentVectorStore : IDisposable
                 ? _entries.Where(e => e.WorkspaceId == workspaceId)
                 : _entries;
 
+            // Exclude stale entries (snapshot superseded or content hash changed)
+            filtered = filtered.Where(e => !e.IsStale);
+
             return filtered
                 .Select(e => new SemanticSearchResult
                 {
@@ -195,6 +198,45 @@ public sealed class PersistentVectorStore : IDisposable
         }
     }
 
+    /// <summary>
+    /// Marks entries as stale when the snapshot has been superseded or content hash changed.
+    /// Stale entries are excluded from search results.
+    /// </summary>
+    public void InvalidateBySnapshot(string? currentSnapshotId, string? currentContentHash)
+    {
+        lock (_lock)
+        {
+            for (var i = 0; i < _entries.Count; i++)
+            {
+                var entry = _entries[i];
+                var stale = false;
+
+                // If entry was bound to a snapshot and it's different now, mark stale
+                if (!string.IsNullOrEmpty(entry.SnapshotId) &&
+                    !string.IsNullOrEmpty(currentSnapshotId) &&
+                    !string.Equals(entry.SnapshotId, currentSnapshotId, StringComparison.OrdinalIgnoreCase))
+                {
+                    stale = true;
+                }
+
+                // If entry was bound to a content hash and it's different now, mark stale
+                if (!stale &&
+                    !string.IsNullOrEmpty(entry.WorkspaceContentHash) &&
+                    !string.IsNullOrEmpty(currentContentHash) &&
+                    !string.Equals(entry.WorkspaceContentHash, currentContentHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    stale = true;
+                }
+
+                if (stale)
+                {
+                    _entries[i] = entry with { IsStale = true };
+                }
+            }
+            Save();
+        }
+    }
+
     public int Count
     {
         get { lock (_lock) return _entries.Count; }
@@ -230,6 +272,9 @@ public sealed class PersistentVectorStore : IDisposable
                 e.WorkspaceId,
                 e.TaskDescription,
                 e.TaskCompleted,
+                e.SnapshotId,
+                e.WorkspaceContentHash,
+                e.IsStale,
             }));
             File.WriteAllText(_persistPath, json);
         }
@@ -262,6 +307,9 @@ public sealed class PersistentVectorStore : IDisposable
                     WorkspaceId = item.TryGetProperty("WorkspaceId", out var ws) ? ws.GetString() : null,
                     TaskDescription = item.TryGetProperty("TaskDescription", out var td) ? td.GetString() : null,
                     TaskCompleted = item.TryGetProperty("TaskCompleted", out var tc) ? tc.GetBoolean() : null,
+                    SnapshotId = item.TryGetProperty("SnapshotId", out var si) ? si.GetString() : null,
+                    WorkspaceContentHash = item.TryGetProperty("WorkspaceContentHash", out var wch) ? wch.GetString() : null,
+                    IsStale = item.TryGetProperty("IsStale", out var isv) && isv.GetBoolean(),
                 });
             }
         }
@@ -314,7 +362,9 @@ public sealed class SemanticReferenceRecall
         SemanticReferenceType type,
         string? workspaceId = null,
         string? taskDescription = null,
-        bool? taskCompleted = null)
+        bool? taskCompleted = null,
+        string? snapshotId = null,
+        string? workspaceContentHash = null)
     {
         var embedding = await _embedding.EmbedAsync(content);
         _store.Add(new SemanticReference
@@ -328,6 +378,8 @@ public sealed class SemanticReferenceRecall
             WorkspaceId = workspaceId,
             TaskDescription = taskDescription,
             TaskCompleted = taskCompleted,
+            SnapshotId = snapshotId,
+            WorkspaceContentHash = workspaceContentHash,
         });
     }
 }

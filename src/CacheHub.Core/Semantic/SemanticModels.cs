@@ -50,6 +50,15 @@ public sealed record SemanticReference
     public string? WorkspaceId { get; init; }
     public string? TaskDescription { get; init; }
     public bool? TaskCompleted { get; init; }
+
+    /// <summary>Snapshot ID this reference was created against. Null = unbound.</summary>
+    public string? SnapshotId { get; init; }
+
+    /// <summary>Content hash of the workspace state when this reference was recorded.</summary>
+    public string? WorkspaceContentHash { get; init; }
+
+    /// <summary>Whether this reference is stale (snapshot superseded or content hash changed).</summary>
+    public bool IsStale { get; init; }
 }
 
 /// <summary>
