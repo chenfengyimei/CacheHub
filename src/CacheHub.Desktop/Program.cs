@@ -22,7 +22,10 @@ using CacheHub.Storage.Repositories;
 var builder = WebApplication.CreateBuilder(args);
 
 // Security: generate a random access token for API authentication
-var accessToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+// Tests can override via configuration "ApiToken" or env var CACHEHUB_API_TOKEN
+var accessToken = builder.Configuration["ApiToken"]
+    ?? Environment.GetEnvironmentVariable("CACHEHUB_API_TOKEN")
+    ?? Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
 
 builder.Services.AddSingleton<AppDataDirectory>();
 builder.Services.AddSingleton<SqliteConnectionFactory>(sp =>
@@ -457,7 +460,7 @@ app.MapPost("/api/v1/workspaces/{id}/export", async (string id, IWorkspaceReposi
 });
 
 // === Search ===
-app.MapGet("/api/v1/search", async (string q, string? workspace, int? limit, SqliteConnectionFactory factory) =>
+app.MapGet("/api/v1/search", async (string? q, string? workspace, int? limit, SqliteConnectionFactory factory) =>
 {
     if (string.IsNullOrWhiteSpace(q))
         return Results.BadRequest(ErrorEnvelope.From(ErrorCode.InvalidArgument, "Query parameter 'q' is required"));
@@ -612,3 +615,6 @@ record ImportRequest(string Path, string? Name);
 record ContextBuildApiRequest(string WorkspaceId, string Task);
 record ExpandApiRequest(string? Symbol, string? File, string? Reason);
 record FeedbackApiRequest(string? ClientId, bool TaskCompleted, bool MissingContextReported, IReadOnlyList<string>? FilesActuallyRead);
+
+// Make Program class accessible for integration testing
+public partial class Program { }
