@@ -68,6 +68,7 @@ public sealed class Fts5Index(SqliteConnectionFactory factory)
     /// <summary>
     /// Searches file contents using FTS5 full-text search.
     /// Query is compiled via FtsQueryCompiler for safe escaping and prefix matching.
+    /// Returns BM25 rank score and best hit line number for each result.
     /// </summary>
     public async Task<IReadOnlyList<FtsSearchResult>> SearchAsync(
         IndexSnapshotId snapshotId,
@@ -80,7 +81,9 @@ public sealed class Fts5Index(SqliteConnectionFactory factory)
         using var cmd = connection.CreateCommand();
         cmd.CommandText =
             """
-            SELECT path, language, snippet(file_contents_fts, 2, '<mark>', '</mark>', '...', 10) as snippet
+            SELECT path, language,
+                   snippet(file_contents_fts, 2, '<mark>', '</mark>', '...', 10) as snippet,
+                   rank, content
             FROM file_contents_fts
             WHERE file_contents_fts MATCH $query AND snapshot_id = $snapshot
             ORDER BY rank
@@ -94,12 +97,43 @@ public sealed class Fts5Index(SqliteConnectionFactory factory)
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
         {
-            results.Add(new FtsSearchResult(
-                reader.GetString(0),
-                reader.GetString(1),
-                reader.GetString(2)));
+            var path = reader.GetString(0);
+            var language = reader.GetString(1);
+            var snippet = reader.GetString(2);
+            var rankScore = reader.IsDBNull(3) ? 0 : reader.GetDouble(3);
+            var content = reader.IsDBNull(4) ? "" : reader.GetString(4);
+
+            // Find the first line matching the query keywords for anchor precision
+            var hitLine = FindHitLine(content, query);
+
+            results.Add(new FtsSearchResult(path, language, snippet, rankScore, hitLine));
         }
         return results;
+    }
+
+    /// <summary>
+    /// Finds the 1-based line number of the first occurrence of any query keyword in the content.
+    /// </summary>
+    private static int? FindHitLine(string content, string query)
+    {
+        if (string.IsNullOrEmpty(content) || string.IsNullOrEmpty(query)) return null;
+
+        var keywords = query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var lines = content.Split('\n');
+
+        foreach (var keyword in keywords)
+        {
+            var cleanKeyword = keyword.Trim('"', '*', '(', ')');
+            if (string.IsNullOrEmpty(cleanKeyword)) continue;
+
+            for (var i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].Contains(cleanKeyword, StringComparison.OrdinalIgnoreCase))
+                    return i + 1;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -207,4 +241,4 @@ public sealed class Fts5Index(SqliteConnectionFactory factory)
 /// <summary>
 /// A single FTS5 search result.
 /// </summary>
-public sealed record FtsSearchResult(string Path, string Language, string Snippet);
+public sealed record FtsSearchResult(string Path, string Language, string Snippet, double RankScore = 0, int? HitLine = null);

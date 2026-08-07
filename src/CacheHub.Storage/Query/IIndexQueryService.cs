@@ -116,6 +116,8 @@ public sealed record FtsSearchResult
     public required string Path { get; init; }
     public required string Language { get; init; }
     public required string Snippet { get; init; }
+    public double RankScore { get; init; }
+    public int? HitLine { get; init; }
 }
 
 /// <summary>
@@ -209,6 +211,8 @@ public sealed class SqliteIndexQueryService : IIndexQueryService
             Path = r.Path,
             Language = r.Language,
             Snippet = r.Snippet,
+            RankScore = r.RankScore,
+            HitLine = r.HitLine,
         }).ToList();
     }
 

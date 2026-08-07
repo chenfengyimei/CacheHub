@@ -454,7 +454,7 @@ app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextE
         {
             var querySvc = new CacheHub.Storage.Query.SqliteIndexQueryService(factory);
             var results = querySvc.SearchFtsAsync(activeSnapshotId, keyword, 50).GetAwaiter().GetResult();
-            return results.Select(r => new CacheHub.Context.Recall.FtsMatch(r.Path, r.Language, r.Snippet)).ToList();
+            return results.Select(r => new CacheHub.Context.Recall.FtsMatch(r.Path, r.Language, r.Snippet, r.RankScore, r.HitLine)).ToList();
         },
         symbolSearch: symbol =>
         {

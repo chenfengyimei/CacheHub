@@ -120,7 +120,7 @@ public static class ContextCommands
             {
                 var querySvc = new SqliteIndexQueryService(factory);
                 var results = querySvc.SearchFtsAsync(snapshotId, keyword, 50).GetAwaiter().GetResult();
-                return results.Select(r => new FtsMatch(r.Path, r.Language, r.Snippet)).ToList();
+                return results.Select(r => new FtsMatch(r.Path, r.Language, r.Snippet, r.RankScore, r.HitLine)).ToList();
             },
             symbolSearch: symbol =>
             {

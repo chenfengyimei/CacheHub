@@ -269,4 +269,4 @@ public sealed record IndexedFileInfo
 /// <summary>
 /// A single FTS match result for recall integration.
 /// </summary>
-public sealed record FtsMatch(string Path, string Language, string Snippet);
+public sealed record FtsMatch(string Path, string Language, string Snippet, double RankScore = 0, int? HitLine = null);

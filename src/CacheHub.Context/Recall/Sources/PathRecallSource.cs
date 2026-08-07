@@ -59,6 +59,12 @@ public sealed class FullTextRecallSource : IRecallSource
                 var ftsResults = context.FtsSearch(keyword);
                 foreach (var match in ftsResults)
                 {
+                    // Normalize BM25 rank: FTS5 rank is negative (more negative = better).
+                    // Convert to 0..1 score: use 1/(1+|rank|) as a normalized relevance score.
+                    var normalizedScore = match.RankScore < 0
+                        ? Math.Min(1.0 / (1.0 + Math.Abs(match.RankScore)), 1.0)
+                        : match.RankScore > 0 ? Math.Min(1.0 / (1.0 + match.RankScore), 1.0) : 0.5;
+
                     hits.Add(new RecallHit
                     {
                         NormalizedPath = match.Path,
@@ -68,9 +74,9 @@ public sealed class FullTextRecallSource : IRecallSource
                         Confidence = 0.9,
                         ScoreHints =
                         [
-                            new ScoreHint { Value = 1.0, Feature = "TextMatch", Confidence = 0.9 },
+                            new ScoreHint { Value = normalizedScore, Feature = "TextMatch", Confidence = 0.9 },
                         ],
-                        Anchors = ExtractSnippetAnchors(match.Snippet),
+                        Anchors = ExtractSnippetAnchors(match.Snippet, match.HitLine),
                     });
                 }
             }
@@ -103,12 +109,29 @@ public sealed class FullTextRecallSource : IRecallSource
         return hits;
     }
 
-    private static IReadOnlyList<LineAnchor> ExtractSnippetAnchors(string? snippet)
+    private static IReadOnlyList<LineAnchor> ExtractSnippetAnchors(string? snippet, int? hitLine)
     {
+        if (string.IsNullOrEmpty(snippet) && hitLine is null) return [];
+
+        // Use actual FTS hit line when available for precise anchor
+        if (hitLine is int line && line > 0)
+        {
+            // Expand to a ~40-line window around the hit for context
+            var start = Math.Max(1, line - 20);
+            var end = line + 20;
+            return [new LineAnchor
+            {
+                StartLine = start,
+                EndLine = end,
+                AnchorType = AnchorType.FtsHit,
+                MatchedText = snippet,
+                Confidence = 0.9,
+            }];
+        }
+
+        // Fallback: no hit line available, use snippet as full-file indicator
         if (string.IsNullOrEmpty(snippet)) return [];
-        // FTS snippets contain "..." delimiters; we can't reliably extract line numbers
-        // without the BM25 offset. Return a full-file anchor as fallback.
-        return [new LineAnchor { StartLine = 1, EndLine = 1, AnchorType = AnchorType.FtsHit, MatchedText = snippet, Confidence = 0.7 }];
+        return [new LineAnchor { StartLine = 1, EndLine = 1, AnchorType = AnchorType.FtsHit, MatchedText = snippet, Confidence = 0.5 }];
     }
 }
 

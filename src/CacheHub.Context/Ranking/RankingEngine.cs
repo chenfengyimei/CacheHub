@@ -140,6 +140,8 @@ public sealed class RankingEngine
 
     /// <summary>
     /// Computes raw feature scores for a candidate.
+    /// ScoreHints from recall sources supplement path-based heuristics:
+    /// when a recall source provides a "TextMatch" hint, it overrides the path-only calculation.
     /// </summary>
     private static FeatureScores ComputeFeatures(
         Recall.CandidateFile candidate,
@@ -156,15 +158,33 @@ public sealed class RankingEngine
             }
         }
 
-        var textMatch = 0.0;
+        // Path-based text match (fallback when no FTS ScoreHint available)
+        var pathTextMatch = 0.0;
         if (task.ExtractedKeywords.Count > 0)
         {
             foreach (var kw in task.ExtractedKeywords)
             {
                 if (candidate.NormalizedPath.Contains(kw, StringComparison.OrdinalIgnoreCase))
-                    textMatch += 1.0 / task.ExtractedKeywords.Count;
+                    pathTextMatch += 1.0 / task.ExtractedKeywords.Count;
             }
         }
+
+        // Consume ScoreHints: FTS and other recall sources provide more accurate signals
+        var ftsTextMatch = 0.0;
+        var symbolHintMatch = 0.0;
+        foreach (var hint in candidate.ScoreHints)
+        {
+            if (hint.Feature == "TextMatch" && hint.Value > ftsTextMatch)
+                ftsTextMatch = hint.Value;
+            if (hint.Feature == "SymbolMatch" && hint.Value > symbolHintMatch)
+                symbolHintMatch = hint.Value;
+        }
+
+        // Use the higher of path-based and FTS-based text match
+        var textMatch = Math.Max(pathTextMatch, ftsTextMatch);
+        // Use the higher of in-memory symbol match and hint-based symbol match
+        if (symbolHintMatch > symbolMatch)
+            symbolMatch = symbolHintMatch;
 
         var pathMatch = 0.0;
         foreach (var path in task.ExtractedPaths)
