@@ -221,14 +221,14 @@ app.MapGet("/api/v1/capabilities", () => Results.Ok(new CapabilityDiscovery
         Capability.WorkspaceImport, Capability.ContextBuild,
         Capability.ContextExpand, Capability.ContextExplain,
         Capability.ContextFeedback, Capability.FileExport,
-        Capability.Cache, Capability.Gateway),
+        Capability.Cache, Capability.Gateway, Capability.Semantic),
     SchemaVersions = new Dictionary<string, int>
     {
         ["contextPackage"] = 1,
         ["capabilityDiscovery"] = 1,
         ["error"] = 1,
     },
-    Limitations = ["No Semantic", "No LSP"],
+    Limitations = ["Semantic is reference-only (FNV-1a lexical, not full semantic)", "No LSP"],
 }));
 
 // === Workspaces ===

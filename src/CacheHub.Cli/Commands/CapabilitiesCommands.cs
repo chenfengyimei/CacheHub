@@ -27,7 +27,8 @@ public static class CapabilitiesCommands
                 Capability.ContextFeedback,
                 Capability.FileExport,
                 Capability.Cache,
-                Capability.Gateway),
+                Capability.Gateway,
+                Capability.Semantic),
             SchemaVersions = new Dictionary<string, int>
             {
                 ["contextPackage"] = 1,
