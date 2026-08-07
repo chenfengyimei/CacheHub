@@ -3,6 +3,22 @@
 
 set -e
 
+SKIP_TESTS=false
+
+# Parse arguments
+for arg in "$@"; do
+    case "$arg" in
+        --skip-tests)
+            SKIP_TESTS=true
+            ;;
+        --help|-h)
+            echo "Usage: install.sh [--skip-tests]"
+            echo "  --skip-tests  Skip test suite (not recommended for production)"
+            exit 0
+            ;;
+    esac
+done
+
 echo "CacheHub Installation"
 echo "==================="
 echo ""
@@ -23,9 +39,17 @@ dotnet build CacheHub.sln -c Release --nologo 2>/dev/null
 echo "  Build successful."
 
 # Test
-echo "[3/4] Running tests..."
-dotnet test CacheHub.sln -c Release --no-build --nologo --verbosity quiet 2>/dev/null || echo "  Warning: Some tests failed."
-echo "  Tests complete."
+if [ "$SKIP_TESTS" = false ]; then
+    echo "[3/4] Running tests..."
+    if ! dotnet test CacheHub.sln -c Release --no-build --nologo --verbosity quiet 2>/dev/null; then
+        echo "Error: Tests failed. Aborting installation."
+        echo "  Use --skip-tests flag to bypass (not recommended for production)."
+        exit 1
+    fi
+    echo "  All tests passed."
+else
+    echo "[3/4] Skipping tests (--skip-tests flag set)."
+fi
 
 # Publish
 echo "[4/4] Publishing single-file executable..."
