@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Closing the gap between "module exists" and "module is on the production main chain."
 
+#### V3 Remaining Items Fixed
+- **SqliteCacheStore wired into Gateway**: GatewayConfig.CacheStore property. GatewayServer uses ICacheStore for cache check/store with fallback to in-memory. GatewayCommands creates SqliteCacheStore with persistent cache.db + blob storage. Gateway cache survives restarts.
+- **Benchmark CLI real ContextEngine**: Removed all DEMO ONLY warnings. `benchmark run` now accepts `--id=<workspace> --task=<task-id>`, creates real ContextEngine.Build, measures actual Recall@10 and TokenReduction. No longer uses Ground Truth as result.
+- **Semantic Snapshot/ContentHash binding**: SemanticReference gains SnapshotId, WorkspaceContentHash, IsStale fields. PersistentVectorStore.InvalidateBySnapshot marks entries stale when snapshot changes. Search excludes stale entries. RecordAsync accepts snapshot/content hash for binding.
+
 #### P0 Critical Fixes
 - **file_relations mapping fix**: confidence/line/source columns were shifted — confidence held parser name, line held confidence double. Migration0010 adds `source` column and migrates mangled data.
 - **Security exit enforcement unified**: CLI markdown export and FileExporter now pass SecurityPolicyEnforcer. All 3 export paths (Local API / CLI / File) enforce security policy.

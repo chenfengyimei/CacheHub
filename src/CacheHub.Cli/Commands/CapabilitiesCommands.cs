@@ -36,12 +36,12 @@ public static class CapabilitiesCommands
             },
             Limitations =
             [
-                "Semantic Search: lexical similarity (FNV-1a hash embedding), wired as low-confidence reference only",
+                "Semantic Search: lexical similarity (FNV-1a hash embedding), wired as reference, bound to Snapshot/ContentHash",
                 "LSP: scaffold only, regex-based parsing fallback",
                 "Tokenizer: CodeTokenizer default (code-aware word splitting), no BPE model tokenizers",
-                "Gateway: multi-provider fallback supported, Responses API streaming supported, Gateway cache still in-process",
-                "Cache: ContextPackageCache wired (in-memory) with complete CacheKey, Gateway raw cache still in-process Dictionary",
-                "Benchmark: CLI benchmark is DEMO ONLY (simulated data, not real Agent evaluation)",
+                "Gateway: multi-provider fallback, Responses API streaming, SSE Usage parsing, persistent SqliteCacheStore",
+                "Cache: ContextPackageCache wired (in-memory) with complete CacheKey, Gateway raw cache persistent via SqliteCacheStore",
+                "Benchmark: CLI benchmark uses real ContextEngine (Recall@10 + TokenReduction), not Agent-level evaluation",
             ],
         };
 

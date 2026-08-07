@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "project": "CacheHub",
   "currentPhase": "V3-TRUE-CLOSURE-COMPLETE",
-  "currentTask": "V3 complete: all P0 (3/3) and P1 (16/16) issues resolved. Fixed: file_relations mapping, security exit, FTS BM25+hit line, ScoreHint ranking, FTS Anchor, Ignore rules, Migration registration, CacheKey, ContextPackageCache, RelationRecallSource, Contextual Completion entry, Gateway multi-provider fallback, Semantic FNV-1a hash, FTS failure tracking, Tokenizer full-chain fix, ChunkingStrategy tokenizer passthrough, SemanticRecallSource wired, Responses API streaming, Chat SSE Usage parsing. 772 tests passing.",
+  "currentTask": "V3 complete + remaining items fixed: all P0 (3/3), all P1 (16/16), plus 3 remaining items: SqliteCacheStore wired into Gateway (persistent cache), Benchmark CLI uses real ContextEngine (no more DEMO), Semantic bound to Snapshot/ContentHash (stale prevention). 772 tests passing.",
   "repository": {
     "branch": "main",
     "dirty": false,
