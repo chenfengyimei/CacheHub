@@ -56,6 +56,78 @@ public sealed record FallbackProvider
 }
 
 /// <summary>
+/// Provider configuration loaded from a JSON config file.
+/// Allows users to define multiple providers without code changes.
+/// </summary>
+public sealed class GatewayProviderConfig
+{
+    public string? PrimaryBaseUrl { get; set; }
+    public string? PrimaryApiKey { get; set; }
+    public List<ProviderEntry> FallbackProviders { get; set; } = [];
+}
+
+public sealed class ProviderEntry
+{
+    public string? BaseUrl { get; set; }
+    public string? ApiKey { get; set; }
+}
+
+/// <summary>
+/// Loads provider configuration from a JSON file.
+/// </summary>
+public static class GatewayProviderConfigLoader
+{
+    /// <summary>
+    /// Loads provider config from the specified path. Returns null if file doesn't exist.
+    /// </summary>
+    public static GatewayProviderConfig? Load(string path)
+    {
+        if (!File.Exists(path)) return null;
+        try
+        {
+            var json = File.ReadAllText(path);
+            return JsonSerializer.Deserialize<GatewayProviderConfig>(json);
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// Converts a loaded config into FallbackProvider list for GatewayConfig.
+    /// API keys are read from environment variables if the value starts with "env:".
+    /// </summary>
+    public static List<FallbackProvider> ToFallbackProviders(GatewayProviderConfig config)
+    {
+        var result = new List<FallbackProvider>();
+        foreach (var entry in config.FallbackProviders)
+        {
+            if (string.IsNullOrEmpty(entry.BaseUrl)) continue;
+            var apiKey = ResolveApiKey(entry.ApiKey);
+            result.Add(new FallbackProvider
+            {
+                BaseUrl = entry.BaseUrl,
+                ApiKey = apiKey ?? "",
+            });
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Resolves an API key that may be an environment variable reference.
+    /// Format: "env:VARIABLE_NAME" → reads from environment.
+    /// </summary>
+    public static string? ResolveApiKey(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return null;
+        if (value.StartsWith("env:", StringComparison.OrdinalIgnoreCase))
+        {
+            var varName = value[4..];
+            return Environment.GetEnvironmentVariable(varName);
+        }
+        return value;
+    }
+}
+
+/// <summary>
 /// Model usage statistics for a request.
 /// </summary>
 public sealed record ModelUsage

@@ -91,6 +91,7 @@ public static class GatewayCommands
             ProviderApiKey = apiKey ?? "",
             Port = portNum,
             CacheStore = cacheStore,
+            FallbackProviders = LoadFallbackProviders(appData),
         };
 
         Console.Error.WriteLine($"Starting CacheHub Gateway on http://127.0.0.1:{config.Port}");
@@ -141,4 +142,21 @@ public static class GatewayCommands
 
     private static string? GetOpt(string[] args, string prefix) =>
         args.FirstOrDefault(a => a.StartsWith(prefix + "=", StringComparison.OrdinalIgnoreCase))?[(prefix.Length + 1)..];
+
+    /// <summary>
+    /// Loads fallback providers from the gateway provider config file.
+    /// Path: {appData.Root}/gateway/providers.json
+    /// Format: { "fallbackProviders": [{ "baseUrl": "...", "apiKey": "env:VAR" }] }
+    /// </summary>
+    private static List<FallbackProvider> LoadFallbackProviders(AppDataDirectory appData)
+    {
+        var configPath = Path.Combine(appData.Root, "gateway", "providers.json");
+        var providerConfig = GatewayProviderConfigLoader.Load(configPath);
+        if (providerConfig is null) return [];
+
+        var fallbacks = GatewayProviderConfigLoader.ToFallbackProviders(providerConfig);
+        if (fallbacks.Count > 0)
+            Console.Error.WriteLine($"  Fallback providers: {fallbacks.Count} (from {configPath})");
+        return fallbacks;
+    }
 }
