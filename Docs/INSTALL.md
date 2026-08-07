@@ -201,7 +201,8 @@ dotnet publish src/CacheHub.Cli/CacheHub.Cli.csproj -c Release -o ./publish
 
 ```bash
 dotnet run --project src/CacheHub.Desktop
-# 访问 http://localhost:5000
+# 访问 http://localhost:5099
+# API Token 打印在终端中，所有 /api/ 请求需 Authorization: Bearer <token>
 ```
 
 ---

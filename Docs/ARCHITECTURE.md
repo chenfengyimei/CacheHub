@@ -9,7 +9,7 @@ CacheHub 采用分层架构，从底到上分为 6 层：
 ```
 ┌─────────────────────────────────────────────────┐
 │                  接入层 (Access)                  │
-│   CLI (cachehub)  ·  Web UI (:5000)  ·  Gateway  │
+│   CLI (cachehub)  ·  Web UI (:5099)  ·  Gateway  │
 ├─────────────────────────────────────────────────┤
 │                  上下文层 (Context)               │
 │  TaskParser · Recall · Ranking · Chunking        │
@@ -20,11 +20,11 @@ CacheHub 采用分层架构，从底到上分为 6 层：
 │  Hasher · Parser(4语言) · RepoMap · FTS5 · Cache │
 ├─────────────────────────────────────────────────┤
 │                  存储层 (Storage)                 │
-│  SQLite · 5 Migrations · 3 Repositories · FTS5   │
+│  SQLite · 9 Migrations · 3 Repositories · FTS5   │
 ├─────────────────────────────────────────────────┤
 │                  核心层 (Core)                    │
 │  Domain Models · Errors · IDs · Context Schema   │
-│  Security · Tokenizer · Provider · Semantic · LSP│
+│  Security · Tokenizer · Semantic · LSP Contracts │
 ├─────────────────────────────────────────────────┤
 │                  基础设施 (Infra)                 │
 │  .NET 9 · ConfigManager · LruCache · GitWrapper  │
@@ -284,7 +284,7 @@ ASP.NET Core 最小 API Web 服务。
 
 | 层级 | 数量 | 说明 |
 |------|------|------|
-| 单元测试 | 379 | 覆盖所有模块的核心逻辑 |
+| 单元测试 | 772 | 覆盖所有模块的核心逻辑 + 安全 + Gateway + Gate 回归 |
 | 跳过 | 2 | 需要真实 Git 环境 |
 | E2E 集成测试 | 8 | 端到端工作流验证 |
 | 真实场景测试 | 5 | 模拟真实使用场景 |
