@@ -528,23 +528,33 @@ public static class BenchmarkCommands
 
         // Baseline branch: give the model the ENTIRE repository content.
         // Represents "AI agent without CacheHub" — reads the full codebase each time.
+        // Baseline branch: give the model the ENTIRE repository content.
+        // Represents "AI agent without CacheHub" — reads the full codebase each time.
         Core.Benchmarks.Agent.AgentContextPackage? baselineCache = null;
         AgentContextPackage BuildBaselineContext(string taskDescription)
         {
             if (baselineCache is not null) return baselineCache;
 
-            var allPaths = Directory.EnumerateFiles(workspace.RootPath, "*", SearchOption.AllDirectories)
-                .Where(p => !p.Contains("\\.git\\", StringComparison.OrdinalIgnoreCase)
-                            && !p.Contains("/.git/", StringComparison.OrdinalIgnoreCase)
-                            && !p.Contains("\\bin\\", StringComparison.OrdinalIgnoreCase)
-                            && !p.Contains("\\obj\\", StringComparison.OrdinalIgnoreCase)
-                            && !p.Contains("/bin/", StringComparison.OrdinalIgnoreCase)
-                            && !p.Contains("/obj/", StringComparison.OrdinalIgnoreCase))
+            // V6 (review #18): Baseline should be a fair, safe "read whole repo" proxy.
+            // Exclude VCS/build/sensitive/binary payloads so it parallels CacheHub's own
+            // indexing filters (never feed .env/*.pem/node_modules/etc into a prompt).
+            var baselinePaths = Directory.EnumerateFiles(workspace.RootPath, "*", SearchOption.AllDirectories)
+                .Where(p =>
+                    !p.Contains("\\.git\\", StringComparison.OrdinalIgnoreCase) &&
+                    !p.Contains("/.git/", StringComparison.OrdinalIgnoreCase) &&
+                    !p.Contains("\\bin\\", StringComparison.OrdinalIgnoreCase) &&
+                    !p.Contains("\\obj\\", StringComparison.OrdinalIgnoreCase) &&
+                    !p.Contains("/bin/", StringComparison.OrdinalIgnoreCase) &&
+                    !p.Contains("/obj/", StringComparison.OrdinalIgnoreCase) &&
+                    !p.Contains("node_modules", StringComparison.OrdinalIgnoreCase) &&
+                    !p.Contains("\\vendor\\", StringComparison.OrdinalIgnoreCase) &&
+                    !p.Contains("/vendor/", StringComparison.OrdinalIgnoreCase) &&
+                    !IsSensitiveOrBinary(p))
                 .Take(500) // V5: increased from 200 to 500 for fairer baseline representation
                 .ToList();
 
             var snippets = new List<string>();
-            foreach (var fullPath in allPaths)
+            foreach (var fullPath in baselinePaths)
             {
                 try
                 {
@@ -555,7 +565,7 @@ public static class BenchmarkCommands
             baselineCache = new Core.Benchmarks.Agent.AgentContextPackage
             {
                 TaskDescription = taskDescription,
-                SelectedFilePaths = allPaths,
+                SelectedFilePaths = baselinePaths,
                 FileSnippets = snippets,
                 EstimatedTokens = tokenizer.CountTokens(string.Join("\n", snippets)),
             };
@@ -877,6 +887,39 @@ public static class BenchmarkCommands
 
     private static bool HasFlag(string[] args, string flag) =>
         args.Contains(flag, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// V6: Flags paths that should never be fed to a model in Baseline context —
+    /// secrets, binary blobs, lock/build artifacts, and huge minified/font files.
+    /// Mirrors CacheHub's indexing safety so the "without CacheHub" baseline stays fair.
+    /// </summary>
+    private static bool IsSensitiveOrBinary(string path)
+    {
+        var fn = System.IO.Path.GetFileName(path);
+        var ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
+        var name = fn.ToLowerInvariant();
+
+        // Secrets / auth
+        if (name is ".env" or ".env.local" or ".env.production" or "id_rsa" or "id_ed25519" or ".npmrc" or ".netrc")
+            return true;
+        if (ext is ".pem" or ".key" or ".pfx" or ".p12" or ".crt" or ".pub" or ".jks" or ".keystore")
+            return true;
+        if (name.Contains("secret") || name.Contains("credential") || name.Contains("apikey") || name.Contains("token"))
+            return true;
+
+        // Binary / non-text
+        if (ext is ".dll" or ".so" or ".dylib" or ".exe" or ".pdb" or ".pyd" or ".so" or ".a" or ".lib"
+            or ".png" or ".jpg" or ".jpeg" or ".gif" or ".svg" or ".webp" or ".ico" or ".bmp"
+            or ".ttf" or ".otf" or ".woff" or ".woff2" or ".eot"
+            or ".zip" or ".gz" or ".tar" or ".7z" or ".rar" or ".jar" or ".war" or ".parquet" or ".db" or ".sqlite")
+            return true;
+
+        // Generated / minified / lockfiles
+        if (fn.EndsWith(".min.js", StringComparison.OrdinalIgnoreCase) ||
+            name is "package-lock.json" or "yarn.lock" or "pnpm-lock.yaml" or ".DS_Store")
+            return true;
+        return false;
+    }
 
     /// <summary>
     /// Checks if a patch contains substantive code changes (not just comments/TODOs/whitespace).
