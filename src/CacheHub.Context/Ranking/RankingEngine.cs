@@ -320,4 +320,5 @@ public static class CandidateAggregator
             })
             .ToList();
     }
-}
+}\
+\

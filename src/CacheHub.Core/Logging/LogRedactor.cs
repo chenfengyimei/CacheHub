@@ -37,7 +37,10 @@ public static partial class LogRedactor
     public static string RedactPath(string path)
     {
         if (string.IsNullOrEmpty(path)) return path;
-        return Path.GetFileName(path) is { } name and not ""
+
+        // Normalize backslashes so Path.GetFileName works on all platforms
+        var normalized = path.Replace('\\', '/');
+        return Path.GetFileName(normalized) is { } name and not ""
             ? $".../{name}"
             : "[PATH]";
     }
