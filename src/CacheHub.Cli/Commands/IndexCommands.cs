@@ -224,11 +224,11 @@ public static class IndexCommands
                     relCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
                     relCmd.Parameters.AddWithValue("$fid", fileId);
                     relCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
-                    relCmd.Parameters.AddWithValue("$src", relation.Relation);
+                    relCmd.Parameters.AddWithValue("$src", string.IsNullOrEmpty(relation.SourceSymbol) ? relation.Relation : relation.SourceSymbol);
                     relCmd.Parameters.AddWithValue("$tgt", relation.TargetName);
                     relCmd.Parameters.AddWithValue("$rt", relation.RelationType.ToString());
                     relCmd.Parameters.AddWithValue("$conf", relation.Confidence.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                    relCmd.Parameters.AddWithValue("$line", DBNull.Value);
+                    relCmd.Parameters.AddWithValue("$line", relation.Line > 0 ? relation.Line : DBNull.Value);
                     relCmd.Parameters.AddWithValue("$source", relation.Source);
                     await relCmd.ExecuteNonQueryAsync();
                 }
@@ -519,11 +519,11 @@ public static class IndexCommands
                     relCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
                     relCmd.Parameters.AddWithValue("$fid", fileId);
                     relCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
-                    relCmd.Parameters.AddWithValue("$src", relation.Relation);
+                    relCmd.Parameters.AddWithValue("$src", string.IsNullOrEmpty(relation.SourceSymbol) ? relation.Relation : relation.SourceSymbol);
                     relCmd.Parameters.AddWithValue("$tgt", relation.TargetName);
                     relCmd.Parameters.AddWithValue("$rt", relation.RelationType.ToString());
                     relCmd.Parameters.AddWithValue("$conf", relation.Confidence.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                    relCmd.Parameters.AddWithValue("$line", DBNull.Value);
+                    relCmd.Parameters.AddWithValue("$line", relation.Line > 0 ? relation.Line : DBNull.Value);
                     relCmd.Parameters.AddWithValue("$source", relation.Source);
                     await relCmd.ExecuteNonQueryAsync();
                 }

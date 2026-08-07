@@ -250,6 +250,8 @@ public sealed partial class CSharpRegexParser : ICodeParser
                     TargetName = funcName,
                     Confidence = 0.5,
                     Source = Id,
+                    SourceSymbol = funcName,
+                    Line = i + 1,
                 });
             }
         }

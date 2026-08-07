@@ -192,6 +192,8 @@ public sealed partial class TypeScriptRegexParser : ICodeParser
                     TargetName = funcName,
                     Confidence = 0.5,
                     Source = Id,
+                    SourceSymbol = funcName,
+                    Line = i + 1,
                 });
             }
         }

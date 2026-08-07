@@ -81,6 +81,12 @@ public sealed record CodeRelation
     public required string TargetName { get; init; }
     public required double Confidence { get; init; } // 0..1
     public required string Source { get; init; } // parser name
+
+    /// <summary>The symbol in this file that has the relation (e.g., the caller). Empty if unknown.</summary>
+    public string SourceSymbol { get; init; } = "";
+
+    /// <summary>The line number where the relation occurs (1-based). 0 if unknown.</summary>
+    public int Line { get; init; }
 }
 
 /// <summary>

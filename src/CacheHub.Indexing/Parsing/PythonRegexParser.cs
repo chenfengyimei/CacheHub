@@ -226,6 +226,8 @@ public sealed partial class PythonRegexParser : ICodeParser
                     TargetName = funcName,
                     Confidence = 0.45,
                     Source = Id,
+                    SourceSymbol = funcName,
+                    Line = i + 1,
                 });
             }
         }
