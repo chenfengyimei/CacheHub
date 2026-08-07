@@ -45,6 +45,7 @@ if (args.Length == 0)
     Console.WriteLine("  scan <file|dir>                      Scan for secrets and sensitive files");
     Console.WriteLine("  init [path]                          Initialize CacheHub in a project directory");
     Console.WriteLine("  integration verify                 Verify installation and integration");
+    Console.WriteLine("  doctor [--json]                     Diagnose environment and installation");
     return 1;
 }
 
@@ -73,5 +74,6 @@ return args[0] switch
     "scan" => ScanCommands.Handle(args.AsSpan(1).ToArray()),
     "init" => await InitCommands.HandleAsync(args.AsSpan(1).ToArray()),
     "workflow" => await WorkflowCommands.HandleAsync(args.AsSpan(1).ToArray()),
+    "doctor" => DoctorCommands.Handle(args.AsSpan(1).ToArray()),
     _ => 1,
 };
