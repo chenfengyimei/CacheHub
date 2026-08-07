@@ -2,7 +2,8 @@
   "schemaVersion": 1,
   "project": "CacheHub",
   "currentPhase": "V4-PRODUCTION-TRUTH-CLOSURE-COMPLETE",
-  "currentTask": "V4 Production Truth Closure: 13/13 items complete. All P0+P1+P2 items fixed + Reverse Relation Recall + /v1/models fallback + BPE Tokenizer + Agent Benchmark framework. 838 tests passing.",
+  "currentPhase": "V4-PRODUCTION-TRUTH-CLOSURE-COMPLETE",
+  "currentTask": "V4 Production Truth Closure: 13/13 items complete. All P0+P1+P2 items fixed + Reverse Relation Recall + /v1/models fallback + BPE Tokenizer + Agent Benchmark framework + benchmark agent --compare (CacheHub vs Baseline). 842 tests passing.",
   "repository": {
     "branch": "main",
     "dirty": false,
@@ -10,7 +11,7 @@
   },
   "qualityGates": {
     "build": "pass (0 errors, 0 warnings, warnings-as-errors enabled)",
-    "unitTests": "pass (838/840, 2 skipped)",
+    "unitTests": "pass (842/844, 2 skipped)",
     "integrationTests": "pass (real SQLite + FTS5 + Context Engine pipeline + Snapshot Clone + Agent Benchmark)",
     "securityTests": "pass (path traversal, auth, XSS, secret scan, symlink, offline mode, unified export enforcement)",
     "format": "pass"
@@ -37,7 +38,7 @@
     "contextualCompletion": "Production Ready — CLI + API entry points, Gateway call implemented (Context→Prompt→Gateway→Model closed)",
     "securityEnforcement": "Production Ready — all export paths enforce SecurityPolicyEnforcer",
     "realBenchmark": "Production Ready — real ContextEngine, Recall@10 with Take(10), unified Tokenizer (BPE), Report aggregates persisted runs",
-    "agentBenchmark": "Framework Implemented — task→model→patch→test→cost loop with IAgentModelExecutor abstraction, 3 tests",
+    "agentBenchmark": "Production Ready — `cachehub benchmark agent` via Gateway + --compare (CacheHub vs Baseline full-repo), task→model→patch→cost, token/rounds/cost comparison",
     "treeSitter": "Scaffold — regex-baseline covers 13 languages",
     "lsp": "Scaffold",
     "crossPlatformCI": "Integrated — ubuntu/windows/macos matrix, push+PR triggers",
@@ -82,12 +83,12 @@
       "CacheHub.Gateway (server, provider, SSE, router, multi-provider config — separated from Core)",
       "CacheHub.Cli (CLI entry, 21 command groups)",
       "CacheHub.Desktop (Web UI, Minimal API, 17 routes)",
-      "CacheHub.Tests (838 tests)"
+      "CacheHub.Tests (842 tests)"
     ],
     "dependencyChain": "Core ← Storage, Indexing, Gateway; Context ← Core+Storage+Indexing; Cli/Desktop ← all",
     "databaseMigrations": 10
   },
   "totalAuditIssuesFixed": 62,
-  "testCount": 838,
-  "lastUpdated": "2026-08-07T22:20:00Z"
+  "testCount": 842,
+  "lastUpdated": "2026-08-07T23:15:00Z"
 }
