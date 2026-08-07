@@ -130,6 +130,112 @@ public class SqliteDatabaseTests
             throw new InvalidOperationException("Intentional failure");
         }
     }
+
+    [Fact]
+    public async Task Migration_UpgradeFromV5ToV9_SucceedsIncrementally()
+    {
+        // Test incremental upgrade: run migrations 1-5, verify, then run 6-9, verify
+        var dbPath = GetTempDbPath();
+        try
+        {
+            // Phase 1: Run only migrations 1-5 (older schema)
+            var factory1 = new SqliteConnectionFactory(dbPath);
+            var runner1 = new MigrationRunner(factory1, dbPath,
+            [
+                new Migration0001Initial(),
+                new Migration0002Fts5(),
+                new Migration0003ContextPackages(),
+                new Migration0004Feedback(),
+                new Migration0005ContextPackageDetails(),
+            ]);
+            runner1.Migrate();
+
+            // Verify schema v1: basic tables exist
+            using (var conn = factory1.CreateOpenConnection())
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT name FROM sqlite_master WHERE type IN ('table','view') ORDER BY name;";
+                var tables = new List<string>();
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                    tables.Add(reader.GetString(0));
+
+                Assert.Contains("workspaces", tables);
+                Assert.Contains("index_snapshots", tables);
+                Assert.Contains("files", tables);
+                Assert.Contains("context_packages", tables);
+                Assert.Contains("context_feedback", tables);
+
+                // V2 tables should NOT exist yet
+                Assert.DoesNotContain("file_symbols", tables);
+                Assert.DoesNotContain("file_imports", tables);
+                Assert.DoesNotContain("file_relations", tables);
+            }
+
+            // Verify migration version is 5
+            using (var conn2 = factory1.CreateOpenConnection())
+            {
+                using var cmd = conn2.CreateCommand();
+                cmd.CommandText = "SELECT MAX(version) FROM __schema_version WHERE applied = 1;";
+                var version = cmd.ExecuteScalar();
+                Assert.Equal(5L, Convert.ToInt64(version));
+            }
+
+            // Phase 2: Upgrade to v9 (run remaining migrations 6-9)
+            var factory2 = new SqliteConnectionFactory(dbPath);
+            var runner2 = new MigrationRunner(factory2, dbPath,
+            [
+                new Migration0001Initial(),
+                new Migration0002Fts5(),
+                new Migration0003ContextPackages(),
+                new Migration0004Feedback(),
+                new Migration0005ContextPackageDetails(),
+                new Migration0006SchemaV2(),
+                new Migration0007ContextPackageFields(),
+                new Migration0008ContextPackageFk(),
+                new Migration0009PersistentCache(),
+            ]);
+            runner2.Migrate();
+
+            // Verify upgrade: new tables now exist
+            using (var conn3 = factory2.CreateOpenConnection())
+            {
+                using var cmd = conn3.CreateCommand();
+                cmd.CommandText = "SELECT name FROM sqlite_master WHERE type IN ('table','view') ORDER BY name;";
+                var tables = new List<string>();
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                    tables.Add(reader.GetString(0));
+
+                // All original tables still exist
+                Assert.Contains("workspaces", tables);
+                Assert.Contains("files", tables);
+
+                // V2 tables now exist
+                Assert.Contains("file_symbols", tables);
+                Assert.Contains("file_imports", tables);
+                Assert.Contains("file_relations", tables);
+
+                // Cache tables from v9
+                Assert.Contains("cache_entries", tables);
+                Assert.Contains("cache_stats", tables);
+            }
+
+            // Verify final migration version is 9
+            using (var conn4 = factory2.CreateOpenConnection())
+            {
+                using var cmd = conn4.CreateCommand();
+                cmd.CommandText = "SELECT MAX(version) FROM __schema_version WHERE applied = 1;";
+                var version = cmd.ExecuteScalar();
+                Assert.Equal(9L, Convert.ToInt64(version));
+            }
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            TryDelete(dbPath);
+        }
+    }
 }
 
 [CollectionDefinition("SQLite")]
