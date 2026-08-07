@@ -44,6 +44,7 @@ public sealed class LocalHashEmbeddingProvider : IEmbeddingProvider
     /// <summary>
     /// Computes a 256-dimensional embedding using character n-gram hashing.
     /// Each n-gram maps to a bucket; values are accumulated and L2-normalized.
+    /// Uses FNV-1a hash for cross-process stability (GetHashCode is not stable).
     /// </summary>
     private float[] ComputeEmbedding(string text)
     {
@@ -65,8 +66,8 @@ public sealed class LocalHashEmbeddingProvider : IEmbeddingProvider
         foreach (var word in words)
         {
             if (word.Length < 2) continue;
-            var hash = word.GetHashCode();
-            var bucket = (hash % NumBuckets + NumBuckets) % NumBuckets;
+            var hash = StableHashFnv1a(word);
+            var bucket = (int)((hash % (uint)NumBuckets + (uint)NumBuckets) % (uint)NumBuckets);
             vector[bucket] += 0.5f;
         }
 
@@ -79,6 +80,23 @@ public sealed class LocalHashEmbeddingProvider : IEmbeddingProvider
         }
 
         return vector;
+    }
+
+    /// <summary>
+    /// FNV-1a hash: stable across processes and platforms.
+    /// Replaces string.GetHashCode() which is randomized per process in .NET.
+    /// Uses unchecked arithmetic — overflow is expected and part of the algorithm.
+    /// </summary>
+    private static uint StableHashFnv1a(string text)
+    {
+        const uint fnvOffset = 2166136261u;
+        const uint fnvPrime = 16777619u;
+        var hash = fnvOffset;
+        foreach (var c in text)
+        {
+            hash = unchecked((hash ^ (uint)c) * fnvPrime);
+        }
+        return hash;
     }
 }
 
