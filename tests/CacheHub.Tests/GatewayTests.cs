@@ -10,7 +10,8 @@ public class GatewayTests
     [Fact]
     public void CacheSafetyChecker_IsCacheable_ShouldAcceptSimpleRequest()
     {
-        var body = """{"model":"gpt-4","messages":[{"role":"user","content":"hello"}],"temperature":0.3}""";
+        // V5-W06: Only temperature == 0 (or not set) is cacheable
+        var body = """{"model":"gpt-4","messages":[{"role":"user","content":"hello"}],"temperature":0}""";
 
         Assert.True(CacheSafetyChecker.IsCacheable(body, "gpt-4"));
     }

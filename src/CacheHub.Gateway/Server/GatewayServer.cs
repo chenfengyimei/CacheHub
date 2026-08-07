@@ -214,8 +214,9 @@ public sealed class GatewayServer : IDisposable
         var sw = System.Diagnostics.Stopwatch.StartNew();
         Interlocked.Increment(ref _totalRequests);
 
-        // Cache key includes endpoint + model for isolation (R5-W005)
-        var requestHash = ComputeHash("/v1/chat/completions" + "|" + model + "|" + requestBody);
+        // V5-W06: Cache key includes endpoint + model + provider identity + request body
+        var providerFingerprint = string.Join("|", _config.GetAllProviders().Select(p => p.BaseUrl));
+        var requestHash = ComputeHash("/v1/chat/completions" + "|" + model + "|" + providerFingerprint + "|" + requestBody);
 
         // Check cache (only for non-streaming, cacheable requests)
         if (!isStream && _config.EnableCache && CacheSafetyChecker.IsCacheable(requestBody, model))
@@ -227,20 +228,22 @@ public sealed class GatewayServer : IDisposable
                 if (cached is not null)
                 {
                     var bodyBytes = _config.CacheStore.GetBlob(requestHash);
-                    var cachedBody = bodyBytes is not null
-                        ? System.Text.Encoding.UTF8.GetString(bodyBytes)
-                        : "";
-                    if (!string.IsNullOrEmpty(cachedBody))
+                    if (bodyBytes is not null && bodyBytes.Length > 0)
                     {
-                        Interlocked.Increment(ref _cacheHits);
-                        sw.Stop();
-                        LogRequest("cached", model, sw.Elapsed, 200, true, 0, 0);
-                        var cachedBytes = System.Text.Encoding.UTF8.GetBytes(cachedBody);
-                        resp.StatusCode = 200;
-                        resp.ContentType = "application/json";
-                        resp.ContentLength64 = cachedBytes.Length;
-                        await resp.OutputStream.WriteAsync(cachedBytes, ct);
-                        return;
+                        // V5-W07: Parse the cached envelope to extract body + usage
+                        var cachedEnvelope = TryParseCachedGatewayResponse(bodyBytes);
+                        if (cachedEnvelope is not null)
+                        {
+                            Interlocked.Increment(ref _cacheHits);
+                            sw.Stop();
+                            LogRequest("cached", model, sw.Elapsed, 200, true, cachedEnvelope.PromptTokens, cachedEnvelope.CompletionTokens);
+                            var cachedBytes = System.Text.Encoding.UTF8.GetBytes(cachedEnvelope.ResponseBody);
+                            resp.StatusCode = 200;
+                            resp.ContentType = "application/json";
+                            resp.ContentLength64 = cachedBytes.Length;
+                            await resp.OutputStream.WriteAsync(cachedBytes, ct);
+                            return;
+                        }
                     }
                 }
             }
@@ -317,13 +320,19 @@ public sealed class GatewayServer : IDisposable
             {
                 if (_config.CacheStore is not null)
                 {
-                    // Use persistent cache store
-                    var bodyBytes = System.Text.Encoding.UTF8.GetBytes(providerResponse.Body);
+                    // V5-W07: Store response + usage metadata as a JSON envelope
+                    var envelope = JsonSerializer.Serialize(new CachedGatewayResponse
+                    {
+                        ResponseBody = providerResponse.Body,
+                        PromptTokens = promptTokens,
+                        CompletionTokens = completionTokens,
+                    });
+                    var bodyBytes = System.Text.Encoding.UTF8.GetBytes(envelope);
                     _config.CacheStore.Put(new CacheEntry
                     {
                         Key = requestHash,
                         Type = CacheType.GatewayResponse,
-                        Version = "gateway-v1",
+                        Version = "gateway-v2",
                         CreatedAt = DateTimeOffset.UtcNow,
                         SizeBytes = bodyBytes.Length,
                         TtlSeconds = (int)CacheTtl.TotalSeconds,
@@ -788,4 +797,27 @@ public sealed class GatewayServer : IDisposable
         int StatusCode,
         string Body,
         System.Net.Http.Headers.HttpResponseHeaders? Headers = null);
+
+    /// <summary>
+    /// V5-W07: Envelope for persistent gateway cache — stores response body + usage metadata.
+    /// </summary>
+    public sealed record CachedGatewayResponse
+    {
+        public required string ResponseBody { get; init; }
+        public required int PromptTokens { get; init; }
+        public required int CompletionTokens { get; init; }
+    }
+
+    /// <summary>
+    /// V5-W07: Parse a cached gateway response envelope from blob bytes.
+    /// </summary>
+    private static CachedGatewayResponse? TryParseCachedGatewayResponse(byte[] blob)
+    {
+        try
+        {
+            var json = System.Text.Encoding.UTF8.GetString(blob);
+            return JsonSerializer.Deserialize<CachedGatewayResponse>(json);
+        }
+        catch { return null; }
+    }
 }

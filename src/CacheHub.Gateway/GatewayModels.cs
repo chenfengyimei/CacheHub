@@ -204,8 +204,8 @@ public static class CacheSafetyChecker
             if (root.TryGetProperty("tools", out _) || root.TryGetProperty("functions", out _))
                 return false;
 
-            // Reject if temperature is too high
-            if (root.TryGetProperty("temperature", out var temp) && temp.ValueKind == JsonValueKind.Number && temp.GetDouble() > 0.7)
+            // V5-W06: Only cache deterministic requests (temperature == 0 or not set)
+            if (root.TryGetProperty("temperature", out var temp) && temp.ValueKind == JsonValueKind.Number && temp.GetDouble() > 0)
                 return false;
 
             // Reject if stream is true (streaming responses not cached in v1)
