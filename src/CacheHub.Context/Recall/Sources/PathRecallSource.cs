@@ -706,6 +706,48 @@ public sealed class RelationRecallSource : IRecallSource
             }
         }
 
+        // Reverse relation recall: "who calls X?" — find files that reference matched symbols
+        if (context.ReverseRelationSearch is not null)
+        {
+            // Collect symbols from matched files to search as reverse targets
+            var reverseTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var path in context.AlreadyMatchedPaths)
+            {
+                var symbols = context.SymbolSearchDetailed?.Invoke(path);
+                if (symbols is not null)
+                {
+                    foreach (var s in symbols)
+                        reverseTargets.Add(s.Name);
+                }
+            }
+
+            // Also add task-extracted symbols
+            foreach (var sym in context.Task.ExtractedSymbols)
+                reverseTargets.Add(sym);
+
+            foreach (var target in reverseTargets)
+            {
+                var callers = context.ReverseRelationSearch(target);
+                foreach (var caller in callers)
+                {
+                    if (string.IsNullOrEmpty(caller.SourcePath)) continue;
+                    if (context.AlreadyMatchedPaths.Contains(caller.SourcePath)) continue;
+
+                    hits.Add(new RecallHit
+                    {
+                        NormalizedPath = caller.SourcePath,
+                        Source = SourceType,
+                        MatchedText = target,
+                        Confidence = 0.6,
+                        ScoreHints =
+                        [
+                            new ScoreHint { Value = 0.6, Feature = "TextMatch", Confidence = 0.6 },
+                        ],
+                    });
+                }
+            }
+        }
+
         return hits;
     }
 }

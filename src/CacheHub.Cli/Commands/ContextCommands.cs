@@ -226,7 +226,20 @@ public static class ContextCommands
                     Confidence = r.Confidence,
                 }).ToList();
             },
-            semanticSearch: SemanticReferenceHelper.CreateSemanticSearch(appData.Root, workspace.Id.Value));
+            semanticSearch: SemanticReferenceHelper.CreateSemanticSearch(appData.Root, workspace.Id.Value),
+            reverseRelationSearch: target =>
+            {
+                var querySvc = new SqliteIndexQueryService(factory);
+                var results = querySvc.GetFilesByRelationTargetAsync(snapshotId, target).GetAwaiter().GetResult();
+                return results.Select(r => new RelationHit
+                {
+                    TargetName = r.TargetName,
+                    RelationType = r.RelationType,
+                    Relation = r.Relation,
+                    Confidence = r.Confidence,
+                    SourcePath = r.NormalizedPath,
+                }).ToList();
+            });
 
         // Persist manifest
         var ctxRepo = new SqliteContextPackageRepository(factory);

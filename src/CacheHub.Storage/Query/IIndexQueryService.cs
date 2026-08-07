@@ -42,6 +42,9 @@ public interface IIndexQueryService
     /// <summary>Gets files that import a specific symbol (for import relation recall).</summary>
     Task<IReadOnlyList<string>> GetFilesByImportedSymbolAsync(IndexSnapshotId snapshotId, string symbolName, CancellationToken ct = default);
 
+    /// <summary>Gets files that call/reference a specific target symbol (reverse relation recall: "who calls X?").</summary>
+    Task<IReadOnlyList<RelationRecord>> GetFilesByRelationTargetAsync(IndexSnapshotId snapshotId, string targetSymbol, CancellationToken ct = default);
+
     /// <summary>Gets the snapshot status and file count.</summary>
     Task<SnapshotStatusRecord?> GetSnapshotStatusAsync(IndexSnapshotId snapshotId, CancellationToken ct = default);
 }
@@ -106,6 +109,8 @@ public sealed record RelationRecord
     public required string TargetName { get; init; }
     public required double Confidence { get; init; }
     public required string Source { get; init; }
+    /// <summary>File path (for reverse relation queries). Null for forward queries.</summary>
+    public string? NormalizedPath { get; init; }
 }
 
 /// <summary>
@@ -378,6 +383,37 @@ public sealed class SqliteIndexQueryService : IIndexQueryService
         while (await reader.ReadAsync(ct))
         {
             results.Add(reader.GetString(0));
+        }
+        return results;
+    }
+
+    public async Task<IReadOnlyList<RelationRecord>> GetFilesByRelationTargetAsync(IndexSnapshotId snapshotId, string targetSymbol, CancellationToken ct = default)
+    {
+        await using var conn = _factory.CreateOpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT r.relation_type, r.source_symbol, r.target_symbol, r.confidence, r.line, r.source, f.normalized_path
+            FROM file_relations r
+            INNER JOIN files f ON r.file_id = f.id
+            WHERE r.snapshot_id = $snap AND r.target_symbol = $target
+            ORDER BY f.normalized_path, r.line;
+            """;
+        cmd.Parameters.AddWithValue("$snap", snapshotId.Value);
+        cmd.Parameters.AddWithValue("$target", targetSymbol);
+
+        var results = new List<RelationRecord>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add(new RelationRecord
+            {
+                RelationType = reader.GetString(0),
+                Relation = reader.GetString(1),
+                TargetName = reader.GetString(2),
+                Confidence = reader.IsDBNull(3) ? 0 : double.TryParse(reader.GetString(3), System.Globalization.CultureInfo.InvariantCulture, out var c) ? c : 0,
+                Source = reader.IsDBNull(5) ? "" : reader.GetString(5),
+                NormalizedPath = reader.GetString(6),
+            });
         }
         return results;
     }

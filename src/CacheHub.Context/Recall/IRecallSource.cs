@@ -113,6 +113,9 @@ public sealed record RecallContext
     /// <summary>Relation search callback (queries file_relations table for a given file path).</summary>
     public Func<string, IReadOnlyList<RelationHit>>? RelationSearch { get; init; }
 
+    /// <summary>Reverse relation search callback: finds files that call/reference a target symbol ("who calls X?").</summary>
+    public Func<string, IReadOnlyList<RelationHit>>? ReverseRelationSearch { get; init; }
+
     /// <summary>Semantic search callback (queries historical references for similar tasks/errors).</summary>
     public Func<string, IReadOnlyList<SemanticHit>>? SemanticSearch { get; init; }
 
@@ -163,6 +166,8 @@ public sealed record RelationHit
     public required string RelationType { get; init; }
     public required string Relation { get; init; }
     public required double Confidence { get; init; }
+    /// <summary>For reverse relation search: the file path that calls/references the target.</summary>
+    public string? SourcePath { get; init; }
 }
 
 /// <summary>
