@@ -1,4 +1,5 @@
 using System.Text.Json;
+using CacheHub.Context.Cache;
 using CacheHub.Context.Engine;
 using CacheHub.Context.Export;
 using CacheHub.Context.Payload;
@@ -90,8 +91,9 @@ public static class ContextCommands
 
         // Build tokenizer registry
         var tokenizers = new Core.Tokens.TokenizerRegistry();
+        var cache = new ContextPackageCache();
 
-        var engine = new ContextEngine(tokenizers, secPolicy);
+        var engine = new ContextEngine(tokenizers, secPolicy, cache);
 
         // Query the real Active Snapshot from the database (not a random ID)
         var activeSnapshot = await GetActiveSnapshotAsync(factory, workspace.Id.Value);

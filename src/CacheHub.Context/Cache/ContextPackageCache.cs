@@ -7,6 +7,8 @@ namespace CacheHub.Context.Cache;
 
 /// <summary>
 /// Cache key components for a Context Package.
+/// Includes all factors that affect context output: task, snapshot, profile, budget,
+/// security, ignore rules, current file, git diff, model, and tokenizer.
 /// </summary>
 public sealed record CacheKey
 {
@@ -15,8 +17,9 @@ public sealed record CacheKey
     public required string ProfileHash { get; init; }
     public required string BudgetHash { get; init; }
     public required string SecurityHash { get; init; }
+    public required string ContextHash { get; init; }
 
-    public string FullKey => $"{TaskHash}|{SnapshotHash}|{ProfileHash}|{BudgetHash}|{SecurityHash}";
+    public string FullKey => $"{TaskHash}|{SnapshotHash}|{ProfileHash}|{BudgetHash}|{SecurityHash}|{ContextHash}";
 
     public static CacheKey Build(
         string task,
@@ -26,13 +29,18 @@ public sealed record CacheKey
         int contextTarget,
         int contextHardLimit,
         string? securityPolicyVersion,
-        string? ignoreRulesHash)
+        string? ignoreRulesHash,
+        string? currentFile = null,
+        string? gitDiffHash = null,
+        string? modelId = null,
+        string? tokenizerId = null)
     {
         var taskHash = Hash(task);
         var snapshotHash = Hash(indexSnapshotId);
         var profileHash = Hash($"{rankingProfileId}:{rankingProfileVersion}");
         var budgetHash = Hash($"{contextTarget}:{contextHardLimit}");
         var securityHash = Hash($"{securityPolicyVersion ?? "none"}|{ignoreRulesHash ?? "none"}");
+        var contextHash = Hash($"{currentFile ?? "none"}|{gitDiffHash ?? "none"}|{modelId ?? "none"}|{tokenizerId ?? "none"}");
 
         return new CacheKey
         {
@@ -41,6 +49,7 @@ public sealed record CacheKey
             ProfileHash = profileHash,
             BudgetHash = budgetHash,
             SecurityHash = securityHash,
+            ContextHash = contextHash,
         };
     }
 

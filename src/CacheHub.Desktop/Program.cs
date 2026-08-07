@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using CacheHub.Context.Cache;
 using CacheHub.Context.Engine;
 using CacheHub.Context.Explain;
 using CacheHub.Context.Parsing;
@@ -57,6 +58,7 @@ builder.Services.AddSingleton<SqliteConnectionFactory>(sp =>
 builder.Services.AddSingleton<IWorkspaceRepository, SqliteWorkspaceRepository>();
 builder.Services.AddSingleton<IContextPackageRepository, SqliteContextPackageRepository>();
 builder.Services.AddSingleton<IFeedbackRepository, SqliteFeedbackRepository>();
+builder.Services.AddSingleton<ContextPackageCache>();
 builder.Services.AddSingleton<ContextEngine>();
 
 // Security: force loopback binding only

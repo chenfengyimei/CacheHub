@@ -74,6 +74,10 @@ public sealed class ContextEngine
         // Cache: check if we already built this exact combination
         if (_cache is not null)
         {
+            var gitDiffHash = request.GitDiffFiles is { Count: > 0 }
+                ? string.Join(",", request.GitDiffFiles.OrderBy(p => p, StringComparer.Ordinal))
+                : null;
+
             var cacheKey = CacheKey.Build(
                 request.Task,
                 request.IndexSnapshotId.Value,
@@ -82,7 +86,11 @@ public sealed class ContextEngine
                 budget.ContextTarget,
                 budget.ContextHardLimit,
                 request.SecurityPolicyVersion,
-                request.IgnoreRulesHash);
+                request.IgnoreRulesHash,
+                request.CurrentFile,
+                gitDiffHash,
+                request.ModelId,
+                _tokenizers.Default.Id);
 
             var cached = _cache.TryGet(cacheKey);
             if (cached is not null)
@@ -186,6 +194,10 @@ public sealed class ContextEngine
         // Cache: store the built manifest for future identical requests
         if (_cache is not null)
         {
+            var gitDiffHash = request.GitDiffFiles is { Count: > 0 }
+                ? string.Join(",", request.GitDiffFiles.OrderBy(p => p, StringComparer.Ordinal))
+                : null;
+
             var storeKey = CacheKey.Build(
                 request.Task,
                 request.IndexSnapshotId.Value,
@@ -194,7 +206,11 @@ public sealed class ContextEngine
                 budget.ContextTarget,
                 budget.ContextHardLimit,
                 request.SecurityPolicyVersion,
-                request.IgnoreRulesHash);
+                request.IgnoreRulesHash,
+                request.CurrentFile,
+                gitDiffHash,
+                request.ModelId,
+                _tokenizers.Default.Id);
             _cache.Put(storeKey, manifest);
         }
 
