@@ -1,6 +1,6 @@
-using CacheHub.Core.Providers;
+using CacheHub.Gateway.Providers;
 
-namespace CacheHub.Core.Providers;
+namespace CacheHub.Gateway.Providers;
 
 /// <summary>
 /// Health status for a provider.

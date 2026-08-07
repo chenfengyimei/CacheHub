@@ -107,6 +107,11 @@ dotnet_diagnostic.CA1822.severity = none
 dotnet_diagnostic.IDE1006.severity = none
 dotnet_diagnostic.CA1305.severity = none
 
+# Gateway uses HttpListener async; ConfigureAwait not needed
+[**/CacheHub.Gateway/**]
+dotnet_diagnostic.CA2007.severity = none
+dotnet_diagnostic.CA1822.severity = none
+
 # Tests don't need ConfigureAwait
 [**/CacheHub.Tests/**]
 dotnet_diagnostic.CA2007.severity = none

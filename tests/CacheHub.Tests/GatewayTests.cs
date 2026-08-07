@@ -1,6 +1,6 @@
 using System.Text.Json;
 using CacheHub.Core.Caching;
-using CacheHub.Core.Gateway;
+using CacheHub.Gateway;
 
 namespace CacheHub.Tests;
 

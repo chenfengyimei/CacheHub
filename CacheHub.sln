@@ -1,4 +1,4 @@
-
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
@@ -18,6 +18,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CacheHub.Tests", "tests\CacheHub.Tests\CacheHub.Tests.csproj", "{3F819035-C645-4BE2-AA9F-22C1BD58E199}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CacheHub.Desktop", "src\CacheHub.Desktop\CacheHub.Desktop.csproj", "{5A2E807D-4B29-45FD-B463-2335EDDAB94D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CacheHub.Gateway", "src\CacheHub.Gateway\CacheHub.Gateway.csproj", "{23BAB3E8-E746-4D0F-9899-0A79F148C9CB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -113,6 +115,18 @@ Global
 		{5A2E807D-4B29-45FD-B463-2335EDDAB94D}.Release|x64.Build.0 = Release|Any CPU
 		{5A2E807D-4B29-45FD-B463-2335EDDAB94D}.Release|x86.ActiveCfg = Release|Any CPU
 		{5A2E807D-4B29-45FD-B463-2335EDDAB94D}.Release|x86.Build.0 = Release|Any CPU
+		{23BAB3E8-E746-4D0F-9899-0A79F148C9CB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{23BAB3E8-E746-4D0F-9899-0A79F148C9CB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{23BAB3E8-E746-4D0F-9899-0A79F148C9CB}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{23BAB3E8-E746-4D0F-9899-0A79F148C9CB}.Debug|x64.Build.0 = Debug|Any CPU
+		{23BAB3E8-E746-4D0F-9899-0A79F148C9CB}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{23BAB3E8-E746-4D0F-9899-0A79F148C9CB}.Debug|x86.Build.0 = Debug|Any CPU
+		{23BAB3E8-E746-4D0F-9899-0A79F148C9CB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{23BAB3E8-E746-4D0F-9899-0A79F148C9CB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{23BAB3E8-E746-4D0F-9899-0A79F148C9CB}.Release|x64.ActiveCfg = Release|Any CPU
+		{23BAB3E8-E746-4D0F-9899-0A79F148C9CB}.Release|x64.Build.0 = Release|Any CPU
+		{23BAB3E8-E746-4D0F-9899-0A79F148C9CB}.Release|x86.ActiveCfg = Release|Any CPU
+		{23BAB3E8-E746-4D0F-9899-0A79F148C9CB}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -125,5 +139,6 @@ Global
 		{95F583C6-1DC4-45B8-805A-266F5B26F316} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{3F819035-C645-4BE2-AA9F-22C1BD58E199} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{5A2E807D-4B29-45FD-B463-2335EDDAB94D} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{23BAB3E8-E746-4D0F-9899-0A79F148C9CB} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

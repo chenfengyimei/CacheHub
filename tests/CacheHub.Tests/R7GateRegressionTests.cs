@@ -1,5 +1,5 @@
 using CacheHub.Core.Caching;
-using CacheHub.Core.Gateway;
+using CacheHub.Gateway;
 using CacheHub.Storage.Caching;
 using CacheHub.Storage.Database;
 using CacheHub.Storage.Database.Migrations;
@@ -29,13 +29,13 @@ public class R7GateRegressionTests
         return factory;
     }
 
-    // R7 Gate: Process restart â†’ safe cache still hits
+    // R7 Gate: Process restart â†?safe cache still hits
     [Fact]
     public void Gate_RestartSafe_CacheStillHits()
     {
         var factory = SetupFactory();
 
-        // Simulate "first process" â€” put into cache
+        // Simulate "first process" â€?put into cache
         var store1 = new SqliteCacheStore(factory);
         store1.Put(new CacheEntry
         {
@@ -46,7 +46,7 @@ public class R7GateRegressionTests
             SizeBytes = 100,
         });
 
-        // Simulate "second process" â€” new store instance, same DB
+        // Simulate "second process" â€?new store instance, same DB
         var store2 = new SqliteCacheStore(factory);
         var result = store2.TryGet("restart-test", CacheType.Context);
 
@@ -54,7 +54,7 @@ public class R7GateRegressionTests
         Assert.Equal("restart-test", result.Key);
     }
 
-    // R7 Gate: File/policy change â†’ dependency cache correctly invalidates
+    // R7 Gate: File/policy change â†?dependency cache correctly invalidates
     [Fact]
     public void Gate_DependencyChange_InvalidatesCache()
     {
@@ -71,17 +71,17 @@ public class R7GateRegressionTests
             DependencyHash = "file-hash-v1",
         });
 
-        // Same dependency hash â†’ hit
+        // Same dependency hash â†?hit
         Assert.NotNull(store.TryGet("dep-test", CacheType.Context, "file-hash-v1"));
 
-        // Different dependency hash (file changed) â†’ miss + invalidated
+        // Different dependency hash (file changed) â†?miss + invalidated
         Assert.Null(store.TryGet("dep-test", CacheType.Context, "file-hash-v2"));
 
         // Should now be deleted
         Assert.Null(store.TryGet("dep-test", CacheType.Context, "file-hash-v1"));
     }
 
-    // R7 Gate: Failed/partial streaming/tool calls â†’ cannot enter cache
+    // R7 Gate: Failed/partial streaming/tool calls â†?cannot enter cache
     [Fact]
     public void Gate_ToolCallRequests_NotCached()
     {
@@ -124,7 +124,7 @@ public class R7GateRegressionTests
         Assert.False(CacheSafetyChecker.HasToolCalls(safeResponse));
     }
 
-    // R7 Gate: Cache corruption â†’ auto-isolate and fall back
+    // R7 Gate: Cache corruption â†?auto-isolate and fall back
     [Fact]
     public void Gate_CorruptedBlob_FallsBackGracefully()
     {
@@ -155,7 +155,7 @@ public class R7GateRegressionTests
         Assert.Null(blob);
     }
 
-    // R7 Gate: TTL expiry â†’ automatic invalidation
+    // R7 Gate: TTL expiry â†?automatic invalidation
     [Fact]
     public void Gate_TTLExpiry_AutoInvalidates()
     {

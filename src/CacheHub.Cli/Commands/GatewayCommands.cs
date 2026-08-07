@@ -1,5 +1,5 @@
-using CacheHub.Core.Gateway;
-using CacheHub.Core.Gateway.Server;
+using CacheHub.Gateway;
+using CacheHub.Gateway.Server;
 
 namespace CacheHub.Cli.Commands;
 

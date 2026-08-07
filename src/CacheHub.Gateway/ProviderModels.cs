@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace CacheHub.Core.Providers;
+namespace CacheHub.Gateway.Providers;
 
 /// <summary>
 /// Provider contract: request transformation, streaming, errors, model list, usage.

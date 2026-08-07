@@ -1,7 +1,7 @@
 using System.Net;
 using System.Text.Json;
 
-namespace CacheHub.Core.Gateway;
+namespace CacheHub.Gateway;
 
 /// <summary>
 /// Configuration for the Gateway process.

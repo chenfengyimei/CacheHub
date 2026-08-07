@@ -24,6 +24,7 @@
     <ProjectReference Include="..\..\src\CacheHub.Storage\CacheHub.Storage.csproj" />
     <ProjectReference Include="..\..\src\CacheHub.Indexing\CacheHub.Indexing.csproj" />
     <ProjectReference Include="..\..\src\CacheHub.Context\CacheHub.Context.csproj" />
+    <ProjectReference Include="..\..\src\CacheHub.Gateway\CacheHub.Gateway.csproj" />
     <ProjectReference Include="..\..\src\CacheHub.Cli\CacheHub.Cli.csproj" />
     <ProjectReference Include="..\..\src\CacheHub.Desktop\CacheHub.Desktop.csproj" />
   </ItemGroup>

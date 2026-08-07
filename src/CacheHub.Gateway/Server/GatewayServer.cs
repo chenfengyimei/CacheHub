@@ -2,9 +2,9 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Text.Json;
 using CacheHub.Core.Errors;
-using CacheHub.Core.Gateway;
+using CacheHub.Gateway;
 
-namespace CacheHub.Core.Gateway.Server;
+namespace CacheHub.Gateway.Server;
 
 /// <summary>
 /// Gateway HTTP server using HttpListener.

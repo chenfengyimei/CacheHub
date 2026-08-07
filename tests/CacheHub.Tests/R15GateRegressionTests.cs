@@ -3,7 +3,7 @@ using CacheHub.Core.Ecosystem;
 namespace CacheHub.Tests;
 
 /// <summary>
-/// R15 Gate: Long-term ecosystem â€” core works without enterprise, no cross-workspace leakage.
+/// R15 Gate: Long-term ecosystem â€?core works without enterprise, no cross-workspace leakage.
 /// </summary>
 public class R15GateRegressionTests
 {
@@ -15,7 +15,7 @@ public class R15GateRegressionTests
         var engine = new CacheHub.Context.Engine.ContextEngine();
         Assert.NotNull(engine);
 
-        using var server = new CacheHub.Core.Gateway.Server.GatewayServer(new CacheHub.Core.Gateway.GatewayConfig
+        using var server = new CacheHub.Gateway.Server.GatewayServer(new CacheHub.Gateway.GatewayConfig
         {
             ProviderBaseUrl = "https://api.example.com",
             ProviderApiKey = "test-key",

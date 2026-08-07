@@ -1,8 +1,8 @@
 using CacheHub.Context.Engine;
 using CacheHub.Context.Recall;
 using CacheHub.Core.Context;
-using CacheHub.Core.Gateway;
-using CacheHub.Core.Gateway.Server;
+using CacheHub.Gateway;
+using CacheHub.Gateway.Server;
 using CacheHub.Core.Identifiers;
 using CacheHub.Core.Workflow;
 
@@ -47,7 +47,7 @@ public class R9GateRegressionTests
             Port = 15310,
         });
 
-        // Gateway can be started and has an access token â€” it doesn't need Context Engine
+        // Gateway can be started and has an access token â€?it doesn't need Context Engine
         Assert.NotEmpty(server.AccessToken);
     }
 
@@ -63,7 +63,7 @@ public class R9GateRegressionTests
             CallGateway = false,
         };
 
-        // Simulate the workflow: build context â†’ no gateway call
+        // Simulate the workflow: build context â†?no gateway call
         var engine = new ContextEngine();
         var manifest = engine.Build(
             new ContextBuildRequest
@@ -96,7 +96,7 @@ public class R9GateRegressionTests
         Assert.True(resolution.IsUnique);
         Assert.Equal(wsId, resolution.WorkspaceId);
 
-        // Non-unique path â†’ error, not guess
+        // Non-unique path â†?error, not guess
         var nonUnique = WorkspaceResolution.NotUnique("Path matches 3 workspaces");
         Assert.False(nonUnique.IsUnique);
         Assert.Null(nonUnique.WorkspaceId);

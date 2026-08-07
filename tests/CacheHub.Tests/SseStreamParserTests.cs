@@ -1,4 +1,4 @@
-using CacheHub.Core.Gateway.Streaming;
+using CacheHub.Gateway.Streaming;
 
 namespace CacheHub.Tests;
 

@@ -1,9 +1,9 @@
 using System.Text.Json;
-using CacheHub.Core.Gateway;
-using CacheHub.Core.Providers;
+using CacheHub.Gateway;
+using CacheHub.Gateway.Providers;
 using CacheHub.Core.Tokens;
 
-namespace CacheHub.Core.Gateway.Streaming;
+namespace CacheHub.Gateway.Streaming;
 
 /// <summary>
 /// SSE (Server-Sent Events) frame for streaming responses.

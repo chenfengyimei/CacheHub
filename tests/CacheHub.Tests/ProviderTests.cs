@@ -1,4 +1,4 @@
-using CacheHub.Core.Providers;
+using CacheHub.Gateway.Providers;
 
 namespace CacheHub.Tests;
 
