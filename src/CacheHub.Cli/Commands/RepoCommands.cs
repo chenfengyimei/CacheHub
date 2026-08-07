@@ -1,3 +1,4 @@
+using System.Text.Json;
 using CacheHub.Core.Identifiers;
 using CacheHub.Core.Repository;
 using CacheHub.Core.Workspaces;
@@ -11,6 +12,8 @@ namespace CacheHub.Cli.Commands;
 
 public static class RepoCommands
 {
+    private static readonly JsonSerializerOptions _jsonOpts = new() { WriteIndented = true };
+
     public static async Task<int> HandleAsync(string[] args)
     {
         if (args.Length == 0)
@@ -225,8 +228,37 @@ public static class RepoCommands
 
         if (Directory.Exists(dest) && Directory.EnumerateFileSystemEntries(dest).Any())
         {
-            Console.Error.WriteLine($"  Destination already exists and is not empty: {dest}");
-            Console.Error.WriteLine("  Skipping clone. Use a different --dest or remove the directory.");
+            // V6: Security — verify .git remote matches the requested URL before continuing
+            var gitDir = Path.Combine(dest, ".git");
+            if (Directory.Exists(gitDir))
+            {
+                Console.Error.WriteLine($"  Destination already exists with a .git directory: {dest}");
+                var remoteResult = await git.ExecuteAsync(dest, ["config", "--get", "remote.origin.url"]);
+                if (remoteResult.Success)
+                {
+                    var existingRemote = remoteResult.Output.Trim();
+                    var normalizedExisting = existingRemote.Replace(".git", "", StringComparison.OrdinalIgnoreCase);
+                    var normalizedRequested = url.Replace(".git", "", StringComparison.OrdinalIgnoreCase);
+                    if (!string.Equals(normalizedExisting, normalizedRequested, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Console.Error.WriteLine($"  ERROR: Destination .git remote URL does not match requested URL!");
+                        Console.Error.WriteLine($"    Existing: {existingRemote}");
+                        Console.Error.WriteLine($"    Requested: {url}");
+                        Console.Error.WriteLine("  Use a different --dest or remove the existing directory.");
+                        return 1;
+                    }
+                    Console.Error.WriteLine("  Remote URL matches. Continuing with existing clone.");
+                }
+                else
+                {
+                    Console.Error.WriteLine("  Warning: Could not read remote URL from existing .git. Proceeding with caution.");
+                }
+            }
+            else
+            {
+                Console.Error.WriteLine($"  Destination already exists and is not empty (no .git): {dest}");
+                Console.Error.WriteLine("  Skipping clone. Use a different --dest or remove the directory.");
+            }
         }
         else
         {
@@ -249,10 +281,11 @@ public static class RepoCommands
             Console.Error.WriteLine("  Clone completed.");
         }
 
-        // Step 3: Detect
+        // Step 3: Detect + Generate Init Plan
         Console.Error.WriteLine($"[3/4] Detecting project type...");
         var detectEngine = new ProjectDetectionEngine();
         var detection = detectEngine.Detect(dest);
+        var initPlan = detectEngine.GeneratePlan(detection);
 
         if (detection.Components.Count > 0)
         {
@@ -263,6 +296,21 @@ public static class RepoCommands
         else
         {
             Console.Error.WriteLine("  No recognized project components found (files will still be indexed).");
+        }
+
+        // V6: Output Init Plan (missing tools, recommended actions, requires approval)
+        if (initPlan.Actions.Count > 0)
+        {
+            Console.Error.WriteLine($"  Init Plan ({initPlan.Actions.Count} action(s)):");
+            foreach (var action in initPlan.Actions)
+            {
+                Console.Error.WriteLine($"    [{action.Approval}] {action.Command} — {action.Purpose}");
+                if (action.Risks.Count > 0)
+                    Console.Error.WriteLine($"      Risks: {string.Join(", ", action.Risks)}");
+            }
+            if (initPlan.MissingTools.Count > 0)
+                Console.Error.WriteLine($"  Missing tools: {string.Join(", ", initPlan.MissingTools)}");
+            Console.Error.WriteLine("  ⚠ Do NOT auto-execute init plan commands without user approval.");
         }
 
         // Step 4: Import workspace
@@ -303,10 +351,23 @@ public static class RepoCommands
             Console.Error.WriteLine($"  Workspace: {workspace.Id.Value}");
             Console.Error.WriteLine($"  Path:      {dest}");
             Console.Error.WriteLine($"  Components: {detection.Components.Count}");
+            Console.Error.WriteLine($"  IsMonorepo: {detection.IsMonorepo}");
+            Console.Error.WriteLine($"  Recommended actions: {initPlan.Actions.Count}");
+            Console.Error.WriteLine($"  Missing tools: {initPlan.MissingTools.Count}");
             Console.Error.WriteLine();
             Console.Error.WriteLine("Next steps:");
             Console.Error.WriteLine($"  cachehub context build --workspace={workspace.Id.Value} --task=\"<your task>\"");
-            Console.WriteLine($"{{ \"bootstrapped\": true, \"workspaceId\": \"{workspace.Id.Value}\", \"path\": \"{dest.Replace('\\', '/')}\", \"components\": {detection.Components.Count} }}");
+            Console.WriteLine(JsonSerializer.Serialize(new
+            {
+                bootstrapped = true,
+                workspaceId = workspace.Id.Value,
+                path = dest.Replace('\\', '/'),
+                components = detection.Components.Count,
+                isMonorepo = detection.IsMonorepo,
+                missingTools = initPlan.MissingTools,
+                recommendedActions = initPlan.Actions.Select(a => new { command = a.Command, purpose = a.Purpose, risks = a.Risks }).ToList(),
+                requiresApproval = initPlan.Actions.Where(a => a.MayRunScripts || a.WritesToDisk).Select(a => a.Command).ToList(),
+            }, _jsonOpts));
         }
 
         return exitCode;

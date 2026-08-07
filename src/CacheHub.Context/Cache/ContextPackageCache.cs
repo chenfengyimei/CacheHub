@@ -38,6 +38,7 @@ public sealed record CacheKey
         string? gitDiffHash = null,
         string? modelId = null,
         string? tokenizerId = null,
+        string? tokenizerVersion = null,
         string? contextEngineVersion = null,
         string? chunkingStrategyVersion = null,
         string? taskParserVersion = null,
@@ -50,7 +51,8 @@ public sealed record CacheKey
         var profileHash = Hash($"{rankingProfileId}:{rankingProfileVersion}");
         var budgetHash = Hash($"{contextTarget}:{contextHardLimit}");
         var securityHash = Hash($"{securityPolicyVersion ?? "none"}|{ignoreRulesHash ?? "none"}");
-        var contextHash = Hash($"{currentFile ?? "none"}|{gitDiffHash ?? "none"}|{modelId ?? "none"}|{tokenizerId ?? "none"}");
+        // V6: include tokenizer version so cache invalidates when tokenizer logic changes
+        var contextHash = Hash($"{currentFile ?? "none"}|{gitDiffHash ?? "none"}|{modelId ?? "none"}|{tokenizerId ?? "none"}|v{tokenizerVersion ?? "none"}");
         // V5-W05: version hash ensures cache invalidation when any engine component is upgraded
         var versionHash = Hash($"{contextEngineVersion ?? "none"}|{chunkingStrategyVersion ?? "none"}|{taskParserVersion ?? "none"}|{tokenBudgetPolicyVersion ?? "none"}|{repoMapVersion ?? "none"}|{semanticStoreVersion ?? "none"}");
 

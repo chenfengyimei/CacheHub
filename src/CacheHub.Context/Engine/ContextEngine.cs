@@ -99,12 +99,13 @@ public sealed class ContextEngine
                 gitDiffHash,
                 request.ModelId,
                 tokenizer.Id,
+                tokenizer.Version,
                 "0.2.0-prealpha",
                 ChunkingStrategy.Version,
                 TaskParser.Version,
                 DefaultTokenBudgetPolicy.Version,
                 request.RepoMapVersion,
-                null);
+                "local-hash-embedding-1.0");
 
             var cached = _cache.TryGet(cacheKey);
             if (cached is not null)
@@ -221,12 +222,13 @@ public sealed class ContextEngine
                 gitDiffHash,
                 request.ModelId,
                 tokenizer.Id,
+                tokenizer.Version,
                 "0.2.0-prealpha",
                 ChunkingStrategy.Version,
                 TaskParser.Version,
                 DefaultTokenBudgetPolicy.Version,
                 request.RepoMapVersion,
-                null);
+                "local-hash-embedding-1.0");
             _cache.Put(storeKey, manifest);
         }
 

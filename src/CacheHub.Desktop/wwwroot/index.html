@@ -227,6 +227,7 @@
 
 <script>
 // Auth token management — stored in localStorage, set via Settings page
+// V6: Auto-authenticate on page load via HttpOnly session cookie
 function getAuthToken() { return localStorage.getItem('cachehub_token') || ''; }
 function setAuthToken(token) { localStorage.setItem('cachehub_token', token); }
 
@@ -237,6 +238,14 @@ async function api(path, opts) {
     const res = await fetch(path, { ...opts, headers });
     return res.json();
 }
+
+// V6: Auto-init session cookie on page load (no manual token copy needed)
+async function autoInitAuth() {
+    try {
+        await fetch('/api/v1/auth/init', { method: 'POST' });
+    } catch (e) { /* fail silently — user can still set token manually */ }
+}
+autoInitAuth();
 
 function showPage(id) {
     document.querySelectorAll('.page').forEach(p => p.style.display = 'none');

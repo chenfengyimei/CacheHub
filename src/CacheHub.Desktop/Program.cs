@@ -102,21 +102,37 @@ builder.WebHost.UseUrls("http://127.0.0.1:5099");
 var app = builder.Build();
 
 // Security: API authentication middleware — all /api/ routes require a valid bearer token
+// V6: Also accept HttpOnly session cookie for same-origin GUI auto-authentication
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path.Value;
     if (path is not null && path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
     {
+        // V6: /api/v1/auth/init is excluded — it's the bootstrap endpoint that sets the cookie
+        if (path.Equals("/api/v1/auth/init", StringComparison.OrdinalIgnoreCase))
+        {
+            await next();
+            return;
+        }
+
 #if DEBUG
         // In debug mode, allow requests without token if no Authorization header is present
         // This is for development convenience — production builds always require the token
 #endif
         var authHeader = context.Request.Headers.Authorization.ToString();
-        if (string.IsNullOrEmpty(authHeader) || !authHeader.Equals($"Bearer {accessToken}", StringComparison.OrdinalIgnoreCase))
+        var cookieToken = context.Request.Cookies["cachehub_session"];
+
+        var isAuthenticated = false;
+        if (!string.IsNullOrEmpty(authHeader) && authHeader.Equals($"Bearer {accessToken}", StringComparison.OrdinalIgnoreCase))
+            isAuthenticated = true;
+        else if (!string.IsNullOrEmpty(cookieToken) && cookieToken.Equals(accessToken, StringComparison.Ordinal))
+            isAuthenticated = true;
+
+        if (!isAuthenticated)
         {
             context.Response.StatusCode = 401;
             context.Response.ContentType = "application/json";
-            await context.Response.WriteAsync($"{{\"error\":\"Unauthorized\",\"code\":\"AUTH_REQUIRED\",\"hint\":\"Use Authorization: Bearer <token> header. Token was printed to console on startup.\"}}");
+            await context.Response.WriteAsync($"{{\"error\":\"Unauthorized\",\"code\":\"AUTH_REQUIRED\",\"hint\":\"Call POST /api/v1/auth/init to get a session cookie, or use Authorization: Bearer <token> header.\"}}");
             return;
         }
 
@@ -363,6 +379,20 @@ static async Task IndexWorkspaceAsync(SqliteConnectionFactory factory, Workspace
     await setActiveCmd.ExecuteNonQueryAsync();
     await activateTx.CommitAsync();
 }
+
+// V6: Auto-authentication endpoint — sets HttpOnly session cookie for same-origin GUI
+// Eliminates the need for users to manually copy/paste the access token.
+app.MapPost("/api/v1/auth/init", (HttpContext ctx) =>
+{
+    ctx.Response.Cookies.Append("cachehub_session", accessToken, new CookieOptions
+    {
+        HttpOnly = true,
+        SameSite = SameSiteMode.Strict,
+        Secure = false, // loopback HTTP is fine — we only bind 127.0.0.1
+        Expires = DateTimeOffset.UtcNow.AddHours(24),
+    });
+    return Results.Ok(new { authenticated = true, message = "Session cookie set." });
+});
 
 // === Capabilities ===
 app.MapGet("/api/v1/capabilities", () => Results.Ok(new CapabilityDiscovery
