@@ -630,3 +630,71 @@ public sealed class DirectoryFallbackRecallSource : IRecallSource
             fileName.Equals("Startup.cs", StringComparison.OrdinalIgnoreCase);
     }
 }
+
+/// <summary>
+/// Relation recall source: expands from matched files to their call/reference targets.
+/// Queries file_relations table for each matched file, then finds files defining the target symbols.
+/// Enables "who calls this?" and "what does this file depend on?" recall.
+/// </summary>
+public sealed class RelationRecallSource : IRecallSource
+{
+    public RecallSource SourceType => RecallSource.Relation;
+    public bool IsEnabled { get; init; } = true;
+
+    public IReadOnlyList<RecallHit> Recall(RecallContext context)
+    {
+        var hits = new List<RecallHit>();
+        if (!IsEnabled || context.RelationSearch is null) return hits;
+        if (context.AlreadyMatchedPaths.Count == 0) return hits;
+
+        // Collect all target symbols from relations of matched files
+        var targetSymbols = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var path in context.AlreadyMatchedPaths)
+        {
+            var relations = context.RelationSearch(path);
+            foreach (var rel in relations)
+            {
+                if (!string.IsNullOrEmpty(rel.TargetName))
+                {
+                    if (!targetSymbols.TryGetValue(rel.TargetName, out var existing) || rel.Confidence > existing)
+                        targetSymbols[rel.TargetName] = rel.Confidence;
+                }
+            }
+        }
+
+        // Also check task-extracted symbols as relation targets
+        foreach (var sym in context.Task.ExtractedSymbols)
+        {
+            if (!targetSymbols.ContainsKey(sym))
+                targetSymbols[sym] = 0.5;
+        }
+
+        // Find files that define the target symbols
+        var symbolSearch = context.SymbolSearch;
+        if (symbolSearch is null) return hits;
+
+        foreach (var (target, confidence) in targetSymbols)
+        {
+            var definingPaths = symbolSearch(target);
+            foreach (var defPath in definingPaths)
+            {
+                if (context.AlreadyMatchedPaths.Contains(defPath)) continue;
+
+                hits.Add(new RecallHit
+                {
+                    NormalizedPath = defPath,
+                    Source = SourceType,
+                    MatchedText = target,
+                    Confidence = Math.Max(confidence, 0.5),
+                    ScoreHints =
+                    [
+                        new ScoreHint { Value = confidence, Feature = "TextMatch", Confidence = confidence },
+                    ],
+                });
+            }
+        }
+
+        return hits;
+    }
+}

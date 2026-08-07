@@ -110,6 +110,9 @@ public sealed record RecallContext
     /// <summary>Import search callback (queries file_imports table).</summary>
     public Func<string, IReadOnlyList<string>>? ImportSearch { get; init; }
 
+    /// <summary>Relation search callback (queries file_relations table for a given file path).</summary>
+    public Func<string, IReadOnlyList<RelationHit>>? RelationSearch { get; init; }
+
     /// <summary>Paths already matched by earlier sources (for expansion).</summary>
     public IReadOnlySet<string> AlreadyMatchedPaths { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 }
@@ -145,4 +148,16 @@ public sealed record SymbolHit
     public required int StartLine { get; init; }
     public required int EndLine { get; init; }
     public required bool ExactMatch { get; init; }
+}
+
+/// <summary>
+/// A relation hit: a relation found in a file pointing to a target symbol.
+/// Used by RelationRecallSource to expand call/reference chains.
+/// </summary>
+public sealed record RelationHit
+{
+    public required string TargetName { get; init; }
+    public required string RelationType { get; init; }
+    public required string Relation { get; init; }
+    public required double Confidence { get; init; }
 }

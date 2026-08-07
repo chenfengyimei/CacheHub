@@ -481,6 +481,18 @@ app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextE
                 EndLine = r.EndLine,
                 ExactMatch = r.ExactMatch,
             }).ToList();
+        },
+        relationSearch: filePath =>
+        {
+            var querySvc = new CacheHub.Storage.Query.SqliteIndexQueryService(factory);
+            var results = querySvc.GetFileRelationsAsync(activeSnapshotId, filePath).GetAwaiter().GetResult();
+            return results.Select(r => new CacheHub.Context.Recall.RelationHit
+            {
+                TargetName = r.TargetName,
+                RelationType = r.RelationType,
+                Relation = r.Relation,
+                Confidence = r.Confidence,
+            }).ToList();
         });
 
     await ctxRepo.SaveAsync(manifest);

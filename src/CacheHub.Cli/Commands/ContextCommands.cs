@@ -147,6 +147,18 @@ public static class ContextCommands
                     EndLine = r.EndLine,
                     ExactMatch = r.ExactMatch,
                 }).ToList();
+            },
+            relationSearch: filePath =>
+            {
+                var querySvc = new SqliteIndexQueryService(factory);
+                var results = querySvc.GetFileRelationsAsync(snapshotId, filePath).GetAwaiter().GetResult();
+                return results.Select(r => new RelationHit
+                {
+                    TargetName = r.TargetName,
+                    RelationType = r.RelationType,
+                    Relation = r.Relation,
+                    Confidence = r.Confidence,
+                }).ToList();
             });
 
         // Persist manifest

@@ -18,6 +18,7 @@ public enum RecallSource
     TestRelation,
     ConfigRelation,
     ImportRelation,
+    Relation,
     DirectoryFallback,
 }
 
@@ -94,6 +95,7 @@ public sealed class RecallPipeline
         new GitDiffRecallSource(),
         new CurrentFileRecallSource(),
         new ImportRelationRecallSource(),
+        new RelationRecallSource(),
         new TestRelationRecallSource(),
         new ConfigRelationRecallSource(),
         new RepoMapRecallSource(),
@@ -112,7 +114,8 @@ public sealed class RecallPipeline
         Func<string, IReadOnlyList<string>>? symbolSearch = null,
         Func<string, IReadOnlyList<string>>? importSearch = null,
         RecallOptions? options = null,
-        Func<string, IReadOnlyList<SymbolHit>>? symbolSearchDetailed = null)
+        Func<string, IReadOnlyList<SymbolHit>>? symbolSearchDetailed = null,
+        Func<string, IReadOnlyList<RelationHit>>? relationSearch = null)
     {
         var opts = options ?? new RecallOptions();
         var builders = new Dictionary<string, CandidateFileBuilder>(StringComparer.OrdinalIgnoreCase);
@@ -129,6 +132,7 @@ public sealed class RecallPipeline
             SymbolSearch = symbolSearch,
             SymbolSearchDetailed = symbolSearchDetailed,
             ImportSearch = importSearch,
+            RelationSearch = relationSearch,
             AlreadyMatchedPaths = matchedPaths,
         };
 
