@@ -34,3 +34,47 @@ jobs:
 
       - name: Format check
         run: dotnet format CacheHub.sln --verify-no-changes --no-restore
+
+  # V6: Publish + binary smoke — proves the shipped executable actually builds & runs,
+  # not just that source compiles (review #29: "source tests pass" ≠ "binary runs").
+  publish-smoke:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Publish single-file CLI
+        run: |
+          mkdir -p publish
+          dotnet publish src/CacheHub.Cli/CacheHub.Cli.csproj -c Release -o publish --nologo \
+            -p:PublishSingleFile=true \
+            -p:SelfContained=false
+
+      - name: Publish Desktop (Web UI)
+        run: dotnet publish src/CacheHub.Desktop/CacheHub.Desktop.csproj -c Release -o publish-desktop --nologo
+
+      - name: Smoke — CLI version
+        run: ./publish/cachehub version
+
+      - name: Smoke — CLI capabilities
+        run: ./publish/cachehub capabilities --output=json
+
+      - name: Smoke — CLI doctor (diagnose env, tolerate env-dependent exit)
+        run: |
+          ./publish/cachehub doctor > /tmp/doctor.out 2>&1 || true
+          grep -qi "cachehub" /tmp/doctor.out || { echo "doctor produced no output"; exit 1; }
+
+      - name: Smoke — Desktop binary present
+        run: |
+          if [ -f publish-desktop/CacheHub.Desktop ]; then
+            echo "Desktop binary present"
+          else
+            ls publish-desktop
+            echo "ERROR: Desktop binary missing"
+            exit 1
+          fi
