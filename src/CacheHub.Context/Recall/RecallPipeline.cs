@@ -110,7 +110,8 @@ public sealed class RecallPipeline
         Func<string, IReadOnlyList<FtsMatch>>? ftsSearch = null,
         Func<string, IReadOnlyList<string>>? symbolSearch = null,
         Func<string, IReadOnlyList<string>>? importSearch = null,
-        RecallOptions? options = null)
+        RecallOptions? options = null,
+        Func<string, IReadOnlyList<SymbolHit>>? symbolSearchDetailed = null)
     {
         var opts = options ?? new RecallOptions();
         var builders = new Dictionary<string, CandidateFileBuilder>(StringComparer.OrdinalIgnoreCase);
@@ -125,6 +126,7 @@ public sealed class RecallPipeline
             CurrentFile = currentFile,
             FtsSearch = ftsSearch,
             SymbolSearch = symbolSearch,
+            SymbolSearchDetailed = symbolSearchDetailed,
             ImportSearch = importSearch,
             AlreadyMatchedPaths = matchedPaths,
         };

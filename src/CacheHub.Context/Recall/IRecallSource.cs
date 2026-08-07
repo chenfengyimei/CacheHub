@@ -101,8 +101,11 @@ public sealed record RecallContext
     /// <summary>FTS search callback (snapshot-bound).</summary>
     public Func<string, IReadOnlyList<FtsMatch>>? FtsSearch { get; init; }
 
-    /// <summary>Symbol search callback (queries file_symbols table).</summary>
+    /// <summary>Symbol search callback (queries file_symbols table, returns paths only).</summary>
     public Func<string, IReadOnlyList<string>>? SymbolSearch { get; init; }
+
+    /// <summary>Detailed symbol search callback (returns full symbol info with line ranges).</summary>
+    public Func<string, IReadOnlyList<SymbolHit>>? SymbolSearchDetailed { get; init; }
 
     /// <summary>Import search callback (queries file_imports table).</summary>
     public Func<string, IReadOnlyList<string>>? ImportSearch { get; init; }
@@ -128,4 +131,18 @@ public interface IRecallSource
     /// Executes recall for this source. Returns hits for files matched by this source only.
     /// </summary>
     IReadOnlyList<RecallHit> Recall(RecallContext context);
+}
+
+/// <summary>
+/// A symbol search result with line range information.
+/// Used by SymbolRecallSource to generate LineAnchors.
+/// </summary>
+public sealed record SymbolHit
+{
+    public required string NormalizedPath { get; init; }
+    public required string Name { get; init; }
+    public required string Kind { get; init; }
+    public required int StartLine { get; init; }
+    public required int EndLine { get; init; }
+    public required bool ExactMatch { get; init; }
 }

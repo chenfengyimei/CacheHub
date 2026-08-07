@@ -124,8 +124,42 @@ public sealed class SymbolRecallSource : IRecallSource
     {
         var hits = new List<RecallHit>();
 
-        if (context.SymbolSearch is not null)
+        // R4-W004: Use detailed symbol search (with line ranges) when available
+        if (context.SymbolSearchDetailed is not null)
         {
+            foreach (var symbol in context.Task.ExtractedSymbols)
+            {
+                var results = context.SymbolSearchDetailed(symbol);
+                foreach (var sym in results)
+                {
+                    hits.Add(new RecallHit
+                    {
+                        NormalizedPath = sym.NormalizedPath,
+                        Source = SourceType,
+                        MatchedText = sym.Name,
+                        Confidence = sym.ExactMatch ? 1.0 : 0.7,
+                        ScoreHints =
+                        [
+                            new ScoreHint { Value = sym.ExactMatch ? 1.0 : 0.7, Feature = "SymbolMatch", Confidence = sym.ExactMatch ? 1.0 : 0.7 },
+                        ],
+                        Anchors =
+                        [
+                            new LineAnchor
+                            {
+                                StartLine = sym.StartLine,
+                                EndLine = sym.EndLine,
+                                AnchorType = AnchorType.SymbolDefinition,
+                                MatchedText = sym.Name,
+                                Confidence = sym.ExactMatch ? 1.0 : 0.7,
+                            },
+                        ],
+                    });
+                }
+            }
+        }
+        else if (context.SymbolSearch is not null)
+        {
+            // Fallback: path-only symbol search (no line ranges)
             foreach (var symbol in context.Task.ExtractedSymbols)
             {
                 var matchingPaths = context.SymbolSearch(symbol);

@@ -132,6 +132,20 @@ public static class ContextCommands
                 var querySvc = new SqliteIndexQueryService(factory);
                 var results = querySvc.GetFilesByImportedSymbolAsync(snapshotId, symbol).GetAwaiter().GetResult();
                 return results.ToList();
+            },
+            symbolSearchDetailed: symbol =>
+            {
+                var querySvc = new SqliteIndexQueryService(factory);
+                var results = querySvc.SearchSymbolsAsync(snapshotId, symbol).GetAwaiter().GetResult();
+                return results.Select(r => new SymbolHit
+                {
+                    NormalizedPath = r.NormalizedPath,
+                    Name = r.Name,
+                    Kind = r.Kind,
+                    StartLine = r.StartLine,
+                    EndLine = r.EndLine,
+                    ExactMatch = r.ExactMatch,
+                }).ToList();
             });
 
         // Persist manifest

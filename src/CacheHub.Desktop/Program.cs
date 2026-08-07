@@ -352,6 +352,20 @@ app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextE
             var querySvc = new CacheHub.Storage.Query.SqliteIndexQueryService(factory);
             var results = querySvc.GetFilesByImportedSymbolAsync(activeSnapshotId, symbol).GetAwaiter().GetResult();
             return results.ToList();
+        },
+        symbolSearchDetailed: symbol =>
+        {
+            var querySvc = new CacheHub.Storage.Query.SqliteIndexQueryService(factory);
+            var results = querySvc.SearchSymbolsAsync(activeSnapshotId, symbol).GetAwaiter().GetResult();
+            return results.Select(r => new CacheHub.Context.Recall.SymbolHit
+            {
+                NormalizedPath = r.NormalizedPath,
+                Name = r.Name,
+                Kind = r.Kind,
+                StartLine = r.StartLine,
+                EndLine = r.EndLine,
+                ExactMatch = r.ExactMatch,
+            }).ToList();
         });
 
     await ctxRepo.SaveAsync(manifest);
