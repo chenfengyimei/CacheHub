@@ -114,7 +114,7 @@ public static class ContextCommands
             },
             () => indexedFiles,
             path => ResolveFileContent(workspace.RootPath, path),
-            path => ResolveFileHash(factory, snapshotId, path),
+            path => ResolveFileHash(factory, snapshotId, path, workspace.RootPath),
             ftsSearch: keyword =>
             {
                 var querySvc = new SqliteIndexQueryService(factory);
@@ -573,7 +573,7 @@ public static class ContextCommands
         return null;
     }
 
-    private static string ResolveFileHash(SqliteConnectionFactory factory, IndexSnapshotId snapshotId, string path)
+    private static string ResolveFileHash(SqliteConnectionFactory factory, IndexSnapshotId snapshotId, string path, string? rootPath = null)
     {
         // Try to read the hash from the files table first
         using var conn = factory.CreateOpenConnection();
@@ -582,8 +582,22 @@ public static class ContextCommands
         cmd.Parameters.AddWithValue("$snap", snapshotId.Value);
         cmd.Parameters.AddWithValue("$path", path);
         var result = cmd.ExecuteScalar();
-        if (result is string hash && !string.IsNullOrEmpty(hash) && hash != "pending")
+        if (result is string hash && !string.IsNullOrEmpty(hash) && hash != "pending" && !hash.StartsWith("fp:", StringComparison.Ordinal))
             return hash;
+
+        // DB hash is pending/fingerprint: compute real SHA-256 from file on disk
+        if (rootPath is not null)
+        {
+            var fullPath = System.IO.Path.Combine(rootPath, path.Replace('/', System.IO.Path.DirectorySeparatorChar));
+            if (System.IO.File.Exists(fullPath))
+            {
+                try
+                {
+                    return CacheHub.Indexing.Hashing.FileHasher.ComputeFullHashAsync(fullPath).GetAwaiter().GetResult();
+                }
+                catch { /* fall through to pending */ }
+            }
+        }
         return "sha256:pending";
     }
 

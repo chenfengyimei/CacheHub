@@ -148,7 +148,7 @@ static async Task<IndexSnapshotId?> GetActiveSnapshotIdAsync(SqliteConnectionFac
     return result is string id ? IndexSnapshotId.Parse(id) : null;
 }
 
-static string ResolveFileHashFromDb(SqliteConnectionFactory factory, IndexSnapshotId snapshotId, string path)
+static string ResolveFileHashFromDb(SqliteConnectionFactory factory, IndexSnapshotId snapshotId, string path, string? rootPath = null)
 {
     using var conn = factory.CreateOpenConnection();
     using var cmd = conn.CreateCommand();
@@ -156,8 +156,22 @@ static string ResolveFileHashFromDb(SqliteConnectionFactory factory, IndexSnapsh
     cmd.Parameters.AddWithValue("$snap", snapshotId.Value);
     cmd.Parameters.AddWithValue("$path", path);
     var result = cmd.ExecuteScalar();
-    if (result is string hash && !string.IsNullOrEmpty(hash) && hash != "pending")
+    if (result is string hash && !string.IsNullOrEmpty(hash) && hash != "pending" && !hash.StartsWith("fp:", StringComparison.Ordinal))
         return hash;
+
+    // DB hash is pending/fingerprint: compute real SHA-256 from file on disk
+    if (rootPath is not null)
+    {
+        var fullPath = SafeResolvePath(rootPath, path);
+        if (fullPath is not null && File.Exists(fullPath))
+        {
+            try
+            {
+                return CacheHub.Indexing.Hashing.FileHasher.ComputeFullHashAsync(fullPath).GetAwaiter().GetResult();
+            }
+            catch { /* fall through to pending */ }
+        }
+    }
     return "sha256:pending";
 }
 
@@ -430,7 +444,7 @@ app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextE
             var fullPath = SafeResolvePath(ws.RootPath, path);
             return fullPath is not null && File.Exists(fullPath) ? File.ReadAllTextAsync(fullPath).GetAwaiter().GetResult() : "";
         },
-        path => ResolveFileHashFromDb(factory, activeSnapshotId, path),
+        path => ResolveFileHashFromDb(factory, activeSnapshotId, path, ws.RootPath),
         ftsSearch: keyword =>
         {
             var querySvc = new CacheHub.Storage.Query.SqliteIndexQueryService(factory);
