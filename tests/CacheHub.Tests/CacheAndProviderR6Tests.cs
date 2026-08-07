@@ -201,7 +201,7 @@ public class CacheAndProviderR6Tests
             EstimatedCostUsd = 0.015m,
         }));
 
-        // Record 0.01 more â€?would exceed 0.02 daily limit
+        // Record 0.01 more éˆ¥?would exceed 0.02 daily limit
         Assert.False(tracker.TryRecord(new UsageRecord
         {
             Timestamp = DateTimeOffset.UtcNow,

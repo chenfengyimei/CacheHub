@@ -41,19 +41,19 @@ public class R8GateRegressionTests
     [Fact]
     public void CacheSafetyChecker_RejectsUnsafeForCaching()
     {
-        // Tool calls â†?not cacheable
+        // Tool calls éˆ«?not cacheable
         Assert.False(CacheSafetyChecker.IsCacheable(
             """{"model":"gpt-4","tools":[{"type":"function","function":{"name":"test"}}],"messages":[]}""", "gpt-4"));
 
-        // Streaming â†?not cacheable
+        // Streaming éˆ«?not cacheable
         Assert.False(CacheSafetyChecker.IsCacheable(
             """{"model":"gpt-4","stream":true,"messages":[]}""", "gpt-4"));
 
-        // High temperature â†?not cacheable
+        // High temperature éˆ«?not cacheable
         Assert.False(CacheSafetyChecker.IsCacheable(
             """{"model":"gpt-4","temperature":2.0,"messages":[]}""", "gpt-4"));
 
-        // No-cache metadata â†?not cacheable
+        // No-cache metadata éˆ«?not cacheable
         Assert.False(CacheSafetyChecker.IsCacheable(
             """{"model":"gpt-4","metadata":{"no_cache":true},"messages":[]}""", "gpt-4"));
     }
@@ -172,7 +172,7 @@ public class R8GateRegressionTests
         {
             // Gateway is running
         }
-        // Gateway disposed â€?Context Engine should still work
+        // Gateway disposed éˆ¥?Context Engine should still work
         var manifest = engine.Build(
             new CacheHub.Context.Engine.ContextBuildRequest
             {

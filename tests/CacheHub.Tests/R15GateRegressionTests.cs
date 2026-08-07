@@ -3,7 +3,7 @@ using CacheHub.Core.Ecosystem;
 namespace CacheHub.Tests;
 
 /// <summary>
-/// R15 Gate: Long-term ecosystem â€?core works without enterprise, no cross-workspace leakage.
+/// R15 Gate: Long-term ecosystem éˆ¥?core works without enterprise, no cross-workspace leakage.
 /// </summary>
 public class R15GateRegressionTests
 {
