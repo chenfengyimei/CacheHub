@@ -1,4 +1,5 @@
 using CacheHub.Context.Budget;
+using CacheHub.Context.Cache;
 using CacheHub.Context.Chunking;
 using CacheHub.Context.Parsing;
 using CacheHub.Context.Ranking;
@@ -42,11 +43,13 @@ public sealed class ContextEngine
     private readonly SelectionEngine _selection = new();
     private readonly TokenizerRegistry _tokenizers;
     private readonly SecurityPolicyEnforcer? _securityEnforcer;
+    private readonly ContextPackageCache? _cache;
 
-    public ContextEngine(TokenizerRegistry? tokenizers = null, SecurityPolicy? securityPolicy = null)
+    public ContextEngine(TokenizerRegistry? tokenizers = null, SecurityPolicy? securityPolicy = null, ContextPackageCache? cache = null)
     {
         _tokenizers = tokenizers ?? new TokenizerRegistry();
         _securityEnforcer = securityPolicy is not null ? new SecurityPolicyEnforcer(securityPolicy) : null;
+        _cache = cache;
     }
 
     /// <summary>
@@ -66,6 +69,25 @@ public sealed class ContextEngine
     {
         var budget = (request.Budget ?? DefaultTokenBudgetPolicy.Create()).ValidateOrThrow();
         var profile = request.RankingProfile ?? DefaultRankingProfile.Create();
+
+        // Cache: check if we already built this exact combination
+        if (_cache is not null)
+        {
+            var cacheKey = CacheKey.Build(
+                request.Task,
+                request.IndexSnapshotId.Value,
+                profile.Id,
+                profile.Version,
+                budget.ContextTarget,
+                budget.ContextHardLimit,
+                request.SecurityPolicyVersion,
+                request.IgnoreRulesHash);
+
+            var cached = _cache.TryGet(cacheKey);
+            if (cached is not null)
+                return cached;
+        }
+
         var tokenizer = request.ModelId is not null
             ? _tokenizers.GetForModel(request.ModelId)
             : _tokenizers.Default;
@@ -159,6 +181,21 @@ public sealed class ContextEngine
             RepoMapVersion = request.RepoMapVersion,
             CreatedAt = DateTimeOffset.UtcNow,
         };
+
+        // Cache: store the built manifest for future identical requests
+        if (_cache is not null)
+        {
+            var storeKey = CacheKey.Build(
+                request.Task,
+                request.IndexSnapshotId.Value,
+                profile.Id,
+                profile.Version,
+                budget.ContextTarget,
+                budget.ContextHardLimit,
+                request.SecurityPolicyVersion,
+                request.IgnoreRulesHash);
+            _cache.Put(storeKey, manifest);
+        }
 
         return manifest;
     }
