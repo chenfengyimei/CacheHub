@@ -3,8 +3,6 @@ namespace CacheHub.Context.Ranking;
 /// <summary>
 /// Feature scores for a candidate file, each normalized to 0..1.
 /// Only includes features that are actually implemented and populated.
-/// Unimplemented features (dependency graph, test mapping, config relations)
-/// are intentionally excluded to avoid false claims.
 /// </summary>
 public sealed record FeatureScores
 {
@@ -14,6 +12,26 @@ public sealed record FeatureScores
     public double GitDiff { get; init; }
     public double CurrentFileRelation { get; init; }
     public double RecentChange { get; init; }
+
+    /// <summary>
+    /// Import relation signal: files that import matched symbols.
+    /// </summary>
+    public double ImportRelation { get; init; }
+
+    /// <summary>
+    /// Test relation signal: test files related to matched source files.
+    /// </summary>
+    public double TestRelation { get; init; }
+
+    /// <summary>
+    /// Config relation signal: config files in directories of matched files.
+    /// </summary>
+    public double ConfigRelation { get; init; }
+
+    /// <summary>
+    /// Directory fallback signal: file was included as a safe fallback.
+    /// </summary>
+    public double DirectoryFallback { get; init; }
 
     /// <summary>
     /// Size efficiency signal: 0..1. Larger files score lower (prefer compact files).
@@ -41,28 +59,32 @@ public sealed record RankingProfile
 /// </summary>
 public sealed record FeatureWeights
 {
-    public double SymbolMatch { get; init; } = 0.30;
-    public double TextMatch { get; init; } = 0.22;
-    public double PathMatch { get; init; } = 0.15;
-    public double GitDiff { get; init; } = 0.13;
-    public double CurrentFileRelation { get; init; } = 0.08;
-    public double RecentChange { get; init; } = 0.07;
-    public double SizeEfficiency { get; init; } = 0.05;
+    public double SymbolMatch { get; init; } = 0.24;
+    public double TextMatch { get; init; } = 0.18;
+    public double PathMatch { get; init; } = 0.12;
+    public double GitDiff { get; init; } = 0.10;
+    public double CurrentFileRelation { get; init; } = 0.06;
+    public double RecentChange { get; init; } = 0.06;
+    public double ImportRelation { get; init; } = 0.08;
+    public double TestRelation { get; init; } = 0.06;
+    public double ConfigRelation { get; init; } = 0.04;
+    public double SizeEfficiency { get; init; } = 0.06;
 
     public double Sum => SymbolMatch + TextMatch + PathMatch + GitDiff +
-        CurrentFileRelation + RecentChange + SizeEfficiency;
+        CurrentFileRelation + RecentChange + ImportRelation +
+        TestRelation + ConfigRelation + SizeEfficiency;
 }
 
 /// <summary>
-/// Default ranking profile (deterministic-v2, version 4).
-/// Redistributes weight from unimplemented features to implemented ones.
+/// Default ranking profile (deterministic-v2, version 5).
+/// Includes relation sources (import/test/config) with appropriate weights.
 /// </summary>
 public static class DefaultRankingProfile
 {
     public static RankingProfile Create() => new()
     {
         Id = "deterministic-v2",
-        Version = 4,
+        Version = 5,
         Weights = new FeatureWeights(),
     };
 }
@@ -158,6 +180,11 @@ public sealed class RankingEngine
         var currentFileRelation = currentFile is not null &&
             candidate.NormalizedPath.EndsWith(currentFile, StringComparison.OrdinalIgnoreCase) ? 1.0 : 0.0;
 
+        var importRelation = candidate.Sources.Contains(Recall.RecallSource.ImportRelation) ? 1.0 : 0.0;
+        var testRelation = candidate.Sources.Contains(Recall.RecallSource.TestRelation) ? 1.0 : 0.0;
+        var configRelation = candidate.Sources.Contains(Recall.RecallSource.ConfigRelation) ? 1.0 : 0.0;
+        var directoryFallback = candidate.Sources.Contains(Recall.RecallSource.DirectoryFallback) ? 1.0 : 0.0;
+
         return new FeatureScores
         {
             SymbolMatch = Math.Min(symbolMatch, 1.0),
@@ -166,6 +193,10 @@ public sealed class RankingEngine
             GitDiff = gitDiff,
             CurrentFileRelation = currentFileRelation,
             RecentChange = recentChange,
+            ImportRelation = importRelation,
+            TestRelation = testRelation,
+            ConfigRelation = configRelation,
+            DirectoryFallback = directoryFallback,
             // Absolute size in bytes; normalized later to 0..1 (larger = less efficient)
             SizeEfficiency = candidate.Size,
         };
@@ -179,7 +210,6 @@ public sealed class RankingEngine
     {
         if (raw.Count == 0) return [];
 
-        // Min-max for each feature
         var maxSymbol = raw.Max(f => f.SymbolMatch);
         var maxText = raw.Max(f => f.TextMatch);
         var maxSize = raw.Max(f => f.SizeEfficiency);
@@ -189,7 +219,6 @@ public sealed class RankingEngine
 
         return raw.Select(f =>
         {
-            // Inverted size efficiency: smaller files get higher scores
             var sizeEfficiency = maxSize > minSize ? 1.0 - ((f.SizeEfficiency - minSize) / (maxSize - minSize)) : 1.0;
 
             return new FeatureScores
@@ -200,6 +229,10 @@ public sealed class RankingEngine
                 GitDiff = f.GitDiff,
                 CurrentFileRelation = f.CurrentFileRelation,
                 RecentChange = f.RecentChange,
+                ImportRelation = f.ImportRelation,
+                TestRelation = f.TestRelation,
+                ConfigRelation = f.ConfigRelation,
+                DirectoryFallback = f.DirectoryFallback,
                 SizeEfficiency = sizeEfficiency,
             };
         }).ToList();
@@ -214,7 +247,14 @@ public sealed class RankingEngine
             + Math.Min(features.GitDiff * w.GitDiff, profile.GitDiffMaxBonus)
             + features.CurrentFileRelation * w.CurrentFileRelation
             + features.RecentChange * w.RecentChange
+            + features.ImportRelation * w.ImportRelation
+            + features.TestRelation * w.TestRelation
+            + features.ConfigRelation * w.ConfigRelation
             + features.SizeEfficiency * w.SizeEfficiency;
+
+        // Directory fallback candidates get a small penalty
+        if (features.DirectoryFallback > 0)
+            score *= 0.1;
 
         return Math.Round(Math.Min(score, 1.0), 4);
     }
@@ -233,6 +273,10 @@ public sealed class RankingEngine
         if (features.GitDiff > 0) reasons.Add($"Git Diff ({features.GitDiff:F2}×{w.GitDiff})");
         if (features.CurrentFileRelation > 0) reasons.Add("当前文件");
         if (features.RecentChange > 0) reasons.Add("最近修改");
+        if (features.ImportRelation > 0) reasons.Add($"导入关系 ({features.ImportRelation:F2}×{w.ImportRelation})");
+        if (features.TestRelation > 0) reasons.Add($"测试关联 ({features.TestRelation:F2}×{w.TestRelation})");
+        if (features.ConfigRelation > 0) reasons.Add($"配置关联 ({features.ConfigRelation:F2}×{w.ConfigRelation})");
+        if (features.DirectoryFallback > 0) reasons.Add("目录降级");
         if (features.SizeEfficiency > 0.5) reasons.Add($"体积小 ({candidate.Size} bytes)");
 
         return reasons.Count > 0 ? reasons : ["低相关"];
