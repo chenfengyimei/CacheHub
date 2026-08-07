@@ -497,11 +497,17 @@ app.MapPost("/api/v1/context/{id}/expand", async (string id, ExpandApiRequest re
     var expander = new ContextExpander();
     var result = expander.ExpandByFile(id, targetPath, content, req.Reason ?? "API expand");
 
+    // Create and persist child revision package
+    var revision = expander.CreateRevision(manifest, result);
+    await ctxRepo.SaveAsync(revision);
+
     return Results.Ok(new
     {
-        contextId = id,
+        contextId = revision.Id.Value,
+        parentContextId = id,
         addedItems = result.AddedItems.Select(i => new { path = i.Path, mode = i.Mode.ToString(), content = i.Content.Length }),
         additionalTokens = result.AdditionalTokens,
+        cumulativeTokens = revision.Budget.ActualEstimate,
         reason = result.Reason,
     });
 });
