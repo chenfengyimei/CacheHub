@@ -329,6 +329,9 @@ public static class BenchmarkCommands
         var model = GetOpt(args, "--model") ?? "gpt-4o-mini";
         var maxRounds = int.TryParse(GetOpt(args, "--rounds"), out var r) ? r : 2;
         var compare = HasFlag(args, "--compare");
+        // V6: Real test — apply patch to git worktree and run build/test command
+        var realTest = HasFlag(args, "--real-test");
+        var testCommand = GetOpt(args, "--test-command") ?? "dotnet test";
 
         if (string.IsNullOrEmpty(wsId))
         {
@@ -521,10 +524,66 @@ public static class BenchmarkCommands
             return baselineCache;
         }
 
-        // Test runner: evaluate the model's patch for real code content.
-        // A valid patch must contain substantive code (not just comments/TODOs/whitespace).
+        // Test runner: evaluate the model's patch.
+        // V6: With --real-test, apply the patch to a temp git worktree and run the real test command.
+        // Success comes from actual build/test exit code, not just "contains code".
+        Core.Benchmarks.Agent.GitWorktreePatchTester? worktreeTester = null;
+        if (realTest)
+        {
+            try
+            {
+                Console.Error.WriteLine("  Using real git worktree test (--real-test)...");
+                worktreeTester = new Core.Benchmarks.Agent.GitWorktreePatchTester();
+                var wtPath = worktreeTester.CreateWorktree(workspace.RootPath, "HEAD");
+                Console.Error.WriteLine($"  Worktree: {wtPath}");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"  Warning: Could not create worktree for real testing: {ex.Message}");
+                Console.Error.WriteLine("  Falling back to substantial-code evaluation.");
+                worktreeTester = null;
+            }
+        }
+
+        var finalWorktree = worktreeTester;
         Task<Core.Benchmarks.Agent.AgentTestResult> EvaluatePatch(string patch)
         {
+            // Real test path: apply patch to worktree and run real test command
+            if (finalWorktree is not null)
+            {
+                try
+                {
+                    // Reset the worktree between patches (apply patch is cumulative-safe)
+                    finalWorktree.Reset();
+                    // Recreate a fresh worktree for each attempt
+                    var wtPath = finalWorktree.CreateWorktree(workspace.RootPath, "HEAD");
+                    _ = wtPath;
+                    var applied = finalWorktree.ApplyPatch(patch);
+                    if (!applied)
+                    {
+                        return Task.FromResult(new Core.Benchmarks.Agent.AgentTestResult
+                        {
+                            Success = false,
+                            Passed = 0,
+                            Total = 1,
+                            ErrorMessage = "Patch failed to apply cleanly (git apply)",
+                        });
+                    }
+                    return Task.FromResult(finalWorktree.RunTests("dotnet", "test -c Release"));
+                }
+                catch (Exception ex)
+                {
+                    return Task.FromResult(new Core.Benchmarks.Agent.AgentTestResult
+                    {
+                        Success = false,
+                        Passed = 0,
+                        Total = 1,
+                        ErrorMessage = ex.Message,
+                    });
+                }
+            }
+
+            // Fallback: substantive-code heuristic
             var valid = !string.IsNullOrWhiteSpace(patch)
                 && patch.Trim() != "```"
                 && ContainsSubstantiveCode(patch);
@@ -621,6 +680,12 @@ public static class BenchmarkCommands
             Console.Error.WriteLine($"Agent Benchmark failed: {ex.Message}");
             Console.Error.WriteLine("  Is the Gateway running? Start it with 'cachehub gateway start --provider-url=...'");
             return 1;
+        }
+        finally
+        {
+            // V6: Clean up git worktree used for real build/test verification
+            (worktreeTester as IDisposable)?.Dispose();
+            worktreeTester = null;
         }
     }
 
