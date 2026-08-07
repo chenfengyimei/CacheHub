@@ -44,4 +44,6 @@ public enum ErrorCode
     // Gateway
     GatewayUnavailable = 7001,
     ProviderError = 7002,
+    AuthRequired = 7003,
+    RequestTooLarge = 7004,
 }

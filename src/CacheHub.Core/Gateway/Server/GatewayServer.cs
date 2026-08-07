@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Text.Json;
+using CacheHub.Core.Errors;
 using CacheHub.Core.Gateway;
 
 namespace CacheHub.Core.Gateway.Server;
@@ -96,7 +97,7 @@ public sealed class GatewayServer : IDisposable
             {
                 resp.StatusCode = 401;
                 resp.ContentType = "application/json";
-                var errBytes = System.Text.Encoding.UTF8.GetBytes("{\"error\":{\"message\":\"Unauthorized\",\"code\":\"AUTH_REQUIRED\"}}");
+                var errBytes = System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(ErrorEnvelope.From(ErrorCode.AuthRequired, "Unauthorized")));
                 resp.ContentLength64 = errBytes.Length;
                 await resp.OutputStream.WriteAsync(errBytes, ct);
                 return;
@@ -130,7 +131,7 @@ public sealed class GatewayServer : IDisposable
         catch (Exception ex)
         {
             resp.StatusCode = 500;
-            var errorJson = JsonSerializer.Serialize(new { error = new { message = ex.Message } });
+            var errorJson = JsonSerializer.Serialize(ErrorEnvelope.From(ErrorCode.ProviderError, ex.Message));
             var bytes = System.Text.Encoding.UTF8.GetBytes(errorJson);
             resp.ContentLength64 = bytes.Length;
             await resp.OutputStream.WriteAsync(bytes, ct);
@@ -163,7 +164,7 @@ public sealed class GatewayServer : IDisposable
         {
             resp.StatusCode = 413;
             resp.ContentType = "application/json";
-            var errBytes = System.Text.Encoding.UTF8.GetBytes("{\"error\":{\"message\":\"Request too large\",\"code\":\"REQUEST_TOO_LARGE\"}}");
+            var errBytes = System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(ErrorEnvelope.From(ErrorCode.RequestTooLarge, "Request too large")));
             resp.ContentLength64 = errBytes.Length;
             await resp.OutputStream.WriteAsync(errBytes, ct);
             return;
@@ -367,7 +368,7 @@ public sealed class GatewayServer : IDisposable
         {
             resp.StatusCode = 413;
             resp.ContentType = "application/json";
-            var errBytes = System.Text.Encoding.UTF8.GetBytes("{\"error\":{\"message\":\"Request too large\",\"code\":\"REQUEST_TOO_LARGE\"}}");
+            var errBytes = System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(ErrorEnvelope.From(ErrorCode.RequestTooLarge, "Request too large")));
             resp.ContentLength64 = errBytes.Length;
             await resp.OutputStream.WriteAsync(errBytes, ct);
             return;
