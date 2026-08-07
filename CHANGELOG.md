@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.0-prealpha] — 2026-08-07
 
+### Final P1 Gap Closure (2026-08-07)
+
+Closed the last 4 PARTIALLY FIXED P1 issues. All 22 P1 issues now fully resolved (0 OPEN, 0 PARTIAL).
+
+#### Production Fixes
+- **IDX-P1-002**: `ConsistencyReconciler.IsModified` now computes real SHA-256 content hash when size+mtime match, detecting same-size mutations
+- **IDX-P1-003**: `IgnoreRuleEngine` uses `PathComparer.PhysicalPathComparison` (platform-aware case sensitivity) instead of hardcoded `OrdinalIgnoreCase`
+- **IDX-P1-005**: `RefreshAsync` rewritten to three-phase batch transaction (collect → single-transaction write → separate FTS), matching `BuildAsync` pattern
+- **CTX-P1-001**: `SelectionEngine.Select` and `ChunkingStrategy.Chunk` accept optional `ITokenizer?`, using real token counting when available (fallback to chars/4)
+
+#### Tests
+- 2 new Reconciler tests: same-size-same-mtime mutation detection via content hash, unchanged-when-hash-matches
+
+Test count: 759 → 761.
+
 ### P1 Gap Fix Round (2026-08-07)
 
 Second audit-driven round: verified all 22 P1 issues (13 FIXED, 8 PARTIALLY FIXED, 0 OPEN) and closed the remaining gaps with production fixes and real verification tests.
