@@ -723,4 +723,77 @@ public class ParserFixtureTests
         Assert.Equal("1.0", parser.Version);
         Assert.Equal("php-regex-baseline", parser.Id);
     }
+
+    // === Ruby Parser Tests ===
+
+    [Fact]
+    public void Ruby_ShouldExtractClassAndMethods()
+    {
+        var code = """
+            class UserService
+              def handle_request
+                return
+              end
+
+              def compute_score(data)
+                return 0
+              end
+            end
+            """;
+        var result = new RubyRegexParser().Parse(code, "user_service.rb");
+
+        Assert.Contains(result.Symbols, s => s.Name == "UserService" && s.Kind == SymbolKind.Class);
+        Assert.Contains(result.Symbols, s => s.Name == "handle_request" && s.Kind == SymbolKind.Method);
+        Assert.Contains(result.Symbols, s => s.Name == "compute_score" && s.Kind == SymbolKind.Method);
+    }
+
+    [Fact]
+    public void Ruby_ShouldExtractRequires()
+    {
+        var code = """
+            require 'json'
+            require_relative 'config'
+            """;
+        var result = new RubyRegexParser().Parse(code, "app.rb");
+
+        Assert.Contains(result.Imports, i => i.Module == "json");
+        Assert.Contains(result.Imports, i => i.Module == "config");
+        Assert.Contains(result.Relations, r => r.Relation == "imports" && r.TargetName == "json");
+    }
+
+    [Fact]
+    public void Ruby_ShouldExtractInheritance()
+    {
+        var code = """
+            class AdminUser < User
+            end
+            """;
+        var result = new RubyRegexParser().Parse(code, "admin_user.rb");
+
+        Assert.Contains(result.Relations, r => r.Relation == "inherits" && r.TargetName == "User");
+    }
+
+    [Fact]
+    public void Ruby_ShouldExtractModule()
+    {
+        var code = """
+            module Auth
+              def authenticate
+                return
+              end
+            end
+            """;
+        var result = new RubyRegexParser().Parse(code, "auth.rb");
+
+        Assert.Contains(result.Symbols, s => s.Name == "Auth" && s.Kind == SymbolKind.Namespace);
+        Assert.Contains(result.Symbols, s => s.Name == "authenticate" && s.Kind == SymbolKind.Method);
+    }
+
+    [Fact]
+    public void Ruby_ParserVersion_ShouldBe1()
+    {
+        var parser = new RubyRegexParser();
+        Assert.Equal("1.0", parser.Version);
+        Assert.Equal("ruby-regex-baseline", parser.Id);
+    }
 }

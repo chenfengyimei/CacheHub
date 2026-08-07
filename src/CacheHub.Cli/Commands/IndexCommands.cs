@@ -685,6 +685,7 @@ public static class IndexCommands
             ".java" => new JavaRegexParser(),
             ".c" or ".h" or ".cpp" or ".hpp" or ".cc" or ".cxx" => new CppRegexParser(),
             ".php" => new PhpRegexParser(),
+            ".rb" => new RubyRegexParser(),
             ".md" or ".markdown" => new MarkdownParser(),
             _ => new TextParser(),
         };
