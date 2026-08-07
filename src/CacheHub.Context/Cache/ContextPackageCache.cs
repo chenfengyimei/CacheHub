@@ -9,7 +9,9 @@ namespace CacheHub.Context.Cache;
 /// <summary>
 /// Cache key components for a Context Package.
 /// Includes all factors that affect context output: task, snapshot, profile, budget,
-/// security, ignore rules, current file, git diff, model, and tokenizer.
+/// security, ignore rules, current file, git diff, model, tokenizer, and all engine version stamps.
+/// V5-W05: Added engine/chunking/parser/budget/repomap/semantic version factors to prevent
+/// stale cache hits across code upgrades.
 /// </summary>
 public sealed record CacheKey
 {
@@ -19,8 +21,9 @@ public sealed record CacheKey
     public required string BudgetHash { get; init; }
     public required string SecurityHash { get; init; }
     public required string ContextHash { get; init; }
+    public required string VersionHash { get; init; }
 
-    public string FullKey => $"{TaskHash}|{SnapshotHash}|{ProfileHash}|{BudgetHash}|{SecurityHash}|{ContextHash}";
+    public string FullKey => $"{TaskHash}|{SnapshotHash}|{ProfileHash}|{BudgetHash}|{SecurityHash}|{ContextHash}|{VersionHash}";
 
     public static CacheKey Build(
         string task,
@@ -34,7 +37,13 @@ public sealed record CacheKey
         string? currentFile = null,
         string? gitDiffHash = null,
         string? modelId = null,
-        string? tokenizerId = null)
+        string? tokenizerId = null,
+        string? contextEngineVersion = null,
+        string? chunkingStrategyVersion = null,
+        string? taskParserVersion = null,
+        string? tokenBudgetPolicyVersion = null,
+        string? repoMapVersion = null,
+        string? semanticStoreVersion = null)
     {
         var taskHash = Hash(task);
         var snapshotHash = Hash(indexSnapshotId);
@@ -42,6 +51,8 @@ public sealed record CacheKey
         var budgetHash = Hash($"{contextTarget}:{contextHardLimit}");
         var securityHash = Hash($"{securityPolicyVersion ?? "none"}|{ignoreRulesHash ?? "none"}");
         var contextHash = Hash($"{currentFile ?? "none"}|{gitDiffHash ?? "none"}|{modelId ?? "none"}|{tokenizerId ?? "none"}");
+        // V5-W05: version hash ensures cache invalidation when any engine component is upgraded
+        var versionHash = Hash($"{contextEngineVersion ?? "none"}|{chunkingStrategyVersion ?? "none"}|{taskParserVersion ?? "none"}|{tokenBudgetPolicyVersion ?? "none"}|{repoMapVersion ?? "none"}|{semanticStoreVersion ?? "none"}");
 
         return new CacheKey
         {
@@ -51,6 +62,7 @@ public sealed record CacheKey
             BudgetHash = budgetHash,
             SecurityHash = securityHash,
             ContextHash = contextHash,
+            VersionHash = versionHash,
         };
     }
 

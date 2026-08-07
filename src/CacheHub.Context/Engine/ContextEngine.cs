@@ -73,6 +73,11 @@ public sealed class ContextEngine
         var budget = (request.Budget ?? DefaultTokenBudgetPolicy.Create()).ValidateOrThrow();
         var profile = request.RankingProfile ?? DefaultRankingProfile.Create();
 
+        // V5-W05: Resolve model-specific tokenizer BEFORE building cache key
+        var tokenizer = request.ModelId is not null
+            ? _tokenizers.GetForModel(request.ModelId)
+            : _tokenizers.Default;
+
         // Cache: check if we already built this exact combination
         if (_cache is not null)
         {
@@ -92,16 +97,18 @@ public sealed class ContextEngine
                 request.CurrentFile,
                 gitDiffHash,
                 request.ModelId,
-                _tokenizers.Default.Id);
+                tokenizer.Id,
+                "0.2.0-prealpha",
+                ChunkingStrategy.Version,
+                TaskParser.Version,
+                DefaultTokenBudgetPolicy.Version,
+                request.RepoMapVersion,
+                null);
 
             var cached = _cache.TryGet(cacheKey);
             if (cached is not null)
                 return cached;
         }
-
-        var tokenizer = request.ModelId is not null
-            ? _tokenizers.GetForModel(request.ModelId)
-            : _tokenizers.Default;
 
         var parsedTask = _taskParser.Parse(request.Task);
         var candidates = _recall.Recall(parsedTask, indexedFilesProvider(), request.GitDiffFiles, request.CurrentFile, ftsSearch, symbolSearch, importSearch, recallOptions, symbolSearchDetailed, relationSearch, semanticSearch, reverseRelationSearch);
@@ -212,7 +219,13 @@ public sealed class ContextEngine
                 request.CurrentFile,
                 gitDiffHash,
                 request.ModelId,
-                _tokenizers.Default.Id);
+                tokenizer.Id,
+                "0.2.0-prealpha",
+                ChunkingStrategy.Version,
+                TaskParser.Version,
+                DefaultTokenBudgetPolicy.Version,
+                request.RepoMapVersion,
+                null);
             _cache.Put(storeKey, manifest);
         }
 
