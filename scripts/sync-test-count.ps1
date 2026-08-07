@@ -11,10 +11,12 @@
 
 param(
     [int]$Count = 0,
+    [int]$Skipped = 0,
     [string]$RepoRoot = (Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path))
 )
 
 $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+$SkippedCount = $Skipped
 
 if ($Count -eq 0) {
     Write-Host "Running tests to get current count..." -ForegroundColor Cyan
@@ -28,9 +30,18 @@ if ($Count -eq 0) {
         Write-Error "Could not parse test count. Run 'dotnet test' manually and pass -Count=<n>"
         exit 1
     }
-}
 
-Write-Host "Test count: $Count" -ForegroundColor Green
+    if ($output -match '已跳过:\s*(\d+)') {
+        $SkippedCount = [int]$Matches[1]
+    }
+    elseif ($output -match 'Skipped:\s*(\d+)') {
+        $SkippedCount = [int]$Matches[1]
+    }
+}
+# When caller provides -Count explicitly, derive skipped from 0 (caller intent) but allow -Skipped override
+$TotalCount = $Count + $SkippedCount
+
+Write-Host "Test count: $Count (total $TotalCount, skipped $SkippedCount)" -ForegroundColor Green
 
 # Helper: read/write with UTF-8 (no BOM)
 function Update-FileUtf8 {
@@ -47,7 +58,8 @@ if (Test-Path $statePath) {
     Update-FileUtf8 $statePath {
         param($json)
         $json = $json -replace '"testCount":\s*\d+', "`"testCount`": $Count"
-        $json = $json -replace 'pass \(\d+/', "pass ($Count/"
+        # Keep numerator + total in sync: "pass (N/M, X skipped)" -> "pass (Count/TotalCount, X skipped)"
+        $json = $json -replace 'pass \(\d+/\d+', "pass ($Count/$TotalCount)"
         return $json
     }
 }
