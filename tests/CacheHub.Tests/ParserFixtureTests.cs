@@ -318,4 +318,21 @@ public class ParserFixtureTests
         Assert.Contains(result.Symbols, s => s.Name == "inner_method" && s.Kind == SymbolKind.Method);
         Assert.Contains(result.Symbols, s => s.Name == "outer_method" && s.Kind == SymbolKind.Method);
     }
+
+    [Fact]
+    public void TypeScript_ShouldExtractDefaultExports()
+    {
+        var code = """
+            export default function connect(config) {
+                return config;
+            }
+            export default class Logger {
+                log(msg) {}
+            }
+            """;
+        var result = new TypeScriptRegexParser().Parse(code, "test.ts");
+
+        Assert.Contains(result.Symbols, s => s.Name == "connect" && s.Kind == SymbolKind.Function);
+        Assert.Contains(result.Symbols, s => s.Name == "Logger" && s.Kind == SymbolKind.Class);
+    }
 }

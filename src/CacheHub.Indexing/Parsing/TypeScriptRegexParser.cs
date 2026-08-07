@@ -82,8 +82,8 @@ public sealed partial class TypeScriptRegexParser : ICodeParser
             var exportMatch = ExportRegex().Match(line);
             if (exportMatch.Success)
             {
-                var kindStr = exportMatch.Groups[2].Value;
-                var name = exportMatch.Groups[3].Value;
+                var kindStr = exportMatch.Groups[3].Value;
+                var name = exportMatch.Groups[4].Value;
                 var kind = kindStr switch
                 {
                     "class" => SymbolKind.Class,
@@ -105,9 +105,9 @@ public sealed partial class TypeScriptRegexParser : ICodeParser
                 });
 
                 // Check for extends/implements
-                if (exportMatch.Groups[4].Success)
+                if (exportMatch.Groups[5].Success)
                 {
-                    var baseClause = exportMatch.Groups[4].Value;
+                    var baseClause = exportMatch.Groups[5].Value;
                     // Split by "implements" keyword and commas to get individual base types
                     var parts = baseClause.Split(BaseClauseSeparators, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                     foreach (var baseType in parts)
@@ -229,8 +229,8 @@ public sealed partial class TypeScriptRegexParser : ICodeParser
     [GeneratedRegex(@"import\s+(?:(\{[^}]+\}|[\w*]+(?:\s+as\s+\w+)?(?:\s*,\s*\{[^}]+\})?)\s+from\s+)?['""]([^'""]+)['""]")]
     private static partial Regex ImportRegex();
 
-    // export class Name extends Base implements I1, I2
-    [GeneratedRegex(@"export\s+(abstract\s+)?(class|interface|function|enum|const|type)\s+(\w+)(?:<[^>]+>)?(?:\s+(?:extends|implements)\s+([^\{]+))?")]
+    // export [default] class|function|interface|enum|const|type Name ...
+    [GeneratedRegex(@"export\s+(?:(default)\s+)?(abstract\s+)?(class|interface|function|enum|const|type)\s+(\w+)(?:<[^>]+>)?(?:\s+(?:extends|implements)\s+([^\{]+))?")]
     private static partial Regex ExportRegex();
 
     [GeneratedRegex(@"function\s+(\w+)\s*[<(]")]
