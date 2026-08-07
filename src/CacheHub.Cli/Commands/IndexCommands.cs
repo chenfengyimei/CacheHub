@@ -919,12 +919,12 @@ public static class IndexCommands
                 insCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
                 insCmd.Parameters.AddWithValue("$fid", newFileId);
                 insCmd.Parameters.AddWithValue("$snap", toSnapshot.Value);
-                insCmd.Parameters.AddWithValue("$name", reader.GetString(3));
-                insCmd.Parameters.AddWithValue("$kind", reader.GetString(4));
-                insCmd.Parameters.AddWithValue("$sl", reader.GetInt32(5));
-                insCmd.Parameters.AddWithValue("$el", reader.GetInt32(6));
-                insCmd.Parameters.AddWithValue("$mod", reader.IsDBNull(7) ? DBNull.Value : reader.GetString(7));
-                insCmd.Parameters.AddWithValue("$conf", reader.GetString(8));
+                insCmd.Parameters.AddWithValue("$name", reader.GetString(2));
+                insCmd.Parameters.AddWithValue("$kind", reader.GetString(3));
+                insCmd.Parameters.AddWithValue("$sl", reader.GetInt32(4));
+                insCmd.Parameters.AddWithValue("$el", reader.GetInt32(5));
+                insCmd.Parameters.AddWithValue("$mod", reader.IsDBNull(6) ? DBNull.Value : reader.GetString(6));
+                insCmd.Parameters.AddWithValue("$conf", reader.GetString(7));
                 await insCmd.ExecuteNonQueryAsync();
             }
         }
