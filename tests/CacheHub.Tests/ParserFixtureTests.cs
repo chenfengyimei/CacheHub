@@ -796,4 +796,77 @@ public class ParserFixtureTests
         Assert.Equal("1.0", parser.Version);
         Assert.Equal("ruby-regex-baseline", parser.Id);
     }
+
+    // === Kotlin Parser Tests ===
+
+    [Fact]
+    public void Kotlin_ShouldExtractClassAndMethods()
+    {
+        var code = """
+            class UserService {
+                fun handleRequest() {
+                    return
+                }
+                private fun computeScore(data: String): Int {
+                    return 0
+                }
+            }
+            """;
+        var result = new KotlinRegexParser().Parse(code, "UserService.kt");
+
+        Assert.Contains(result.Symbols, s => s.Name == "UserService" && s.Kind == SymbolKind.Class);
+        Assert.Contains(result.Symbols, s => s.Name == "handleRequest" && s.Kind == SymbolKind.Method);
+        Assert.Contains(result.Symbols, s => s.Name == "computeScore" && s.Kind == SymbolKind.Method);
+    }
+
+    [Fact]
+    public void Kotlin_ShouldExtractImports()
+    {
+        var code = """
+            import kotlin.collections.List
+            import com.example.Service as Svc
+            """;
+        var result = new KotlinRegexParser().Parse(code, "main.kt");
+
+        Assert.Contains(result.Imports, i => i.Module == "kotlin.collections.List");
+        Assert.Contains(result.Imports, i => i.Module == "com.example.Service" && i.ImportedName == "Svc");
+    }
+
+    [Fact]
+    public void Kotlin_ShouldExtractInterfaceAndObject()
+    {
+        var code = """
+            interface Repository {
+                fun save()
+            }
+            object Config {
+                val port: Int = 8080
+            }
+            """;
+        var result = new KotlinRegexParser().Parse(code, "types.kt");
+
+        Assert.Contains(result.Symbols, s => s.Name == "Repository" && s.Kind == SymbolKind.Interface);
+        Assert.Contains(result.Symbols, s => s.Name == "Config" && s.Kind == SymbolKind.Class);
+    }
+
+    [Fact]
+    public void Kotlin_ShouldExtractInheritance()
+    {
+        var code = """
+            class AdminUser : User, Serializable {
+            }
+            """;
+        var result = new KotlinRegexParser().Parse(code, "admin.kt");
+
+        Assert.Contains(result.Relations, r => r.Relation == "inherits" && r.TargetName == "User");
+        Assert.Contains(result.Relations, r => r.Relation == "inherits" && r.TargetName == "Serializable");
+    }
+
+    [Fact]
+    public void Kotlin_ParserVersion_ShouldBe1()
+    {
+        var parser = new KotlinRegexParser();
+        Assert.Equal("1.0", parser.Version);
+        Assert.Equal("kotlin-regex-baseline", parser.Id);
+    }
 }
