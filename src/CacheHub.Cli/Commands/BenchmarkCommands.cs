@@ -365,27 +365,96 @@ public static class BenchmarkCommands
         var executor = new GatewayAgentModelExecutor(gatewayUrl, gatewayToken, model);
         var agentRunner = new Core.Benchmarks.Agent.AgentBenchmarkRunner(executor, tokenizer, maxRounds);
 
-        // CacheHub branch: read the task's required/helpful files as compressed context.
+        // CacheHub branch: use REAL ContextEngine to build context (NOT RequiredFiles).
+        // This proves CacheHub's recall/ranking/selection can find the right files.
         AgentContextPackage BuildCacheHubContext(string taskDescription)
         {
-            var task = BenchmarkTaskSet.Tasks.FirstOrDefault(t => t.TaskDescription == taskDescription);
-            var paths = task?.RequiredFiles.ToList() ?? [];
-            var snippets = new List<string>();
-            foreach (var p in paths)
-            {
-                var fullPath = Path.Combine(workspace.RootPath, p.Replace('/', Path.DirectorySeparatorChar));
-                if (File.Exists(fullPath))
+            var querySvc = new SqliteIndexQueryService(factory);
+            var activeSnapshotId = querySvc.GetActiveSnapshotIdAsync(workspace.Id.Value).GetAwaiter().GetResult();
+            if (activeSnapshotId is null)
+                return new Core.Benchmarks.Agent.AgentContextPackage
                 {
-                    var content = File.ReadAllText(fullPath);
-                    snippets.Add($"// ---- {p} ----\n{content}");
-                }
-            }
+                    TaskDescription = taskDescription,
+                    SelectedFilePaths = [],
+                    FileSnippets = [],
+                    EstimatedTokens = 0,
+                };
+
+            var indexedFiles = querySvc.GetIndexedFilesBySnapshotAsync(activeSnapshotId).GetAwaiter().GetResult();
+            var indexedFileInfos = indexedFiles.Select(f => new Context.Recall.IndexedFileInfo
+            {
+                Path = f.NormalizedPath,
+                NormalizedPath = f.NormalizedPath,
+                Language = f.Language,
+                Size = f.Size,
+                ContentHash = f.ContentHash,
+            }).ToList();
+
+            var engine = new ContextEngine(tokenizers, cache: ContextCommands.CreateContextCache(factory));
+            var manifest = engine.Build(
+                new ContextBuildRequest
+                {
+                    WorkspaceId = workspace.Id,
+                    IndexSnapshotId = activeSnapshotId,
+                    Task = taskDescription,
+                },
+                () => indexedFileInfos,
+                path => ResolveFileContent(workspace.RootPath, path),
+                path => ResolveFileHash(factory, activeSnapshotId, path, workspace.RootPath),
+                ftsSearch: keyword =>
+                {
+                    var results = querySvc.SearchFtsAsync(activeSnapshotId, keyword, 50).GetAwaiter().GetResult();
+                    return results.Select(r => new Context.Recall.FtsMatch(r.Path, r.Language, r.Snippet, r.RankScore, r.HitLine)).ToList();
+                },
+                symbolSearch: symbol =>
+                {
+                    var results = querySvc.SearchSymbolsAsync(activeSnapshotId, symbol).GetAwaiter().GetResult();
+                    return results.Select(r => r.NormalizedPath).ToList();
+                },
+                importSearch: symbol =>
+                {
+                    var results = querySvc.GetFilesByImportedSymbolAsync(activeSnapshotId, symbol).GetAwaiter().GetResult();
+                    return results.ToList();
+                },
+                symbolSearchDetailed: symbol =>
+                {
+                    var results = querySvc.SearchSymbolsAsync(activeSnapshotId, symbol).GetAwaiter().GetResult();
+                    return results.Select(r => new Context.Recall.SymbolHit
+                    {
+                        NormalizedPath = r.NormalizedPath,
+                        Name = r.Name,
+                        Kind = r.Kind,
+                        StartLine = r.StartLine,
+                        EndLine = r.EndLine,
+                        ExactMatch = r.ExactMatch,
+                    }).ToList();
+                },
+                relationSearch: filePath =>
+                {
+                    var results = querySvc.GetFileRelationsAsync(activeSnapshotId, filePath).GetAwaiter().GetResult();
+                    return results.Select(r => new Context.Recall.RelationHit
+                    {
+                        TargetName = r.TargetName,
+                        RelationType = r.RelationType,
+                        Relation = r.Relation,
+                        Confidence = r.Confidence,
+                    }).ToList();
+                },
+                semanticSearch: SemanticReferenceHelper.CreateSemanticSearch(appData.Root, workspace.Id.Value));
+
+            var paths = manifest.SelectedFiles.Select(f => f.Path).ToList();
+            var snippets = paths
+                .Select(p => new { Path = p, Content = ResolveFileContent(workspace.RootPath, p) })
+                .Where(x => !string.IsNullOrEmpty(x.Content))
+                .Select(x => $"// ---- {x.Path} ----\n{x.Content}")
+                .ToList();
+
             return new Core.Benchmarks.Agent.AgentContextPackage
             {
                 TaskDescription = taskDescription,
                 SelectedFilePaths = paths,
                 FileSnippets = snippets,
-                EstimatedTokens = tokenizer.CountTokens(string.Join("\n", snippets)),
+                EstimatedTokens = manifest.Budget.ActualEstimate,
             };
         }
 
@@ -425,16 +494,19 @@ public static class BenchmarkCommands
             return baselineCache;
         }
 
-        // Test runner: given the model's patch, evaluate. For CLI, we treat
-        // a non-empty patch as "attempted"; extension point for build/test hooks.
+        // Test runner: evaluate the model's patch for real code content.
+        // A valid patch must contain substantive code (not just comments/TODOs/whitespace).
         Task<Core.Benchmarks.Agent.AgentTestResult> EvaluatePatch(string patch)
         {
-            var valid = !string.IsNullOrWhiteSpace(patch) && patch.Trim() != "```";
+            var valid = !string.IsNullOrWhiteSpace(patch)
+                && patch.Trim() != "```"
+                && ContainsSubstantiveCode(patch);
             return Task.FromResult(new Core.Benchmarks.Agent.AgentTestResult
             {
                 Success = valid,
                 Passed = valid ? 1 : 0,
                 Total = 1,
+                ErrorMessage = valid ? null : "Patch contains no substantive code changes",
             });
         }
 
@@ -671,4 +743,48 @@ public static class BenchmarkCommands
 
     private static bool HasFlag(string[] args, string flag) =>
         args.Contains(flag, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Checks if a patch contains substantive code changes (not just comments/TODOs/whitespace).
+    /// A valid patch must have at least one line that looks like real code:
+    /// assignment, function call, control flow, return, declaration, etc.
+    /// </summary>
+    private static bool ContainsSubstantiveCode(string patch)
+    {
+        var codeLines = patch.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(l => l.Trim())
+            .Where(l => !l.StartsWith("//", StringComparison.Ordinal) && !l.StartsWith('#') && !l.StartsWith("/*", StringComparison.Ordinal) && !l.StartsWith('*'))
+            .Where(l => !string.IsNullOrWhiteSpace(l))
+            .ToList();
+
+        if (codeLines.Count == 0) return false;
+
+        // At least one line must contain a code-like pattern
+        return codeLines.Any(l =>
+            l.Contains('=', StringComparison.Ordinal) ||
+            l.Contains('(', StringComparison.Ordinal) ||
+            l.Contains('{', StringComparison.Ordinal) ||
+            l.Contains('}', StringComparison.Ordinal) ||
+            l.StartsWith("return", StringComparison.Ordinal) ||
+            l.StartsWith("if ", StringComparison.Ordinal) ||
+            l.StartsWith("for ", StringComparison.Ordinal) ||
+            l.StartsWith("while ", StringComparison.Ordinal) ||
+            l.StartsWith("def ", StringComparison.Ordinal) ||
+            l.StartsWith("func ", StringComparison.Ordinal) ||
+            l.StartsWith("fn ", StringComparison.Ordinal) ||
+            l.StartsWith("public ", StringComparison.Ordinal) ||
+            l.StartsWith("private ", StringComparison.Ordinal) ||
+            l.StartsWith("protected ", StringComparison.Ordinal) ||
+            l.StartsWith("internal ", StringComparison.Ordinal) ||
+            l.StartsWith("class ", StringComparison.Ordinal) ||
+            l.StartsWith("struct ", StringComparison.Ordinal) ||
+            l.StartsWith("enum ", StringComparison.Ordinal) ||
+            l.StartsWith("interface ", StringComparison.Ordinal) ||
+            l.StartsWith("import ", StringComparison.Ordinal) ||
+            l.StartsWith("using ", StringComparison.Ordinal) ||
+            l.StartsWith("export ", StringComparison.Ordinal) ||
+            l.StartsWith("const ", StringComparison.Ordinal) ||
+            l.StartsWith("let ", StringComparison.Ordinal) ||
+            l.StartsWith("var ", StringComparison.Ordinal));
+    }
 }
