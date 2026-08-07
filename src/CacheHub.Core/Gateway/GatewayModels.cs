@@ -15,6 +15,19 @@ public sealed record GatewayConfig
     public bool EnableCache { get; init; } = true;
     public bool EnableSingleFlight { get; init; } = true;
     public int MaxRequestSizeBytes { get; init; } = 10 * 1024 * 1024;
+
+    /// <summary>Maximum concurrent in-flight provider requests (0 = unlimited).</summary>
+    public int MaxConcurrentRequests { get; init; } = 32;
+
+    /// <summary>Maximum total cache size in bytes (0 = unlimited).</summary>
+    public long MaxCacheBytes { get; init; } = 64 * 1024 * 1024;
+
+    /// <summary>Allowed response headers to forward to clients. Empty = forward all safe headers.</summary>
+    public IReadOnlyList<string> AllowedResponseHeaders { get; init; } =
+    [
+        "Content-Type", "Retry-After", "X-Request-ID", "X-RateLimit-Limit",
+        "X-RateLimit-Remaining", "X-RateLimit-Reset",
+    ];
 }
 
 /// <summary>

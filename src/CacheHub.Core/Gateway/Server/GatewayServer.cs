@@ -6,9 +6,9 @@ using CacheHub.Core.Gateway;
 namespace CacheHub.Core.Gateway.Server;
 
 /// <summary>
-/// Minimal Gateway HTTP server using HttpListener.
+/// Gateway HTTP server using HttpListener.
 /// Listens on loopback only. Forwards OpenAI-compatible requests to a provider.
-/// Requires a local bearer token for authentication.
+/// Supports SSE streaming, auth, concurrency limits, safe caching, and headers.
 /// </summary>
 public sealed class GatewayServer : IDisposable
 {
@@ -16,9 +16,10 @@ public sealed class GatewayServer : IDisposable
     private readonly HttpListener _listener;
     private readonly HttpClient _httpClient;
     private readonly Dictionary<string, RawCacheEntry> _cache = new();
-    private readonly ConcurrentDictionary<string, Lazy<Task<string>>> _inFlight = new();
+    private readonly ConcurrentDictionary<string, Lazy<Task<ProviderResponse>>> _inFlight = new();
     private readonly List<ModelRequestLog> _logs = [];
     private readonly Lock _lock = new();
+    private readonly SemaphoreSlim? _concurrencyGate;
     private readonly string _accessToken;
     private const int MaxCacheEntries = 10_000;
     private const int MaxLogEntries = 1_000;
@@ -35,6 +36,9 @@ public sealed class GatewayServer : IDisposable
     public GatewayServer(GatewayConfig config)
     {
         _config = config;
+        _concurrencyGate = config.MaxConcurrentRequests > 0
+            ? new SemaphoreSlim(config.MaxConcurrentRequests, config.MaxConcurrentRequests)
+            : null;
 
         // Security: force loopback — ignore config.Host if it's not a loopback address
         var host = config.Host == "127.0.0.1" || config.Host == "localhost"
@@ -165,18 +169,32 @@ public sealed class GatewayServer : IDisposable
             return;
         }
 
+        // Parse model and stream flag from request
+        string model = "unknown";
+        bool isStream = false;
+        try
+        {
+            using var doc = JsonDocument.Parse(requestBody);
+            if (doc.RootElement.TryGetProperty("model", out var m) && m.ValueKind == JsonValueKind.String)
+                model = m.GetString() ?? "unknown";
+            if (doc.RootElement.TryGetProperty("stream", out var s) && s.ValueKind == JsonValueKind.True)
+                isStream = true;
+        }
+        catch { }
+
         var sw = System.Diagnostics.Stopwatch.StartNew();
         Interlocked.Increment(ref _totalRequests);
 
-        // Check cache
-        var requestHash = ComputeHash(requestBody);
-        if (_config.EnableCache && CacheSafetyChecker.IsCacheable(requestBody, "model"))
+        // Cache key includes endpoint + model for isolation (R5-W005)
+        var requestHash = ComputeHash("/v1/chat/completions" + "|" + model + "|" + requestBody);
+
+        // Check cache (only for non-streaming, cacheable requests)
+        if (!isStream && _config.EnableCache && CacheSafetyChecker.IsCacheable(requestBody, model))
         {
             RawCacheEntry? cachedEntry;
             lock (_lock)
             {
                 _cache.TryGetValue(requestHash, out cachedEntry);
-                // TTL check on read
                 if (cachedEntry is not null &&
                     DateTimeOffset.UtcNow.Subtract(cachedEntry.CreatedAt) > CacheTtl)
                 {
@@ -189,7 +207,7 @@ public sealed class GatewayServer : IDisposable
             {
                 Interlocked.Increment(ref _cacheHits);
                 sw.Stop();
-                LogRequest("cached", "model", sw.Elapsed, 200, true, 0, 0);
+                LogRequest("cached", model, sw.Elapsed, 200, true, 0, 0);
                 var cachedBytes = System.Text.Encoding.UTF8.GetBytes(cachedEntry.ResponseBody);
                 resp.StatusCode = 200;
                 resp.ContentType = "application/json";
@@ -201,58 +219,131 @@ public sealed class GatewayServer : IDisposable
 
         Interlocked.Increment(ref _cacheMisses);
 
-        // Forward to provider (with SingleFlight for safe requests)
-        ProviderResponse providerResponse;
+        // R5-W003: Concurrency limiting
+        if (_concurrencyGate is not null)
+            await _concurrencyGate.WaitAsync(ct);
 
-        if (_config.EnableSingleFlight && CacheSafetyChecker.IsCacheable(requestBody, "model"))
+        try
         {
-            // Use ConcurrentDictionary<string, Lazy<T>> for atomic SingleFlight
-            var lazy = _inFlight.GetOrAdd(requestHash, _ => new Lazy<Task<string>>(() => ForwardToProviderAsync(requestBody, ct)));
-            var responseBody = await lazy.Value;
-            _inFlight.TryRemove(requestHash, out _);
-            // We need the status code — re-query it
-            // Since ForwardToProviderAsync only returns body, we need to also return status
-            // For cached requests we return 200; for non-cached we need the actual status
-            // Fix: ForwardToProviderAsync should return (status, body)
-            providerResponse = new ProviderResponse(200, responseBody);
-        }
-        else
-        {
-            providerResponse = await ForwardToProviderWithStatusAsync(requestBody, ct);
-        }
-
-        sw.Stop();
-
-        // Cache response ONLY if it's a 2xx success AND cacheable
-        if (_config.EnableCache &&
-            providerResponse.StatusCode >= 200 && providerResponse.StatusCode < 300 &&
-            CacheSafetyChecker.IsCacheable(requestBody, "model") &&
-            !CacheSafetyChecker.HasToolCalls(providerResponse.Body))
-        {
-            lock (_lock)
+            // R5-W002: SSE streaming passthrough
+            if (isStream)
             {
-                _cache[requestHash] = new RawCacheEntry
-                {
-                    RequestHash = requestHash,
-                    ResponseBody = providerResponse.Body,
-                    CreatedAt = DateTimeOffset.UtcNow,
-                    Model = "model",
-                    HasToolCalls = false,
-                };
-                EvictStaleCacheLocked();
+                await HandleStreamingAsync(requestBody, model, resp, ct);
+                return;
             }
+
+            // Non-streaming: forward to provider (with atomic SingleFlight)
+            ProviderResponse providerResponse;
+
+            if (_config.EnableSingleFlight && CacheSafetyChecker.IsCacheable(requestBody, model))
+            {
+                var lazy = _inFlight.GetOrAdd(requestHash,
+                    _ => new Lazy<Task<ProviderResponse>>(() => ForwardToProviderWithStatusAsync(requestBody, model, ct)));
+                providerResponse = await lazy.Value;
+                _inFlight.TryRemove(requestHash, out _);
+            }
+            else
+            {
+                providerResponse = await ForwardToProviderWithStatusAsync(requestBody, model, ct);
+            }
+
+            sw.Stop();
+
+            // Extract usage from response (R5-W004)
+            var (promptTokens, completionTokens) = ExtractUsage(providerResponse.Body);
+
+            // Cache response ONLY if 2xx, cacheable, and no tool calls (R5-W005)
+            if (_config.EnableCache &&
+                providerResponse.StatusCode >= 200 && providerResponse.StatusCode < 300 &&
+                CacheSafetyChecker.IsCacheable(requestBody, model) &&
+                !CacheSafetyChecker.HasToolCalls(providerResponse.Body))
+            {
+                lock (_lock)
+                {
+                    _cache[requestHash] = new RawCacheEntry
+                    {
+                        RequestHash = requestHash,
+                        ResponseBody = providerResponse.Body,
+                        CreatedAt = DateTimeOffset.UtcNow,
+                        Model = model,
+                        HasToolCalls = false,
+                    };
+                    EvictStaleCacheLocked();
+                }
+            }
+
+            LogRequest("chat/completions", model, sw.Elapsed, providerResponse.StatusCode, false, promptTokens, completionTokens);
+
+            // R5-W004: Forward provider status code and select headers
+            resp.StatusCode = providerResponse.StatusCode;
+            resp.ContentType = "application/json";
+            ForwardAllowedHeaders(providerResponse.Headers, resp);
+            var respBytes = System.Text.Encoding.UTF8.GetBytes(providerResponse.Body);
+            resp.ContentLength64 = respBytes.Length;
+            await resp.OutputStream.WriteAsync(respBytes, ct);
         }
-
-        LogRequest("direct", "model", sw.Elapsed, providerResponse.StatusCode, false, 0, 0);
-
-        resp.StatusCode = providerResponse.StatusCode;
-        resp.ContentType = "application/json";
-        var respBytes = System.Text.Encoding.UTF8.GetBytes(providerResponse.Body);
-        resp.ContentLength64 = respBytes.Length;
-        await resp.OutputStream.WriteAsync(respBytes, ct);
+        finally
+        {
+            _concurrencyGate?.Release();
+        }
     }
 
-    private async Task<ProviderResponse> ForwardToProviderWithStatusAsync(string requestBody, CancellationToken ct)
+    /// <summary>
+    /// R5-W002: SSE streaming passthrough — streams provider response to client in real-time.
+    /// </summary>
+    private async Task HandleStreamingAsync(string requestBody, string model, HttpListenerResponse resp, CancellationToken ct)
+    {
+        using var msg = new HttpRequestMessage(HttpMethod.Post, $"{_config.ProviderBaseUrl}/v1/chat/completions");
+        msg.Content = new StringContent(requestBody, System.Text.Encoding.UTF8, "application/json");
+        msg.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _config.ProviderApiKey);
+
+        var response = await _httpClient.SendAsync(msg, HttpCompletionOption.ResponseHeadersRead, ct);
+
+        resp.StatusCode = (int)response.StatusCode;
+        resp.ContentType = response.Content.Headers.ContentType?.ToString() ?? "text/event-stream";
+        ForwardAllowedHeaders(response.Headers, resp);
+
+        // Stream the response body directly to the client
+        using var stream = await response.Content.ReadAsStreamAsync(ct);
+        await stream.CopyToAsync(resp.OutputStream, 8192, ct);
+        resp.OutputStream.Flush();
+    }
+
+    /// <summary>
+    /// R5-W004: Forward allowed response headers from provider to client.
+    /// </summary>
+    private void ForwardAllowedHeaders(System.Net.Http.Headers.HttpResponseHeaders? providerHeaders, HttpListenerResponse resp)
+    {
+        if (providerHeaders is null) return;
+        foreach (var allowed in _config.AllowedResponseHeaders)
+        {
+            if (providerHeaders.TryGetValues(allowed, out var values))
+            {
+                resp.Headers[allowed] = string.Join(", ", values);
+            }
+        }
+    }
+
+    /// <summary>
+    /// R5-W004: Extract usage tokens from provider response body.
+    /// </summary>
+    private static (int prompt, int completion) ExtractUsage(string responseBody)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(responseBody);
+            if (doc.RootElement.TryGetProperty("usage", out var usage))
+            {
+                var prompt = usage.TryGetProperty("prompt_tokens", out var p) && p.ValueKind == JsonValueKind.Number ? p.GetInt32() : 0;
+                var completion = usage.TryGetProperty("completion_tokens", out var c) && c.ValueKind == JsonValueKind.Number ? c.GetInt32() : 0;
+                return (prompt, completion);
+            }
+        }
+        catch { }
+        return (0, 0);
+    }
+
+    private async Task<ProviderResponse> ForwardToProviderWithStatusAsync(string requestBody, string model, CancellationToken ct)
     {
         using var msg = new HttpRequestMessage(HttpMethod.Post, $"{_config.ProviderBaseUrl}/v1/chat/completions");
         msg.Content = new StringContent(requestBody, System.Text.Encoding.UTF8, "application/json");
@@ -260,13 +351,7 @@ public sealed class GatewayServer : IDisposable
 
         var response = await _httpClient.SendAsync(msg, ct);
         var body = await response.Content.ReadAsStringAsync(ct);
-        return new ProviderResponse((int)response.StatusCode, body);
-    }
-
-    private async Task<string> ForwardToProviderAsync(string requestBody, CancellationToken ct)
-    {
-        var result = await ForwardToProviderWithStatusAsync(requestBody, ct);
-        return result.Body;
+        return new ProviderResponse((int)response.StatusCode, body, response.Headers);
     }
 
     /// <summary>
@@ -291,22 +376,43 @@ public sealed class GatewayServer : IDisposable
         var sw = System.Diagnostics.Stopwatch.StartNew();
         Interlocked.Increment(ref _totalRequests);
 
-        // Forward to provider's /v1/responses endpoint
-        using var msg = new HttpRequestMessage(HttpMethod.Post, $"{_config.ProviderBaseUrl}/v1/responses");
-        msg.Content = new StringContent(requestBody, System.Text.Encoding.UTF8, "application/json");
-        msg.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _config.ProviderApiKey);
+        string model = "unknown";
+        try
+        {
+            using var doc = JsonDocument.Parse(requestBody);
+            if (doc.RootElement.TryGetProperty("model", out var m) && m.ValueKind == JsonValueKind.String)
+                model = m.GetString() ?? "unknown";
+        }
+        catch { }
 
-        var response = await _httpClient.SendAsync(msg, ct);
-        var responseBody = await response.Content.ReadAsStringAsync(ct);
+        // R5-W003: Concurrency limiting
+        if (_concurrencyGate is not null)
+            await _concurrencyGate.WaitAsync(ct);
 
-        sw.Stop();
-        LogRequest("responses", "model", sw.Elapsed, (int)response.StatusCode, false, 0, 0);
+        try
+        {
+            // Forward to provider's /v1/responses endpoint
+            using var msg = new HttpRequestMessage(HttpMethod.Post, $"{_config.ProviderBaseUrl}/v1/responses");
+            msg.Content = new StringContent(requestBody, System.Text.Encoding.UTF8, "application/json");
+            msg.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _config.ProviderApiKey);
 
-        resp.StatusCode = (int)response.StatusCode;
-        resp.ContentType = "application/json";
-        var respBytes = System.Text.Encoding.UTF8.GetBytes(responseBody);
-        resp.ContentLength64 = respBytes.Length;
-        await resp.OutputStream.WriteAsync(respBytes, ct);
+            var response = await _httpClient.SendAsync(msg, ct);
+            var responseBody = await response.Content.ReadAsStringAsync(ct);
+
+            sw.Stop();
+            LogRequest("responses", model, sw.Elapsed, (int)response.StatusCode, false, 0, 0);
+
+            resp.StatusCode = (int)response.StatusCode;
+            resp.ContentType = "application/json";
+            ForwardAllowedHeaders(response.Headers, resp);
+            var respBytes = System.Text.Encoding.UTF8.GetBytes(responseBody);
+            resp.ContentLength64 = respBytes.Length;
+            await resp.OutputStream.WriteAsync(respBytes, ct);
+        }
+        finally
+        {
+            _concurrencyGate?.Release();
+        }
     }
 
     private void LogRequest(string endpoint, string model, TimeSpan latency, int statusCode, bool cached, int promptTokens, int completionTokens)
@@ -350,7 +456,22 @@ public sealed class GatewayServer : IDisposable
         foreach (var key in expiredKeys)
             _cache.Remove(key);
 
-        // Count cap: if still overflowing, batch-remove oldest entries.
+        // Count cap + byte cap eviction (R5-W006: byte LRU)
+        if (_config.MaxCacheBytes > 0)
+        {
+            var totalBytes = _cache.Values.Sum(e => System.Text.Encoding.UTF8.GetByteCount(e.ResponseBody));
+            if (totalBytes > _config.MaxCacheBytes)
+            {
+                // Evict oldest entries until under byte cap
+                foreach (var kvp in _cache.OrderBy(k => k.Value.CreatedAt).ToList())
+                {
+                    _cache.Remove(kvp.Key);
+                    totalBytes -= System.Text.Encoding.UTF8.GetByteCount(kvp.Value.ResponseBody);
+                    if (totalBytes <= _config.MaxCacheBytes) break;
+                }
+            }
+        }
+
         if (_cache.Count > MaxCacheEntries)
         {
             var toRemove = _cache
@@ -397,5 +518,8 @@ public sealed class GatewayServer : IDisposable
         _httpClient.Dispose();
     }
 
-    private sealed record ProviderResponse(int StatusCode, string Body);
+    private sealed record ProviderResponse(
+        int StatusCode,
+        string Body,
+        System.Net.Http.Headers.HttpResponseHeaders? Headers = null);
 }
