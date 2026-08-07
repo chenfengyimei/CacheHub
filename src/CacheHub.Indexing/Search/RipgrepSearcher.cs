@@ -86,11 +86,11 @@ public sealed class RipgrepSearcher
         if (process is null) return [];
 
         var results = new List<RipgrepResult>();
-        while (!process.StandardOutput.EndOfStream)
+        // V5-W11: .NET 10 CA2024 — avoid EndOfStream in async methods; use ReadLine loop
+        string? line;
+        while ((line = process.StandardOutput.ReadLine()) is not null)
         {
             ct.ThrowIfCancellationRequested();
-            var line = process.StandardOutput.ReadLine();
-            if (line is null) break;
 
             var parts = line.Split(':', 3);
             if (parts.Length >= 3 && int.TryParse(parts[1], out var lineNum))

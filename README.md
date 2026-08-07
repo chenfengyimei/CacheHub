@@ -5,7 +5,7 @@
 **�?AI 编程助手装上"眼睛"——让它看到整个代码库的结构，但只把真正需要的那部分代码喂给模型�?*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![.NET 9](https://img.shields.io/badge/.NET-9.0-blue.svg)](https://dotnet.microsoft.com/download/dotnet/9.0)
+[![.NET 9](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/download/dotnet/10.0)
 [![Tests](https://img.shields.io/badge/Tests-865%20passed-brightgreen.svg)](#测试覆盖�?
 [![CI](https://img.shields.io/badge/CI-3%20platforms%20%E2%9C%93-success.svg)](.github/workflows/ci.yml)
 [![Status: Pre-Alpha](https://img.shields.io/badge/Status-Pre--Alpha-orange.svg)](#功能成熟度矩�?
@@ -133,7 +133,7 @@ src/auth/refresh.ts  Score: 0.92  Mode: chunks  Tokens: 450
 
 | 区域 | 技术选型 |
 |------|----------|
-| 主语言 | C# / .NET 9 (LTS) |
+| 主语言 | C# / .NET 10 (LTS) |
 | SDK | 9.0.313 (global.json 锁定) |
 | 数据�?| SQLite + FTS5 (Microsoft.Data.Sqlite) |
 | 语法解析 | Regex + [GeneratedRegex] 源生成器 v2.0 |

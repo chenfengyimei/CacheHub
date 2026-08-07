@@ -1,4 +1,4 @@
-# Third Party Notices
+﻿# Third Party Notices
 
 CacheHub 使用的第三方软件和库。
 
@@ -24,8 +24,8 @@ CacheHub 使用的第三方软件和库。
 
 ## .NET 运行时
 
-CacheHub 基于 .NET 9 (LTS) 构建，使用以下 .NET 组件：
-- .NET SDK 9.0.313
+CacheHub 基于 \.NET 10 (LTS) 构建，使用以下 .NET 组件：
+- .NET SDK 10.0.302
 - .NET Runtime 9.0
 - ASP.NET Core Runtime 9.0
 

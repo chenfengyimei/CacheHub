@@ -7,7 +7,7 @@
 CacheHub 采用分层架构，从底到上分�?6 层：
 
 ```
-┌─────────────────────────────────────────────────�?�?                 接入�?(Access)                  �?�?  CLI (cachehub)  ·  Web UI (:5099)  ·  Gateway  �?├─────────────────────────────────────────────────�?�?                 上下文层 (Context)               �?�? TaskParser · Recall · Ranking · Chunking        �?�? Budget · Selection · Engine · Expand · Explain  �?├─────────────────────────────────────────────────�?�?                 索引�?(Indexing)                �?�? Enumerator · IgnoreRules · FileDetector         �?�? Hasher · Parser(4语言) · RepoMap · FTS5 · Cache �?├─────────────────────────────────────────────────�?�?                 存储�?(Storage)                 �?�? SQLite · 9 Migrations · 3 Repositories · FTS5   �?├─────────────────────────────────────────────────�?�?                 核心�?(Core)                    �?�? Domain Models · Errors · IDs · Context Schema   �?�? Security · Tokenizer · Semantic · LSP Contracts �?├─────────────────────────────────────────────────�?�?                 基础设施 (Infra)                 �?�? .NET 9 · ConfigManager · LruCache · GitWrapper  �?└─────────────────────────────────────────────────�?```
+┌─────────────────────────────────────────────────�?�?                 接入�?(Access)                  �?�?  CLI (cachehub)  ·  Web UI (:5099)  ·  Gateway  �?├─────────────────────────────────────────────────�?�?                 上下文层 (Context)               �?�? TaskParser · Recall · Ranking · Chunking        �?�? Budget · Selection · Engine · Expand · Explain  �?├─────────────────────────────────────────────────�?�?                 索引�?(Indexing)                �?�? Enumerator · IgnoreRules · FileDetector         �?�? Hasher · Parser(4语言) · RepoMap · FTS5 · Cache �?├─────────────────────────────────────────────────�?�?                 存储�?(Storage)                 �?�? SQLite · 9 Migrations · 3 Repositories · FTS5   �?├─────────────────────────────────────────────────�?�?                 核心�?(Core)                    �?�? Domain Models · Errors · IDs · Context Schema   �?�? Security · Tokenizer · Semantic · LSP Contracts �?├─────────────────────────────────────────────────�?�?                 基础设施 (Infra)                 �?�? \.NET 10 · ConfigManager · LruCache · GitWrapper  �?└─────────────────────────────────────────────────�?```
 
 ---
 
@@ -143,7 +143,7 @@ ASP.NET Core 最�?API Web 服务�?
 
 | ADR | 标题 | 决策 |
 |-----|------|------|
-| ADR-0001 | 主语言选择 | C# / .NET 9（性能、类型安全、跨平台、生态） |
+| ADR-0001 | 主语言选择 | C# / \.NET 10（性能、类型安全、跨平台、生态） |
 | ADR-0002 | 存储方案 | SQLite + FTS5（零配置、嵌入式、跨平台、全文搜索） |
 | ADR-0003 | 解析策略 | Regex + [GeneratedRegex]（确定性、无原生依赖，后续替�?Tree-sitter�?|
 | ADR-0004 | UI 方案 | ASP.NET Core 最�?Web�?.1-beta 阶段，后续迁�?Avalonia�?|

@@ -1084,58 +1084,58 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
         }
         else
         {
-        var gatewayUrl = req.GatewayUrl ?? "http://127.0.0.1:5218";
-        var gatewayToken = req.GatewayToken
-            ?? Environment.GetEnvironmentVariable("CACHEHUB_GATEWAY_TOKEN")
-            ?? "";
+            var gatewayUrl = req.GatewayUrl ?? "http://127.0.0.1:5218";
+            var gatewayToken = req.GatewayToken
+                ?? Environment.GetEnvironmentVariable("CACHEHUB_GATEWAY_TOKEN")
+                ?? "";
 
-        try
-        {
-            using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
-            var requestBody = System.Text.Json.JsonSerializer.Serialize(new
+            try
             {
-                model = req.ModelId,
-                messages = new[]
+                using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
+                var requestBody = System.Text.Json.JsonSerializer.Serialize(new
                 {
+                    model = req.ModelId,
+                    messages = new[]
+                    {
                     new { role = "system", content = systemPrompt },
                     new { role = "user", content = userContent },
                 },
-            });
+                });
 
-            using var msg = new HttpRequestMessage(HttpMethod.Post, $"{gatewayUrl.TrimEnd('/')}/v1/chat/completions");
-            msg.Content = new StringContent(requestBody, System.Text.Encoding.UTF8, "application/json");
-            if (!string.IsNullOrEmpty(gatewayToken))
-                msg.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", gatewayToken);
+                using var msg = new HttpRequestMessage(HttpMethod.Post, $"{gatewayUrl.TrimEnd('/')}/v1/chat/completions");
+                msg.Content = new StringContent(requestBody, System.Text.Encoding.UTF8, "application/json");
+                if (!string.IsNullOrEmpty(gatewayToken))
+                    msg.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", gatewayToken);
 
-            var resp = await http.SendAsync(msg);
-            var body = await resp.Content.ReadAsStringAsync();
+                var resp = await http.SendAsync(msg);
+                var body = await resp.Content.ReadAsStringAsync();
 
-            if (resp.IsSuccessStatusCode)
-            {
-                using var doc = System.Text.Json.JsonDocument.Parse(body);
-                modelResponse = doc.RootElement
-                    .GetProperty("choices")[0]
-                    .GetProperty("message")
-                    .GetProperty("content")
-                    .GetString();
-                gatewayCalled = true;
-
-                if (doc.RootElement.TryGetProperty("usage", out var usage))
+                if (resp.IsSuccessStatusCode)
                 {
-                    modelPromptTokens = usage.TryGetProperty("prompt_tokens", out var pt) ? pt.GetInt32() : 0;
-                    modelCompletionTokens = usage.TryGetProperty("completion_tokens", out var ct) ? ct.GetInt32() : 0;
-                    modelTotalTokens = usage.TryGetProperty("total_tokens", out var tt) ? tt.GetInt32() : (modelPromptTokens + modelCompletionTokens);
+                    using var doc = System.Text.Json.JsonDocument.Parse(body);
+                    modelResponse = doc.RootElement
+                        .GetProperty("choices")[0]
+                        .GetProperty("message")
+                        .GetProperty("content")
+                        .GetString();
+                    gatewayCalled = true;
+
+                    if (doc.RootElement.TryGetProperty("usage", out var usage))
+                    {
+                        modelPromptTokens = usage.TryGetProperty("prompt_tokens", out var pt) ? pt.GetInt32() : 0;
+                        modelCompletionTokens = usage.TryGetProperty("completion_tokens", out var ct) ? ct.GetInt32() : 0;
+                        modelTotalTokens = usage.TryGetProperty("total_tokens", out var tt) ? tt.GetInt32() : (modelPromptTokens + modelCompletionTokens);
+                    }
+                }
+                else
+                {
+                    modelResponse = $"Gateway error ({resp.StatusCode}): {body}";
                 }
             }
-            else
+            catch (Exception ex)
             {
-                modelResponse = $"Gateway error ({resp.StatusCode}): {body}";
+                modelResponse = $"Gateway call failed: {ex.Message}";
             }
-        }
-        catch (Exception ex)
-        {
-            modelResponse = $"Gateway call failed: {ex.Message}";
-        }
         } // end else (cloud send allowed)
     }
 

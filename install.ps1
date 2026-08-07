@@ -20,7 +20,7 @@ Write-Host ""
 $dotnetVersion = dotnet --version 2>$null
 if (!$dotnetVersion) {
     Write-Host "Error: .NET SDK not found. Please install .NET 9 SDK." -ForegroundColor Red
-    Write-Host "  https://dotnet.microsoft.com/download/dotnet/9.0"
+    Write-Host "  https://dotnet.microsoft.com/download/dotnet/10.0"
     exit 1
 }
 Write-Host "[1/4] .NET SDK: $dotnetVersion" -ForegroundColor Green

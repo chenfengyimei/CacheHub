@@ -26,7 +26,7 @@ echo ""
 # Check .NET SDK
 if ! command -v dotnet &> /dev/null; then
     echo "Error: .NET SDK not found. Please install .NET 9 SDK."
-    echo "  https://dotnet.microsoft.com/download/dotnet/9.0"
+    echo "  https://dotnet.microsoft.com/download/dotnet/10.0"
     exit 1
 fi
 

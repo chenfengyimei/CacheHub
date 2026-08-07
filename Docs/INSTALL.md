@@ -1,4 +1,4 @@
-# CacheHub 安装手册
+﻿# CacheHub 安装手册
 
 > 本文档面向人类用户和 AI Agent。AI Agent 可直接阅读本文件，按步骤执行即可完成 CacheHub 的全自动安装。
 
@@ -9,13 +9,13 @@
 | 条件 | 要求 |
 |------|------|
 | 操作系统 | Windows 10+ / Linux / macOS |
-| .NET SDK | 9.0.313 或更高（`global.json` 锁定 9.0.313，`rollForward: latestPatch`） |
+| .NET SDK | 10.0.302 或更高（`global.json` 锁定 10.0.302，`rollForward: latestPatch`） |
 | Git | 任意版本（用于克隆仓库和 `repo` 命令） |
 | 磁盘空间 | ~200MB（源码 + 构建 + 发布） |
 
-### 安装 .NET 9 SDK
+### 安装 \.NET 10 SDK
 
-如果尚未安装 .NET 9 SDK：
+如果尚未安装 \.NET 10 SDK：
 
 - **Windows**：从 https://dotnet.microsoft.com/download/dotnet/9.0 下载安装程序
 - **Linux**（Ubuntu）：
@@ -33,7 +33,7 @@
 验证：
 ```bash
 dotnet --version
-# 输出应 >= 9.0.313
+# 输出应 >= 10.0.302
 ```
 
 ---
@@ -159,7 +159,7 @@ dotnet --version
 git --version
 ```
 
-如果 `dotnet` 不存在，提示用户安装 .NET 9 SDK 后继续。
+如果 `dotnet` 不存在，提示用户安装 \.NET 10 SDK 后继续。
 
 ### 自动安装流程
 
@@ -246,7 +246,7 @@ rm -rf ./publish
 
 ### Q: 构建时报 "SDK version not found"
 
-确保已安装 .NET 9 SDK。`global.json` 指定版本 9.0.313，`rollForward: latestPatch` 允许使用更高补丁版本。
+确保已安装 \.NET 10 SDK。`global.json` 指定版本 10.0.302，`rollForward: latestPatch` 允许使用更高补丁版本。
 
 ### Q: 测试中有 2 个跳过
 

@@ -199,48 +199,48 @@ public static class WorkflowCommands
             }
             else
             {
-            var gatewayUrl = GetOpt(args, "--gateway-url") ?? "http://127.0.0.1:5218";
-            var gatewayToken = GetOpt(args, "--gateway-token")
-                ?? Environment.GetEnvironmentVariable("CACHEHUB_GATEWAY_TOKEN")
-                ?? "";
+                var gatewayUrl = GetOpt(args, "--gateway-url") ?? "http://127.0.0.1:5218";
+                var gatewayToken = GetOpt(args, "--gateway-token")
+                    ?? Environment.GetEnvironmentVariable("CACHEHUB_GATEWAY_TOKEN")
+                    ?? "";
 
-            try
-            {
-                var (responseContent, promptTokens, completionTokens, totalTokens) = await CallGatewayAsync(
-                    gatewayUrl, gatewayToken, model, systemPrompt, userContent);
-
-                var gatewayOutput = new
+                try
                 {
-                    manifest = new
-                    {
-                        id = manifest.Id.Value,
-                        workspaceId = manifest.WorkspaceId.Value,
-                        task = manifest.Task.OriginalText,
-                        selectedFiles = manifest.SelectedFiles.Count,
-                        contextSelectedTokens = manifest.Budget.ActualEstimate,
-                        targetTokens = manifest.Budget.ContextTarget,
-                    },
-                    systemPrompt,
-                    userContent = userContent.Length > 500 ? userContent[..500] + "..." : userContent,
-                    gatewayCalled = true,
-                    modelResponse = responseContent,
-                    // V5-W10: No double-counting — model total already includes context
-                    modelPromptTokens = promptTokens,
-                    modelCompletionTokens = completionTokens,
-                    modelTotalTokens = totalTokens,
-                    tokensSaved = manifest.Budget.ContextTarget - promptTokens,
-                };
+                    var (responseContent, promptTokens, completionTokens, totalTokens) = await CallGatewayAsync(
+                        gatewayUrl, gatewayToken, model, systemPrompt, userContent);
 
-                Console.WriteLine(JsonSerializer.Serialize(gatewayOutput, _jsonOpts));
-                Console.Error.WriteLine($"  Context: {manifest.SelectedFiles.Count} files, {manifest.Budget.ActualEstimate} tokens");
-                Console.Error.WriteLine($"  Gateway: called {gatewayUrl}, response {responseContent.Length} chars");
-                return 0;
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"  Gateway call failed: {ex.Message}");
-                Console.Error.WriteLine("  Returning context without model response.");
-            }
+                    var gatewayOutput = new
+                    {
+                        manifest = new
+                        {
+                            id = manifest.Id.Value,
+                            workspaceId = manifest.WorkspaceId.Value,
+                            task = manifest.Task.OriginalText,
+                            selectedFiles = manifest.SelectedFiles.Count,
+                            contextSelectedTokens = manifest.Budget.ActualEstimate,
+                            targetTokens = manifest.Budget.ContextTarget,
+                        },
+                        systemPrompt,
+                        userContent = userContent.Length > 500 ? userContent[..500] + "..." : userContent,
+                        gatewayCalled = true,
+                        modelResponse = responseContent,
+                        // V5-W10: No double-counting — model total already includes context
+                        modelPromptTokens = promptTokens,
+                        modelCompletionTokens = completionTokens,
+                        modelTotalTokens = totalTokens,
+                        tokensSaved = manifest.Budget.ContextTarget - promptTokens,
+                    };
+
+                    Console.WriteLine(JsonSerializer.Serialize(gatewayOutput, _jsonOpts));
+                    Console.Error.WriteLine($"  Context: {manifest.SelectedFiles.Count} files, {manifest.Budget.ActualEstimate} tokens");
+                    Console.Error.WriteLine($"  Gateway: called {gatewayUrl}, response {responseContent.Length} chars");
+                    return 0;
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"  Gateway call failed: {ex.Message}");
+                    Console.Error.WriteLine("  Returning context without model response.");
+                }
             } // end else (cloud send allowed)
         }
 

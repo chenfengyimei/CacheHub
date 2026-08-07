@@ -1,6 +1,7 @@
 using CacheHub.Core.Parsing;
 
 namespace CacheHub.Indexing.Parsing;
+
 public sealed class TextParser : ICodeParser
 {
     public string Id => "text";

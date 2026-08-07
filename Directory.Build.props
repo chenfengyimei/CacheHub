@@ -1,7 +1,7 @@
 <Project>
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
@@ -11,7 +11,7 @@
     <ContinuousIntegrationBuild>false</ContinuousIntegrationBuild>
     <CheckForOverflowUnderflow>true</CheckForOverflowUnderflow>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <NoWarn>$(NoWarn);CS1591;NU1903</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup>
