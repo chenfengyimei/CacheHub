@@ -221,6 +221,26 @@
                 </div>
                 <p id="token-status" style="color:var(--text-dim);font-size:0.85rem"></p>
             </div>
+            <div class="card">
+                <h2>Gateway / Provider</h2>
+                <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:0.75rem">
+                    Configure the model provider endpoint. Used by <code>cachehub gateway start</code> and <code>benchmark agent</code>.
+                </p>
+                <div class="row" style="margin-bottom:0.5rem">
+                    <input type="text" id="provider-url" placeholder="https://api.openai.com/v1" style="flex:1">
+                </div>
+                <div class="row" style="margin-bottom:0.5rem">
+                    <label style="color:var(--text-dim);width:120px;font-size:0.85rem">Port</label>
+                    <input type="text" id="provider-port" placeholder="5218" style="width:120px">
+                    <label style="color:var(--text-dim);width:120px;font-size:0.85rem;margin-left:1rem">Enabled</label>
+                    <input type="checkbox" id="provider-enabled" checked>
+                </div>
+                <div class="row">
+                    <button class="btn" onclick="loadProviderConfig()">Load</button>
+                    <button class="btn btn-success" onclick="saveProviderConfig()">Save Provider</button>
+                    <span id="provider-status" style="color:var(--text-dim);font-size:0.85rem"></span>
+                </div>
+            </div>
         </div>
     </main>
     <div id="toast"></div>
@@ -261,7 +281,7 @@ function showPage(id) {
     document.getElementById('page-' + id).style.display = '';
     document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
     event.target.classList.add('active');
-    if (id === 'settings') loadTokenStatus();
+    if (id === 'settings') { loadTokenStatus(); loadProviderConfig(); }
     if (id === 'dashboard') loadDashboard();
     if (id === 'workspaces') loadWorkspaces();
 }
@@ -288,6 +308,41 @@ function loadTokenStatus() {
     } else {
         status.textContent = 'No token set. Copy the access token from the console and paste it above.';
         status.style.color = 'var(--warning)';
+    }
+}
+
+// V6: GUI Gateway/Provider config (review #33 "GUI Provider 配置不足")
+async function loadProviderConfig() {
+    try {
+        const cfg = await api('/api/v1/config/provider');
+        document.getElementById('provider-url').value = cfg.providerUrl || '';
+        document.getElementById('provider-port').value = cfg.port || 5218;
+        document.getElementById('provider-enabled').checked = !!cfg.enabled;
+        document.getElementById('provider-status').textContent = 'Loaded (' + (cfg.providerUrl || 'not set') + ')';
+    } catch (e) {
+        document.getElementById('provider-status').textContent = 'Failed to load provider config';
+    }
+}
+
+async function saveProviderConfig() {
+    const url = document.getElementById('provider-url').value.trim();
+    const port = parseInt(document.getElementById('provider-port').value, 10) || 5218;
+    const enabled = document.getElementById('provider-enabled').checked;
+    try {
+        const res = await api('/api/v1/config/provider', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled, port, providerUrl: url || null })
+        });
+        if (res.saved) {
+            document.getElementById('provider-status').textContent = '已保存: ' + (res.providerUrl || 'not set') + ' :' + res.port;
+            document.getElementById('provider-status').style.color = 'var(--success)';
+            toast('Provider 配置已保存');
+            loadProviderConfig();
+        }
+    } catch (e) {
+        document.getElementById('provider-status').textContent = '保存失败: ' + (e.message || 'error');
+        document.getElementById('provider-status').style.color = 'var(--warning)';
     }
 }
 

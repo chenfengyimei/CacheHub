@@ -394,6 +394,40 @@ app.MapPost("/api/v1/auth/init", (HttpContext ctx) =>
     return Results.Ok(new { authenticated = true, message = "Session cookie set." });
 });
 
+// === V6 Provider Config (review #33: GUI Provider 配置不足) ===
+app.MapGet("/api/v1/config/provider", () =>
+{
+    var cm = new ConfigManager();
+    var config = cm.Load();
+    var gw = config.Gateway;
+    return Results.Ok(new
+    {
+        enabled = gw?.Enabled ?? false,
+        port = gw?.Port ?? 5218,
+        providerUrl = gw?.ProviderUrl ?? "",
+        enableCache = gw?.EnableCache ?? true,
+        enableSingleFlight = gw?.EnableSingleFlight ?? true,
+    });
+});
+
+app.MapPost("/api/v1/config/provider", (ProviderConfigApiRequest req) =>
+{
+    var cm = new ConfigManager();
+    var config = cm.Load();
+    var gw = config.Gateway ?? new GatewayConfigFile();
+    var updated = gw with
+    {
+        Enabled = req.Enabled ?? gw.Enabled,
+        Port = req.Port ?? gw.Port,
+        ProviderUrl = req.ProviderUrl ?? gw.ProviderUrl,
+        EnableCache = req.EnableCache ?? gw.EnableCache,
+        EnableSingleFlight = req.EnableSingleFlight ?? gw.EnableSingleFlight,
+    };
+    var newConfig = config with { Gateway = updated };
+    cm.Save(newConfig);
+    return Results.Ok(new { saved = true, providerUrl = updated.ProviderUrl, port = updated.Port });
+});
+
 // === Capabilities ===
 app.MapGet("/api/v1/capabilities", () => Results.Ok(new CapabilityDiscovery
 {
@@ -1320,6 +1354,7 @@ record ContextBuildApiRequest(string WorkspaceId, string Task);
 record ExpandApiRequest(string? Symbol, string? File, string? Reason);
 record FeedbackApiRequest(string? ClientId, bool TaskCompleted, bool MissingContextReported, IReadOnlyList<string>? FilesActuallyRead);
 record ContextualCompletionApiRequest(string WorkspaceId, string Task, string? ModelId, string? CurrentFile, bool CallGateway, string? GatewayUrl = null, string? GatewayToken = null);
+record ProviderConfigApiRequest(bool? Enabled, int? Port, string? ProviderUrl, bool? EnableCache, bool? EnableSingleFlight);
 
 // Make Program class accessible for integration testing
 public partial class Program { }

@@ -132,6 +132,22 @@ public class LocalApiContractTests : IClassFixture<LocalApiFactory>
         Assert.Equal(JsonValueKind.Number, code.ValueKind);
     }
 
+    // V6: Provider config endpoint (review #33)
+    [Fact]
+    public async Task ConfigProvider_Get_ReturnsValidShape()
+    {
+        _client.DefaultRequestHeaders.Authorization = new("Bearer", TestToken);
+        var response = await _client.GetAsync("/api/v1/config/provider");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonDocument>();
+        Assert.NotNull(body);
+        Assert.True(body.RootElement.TryGetProperty("enabled", out _));
+        Assert.True(body.RootElement.TryGetProperty("port", out _));
+        Assert.True(body.RootElement.TryGetProperty("providerUrl", out _));
+        Assert.True(body.RootElement.TryGetProperty("enableCache", out _));
+    }
+
     // === Search Contract ===
 
     [Fact]
