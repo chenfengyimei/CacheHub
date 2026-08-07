@@ -709,6 +709,7 @@ public static class BenchmarkCommands
                 Console.Error.WriteLine($"{"Success rate",-26} {result.SuccessRate:P1,-12} {baselineResult.SuccessRate:P1,-12}");
                 Console.Error.WriteLine($"{"Total input tokens",-26} {result.TotalPromptTokens,-12} {baselineResult.TotalPromptTokens,-12}");
                 Console.Error.WriteLine($"{"Total tokens",-26} {result.TotalTokens,-12} {baselineResult.TotalTokens,-12}");
+                Console.Error.WriteLine($"{"Local est. context tokens",-26} {result.TotalLocalEstimatedContextTokens,-12} {baselineResult.TotalLocalEstimatedContextTokens,-12}");
                 Console.Error.WriteLine($"{"Avg rounds",-26} {result.AvgRounds:F2,-12} {baselineResult.AvgRounds:F2,-12}");
                 Console.Error.WriteLine($"{"Total cost (USD)",-26} {result.TotalCost:F6,-12} {baselineResult.TotalCost:F6,-12}");
             }
