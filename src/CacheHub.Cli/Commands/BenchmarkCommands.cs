@@ -469,17 +469,18 @@ public static class BenchmarkCommands
                 });
 
             var paths = manifest.SelectedFiles.Select(f => f.Path).ToList();
-            var snippets = paths
-                .Select(p => new { Path = p, Content = ResolveFileContent(workspace.RootPath, p) })
-                .Where(x => !string.IsNullOrEmpty(x.Content))
-                .Select(x => $"// ---- {x.Path} ----\n{x.Content}")
-                .ToList();
+
+            // V6: Use real PayloadGenerator for chunked/compressed payload (respects anchor ranges)
+            var payloadGenerator = new CacheHub.Context.Payload.PayloadGenerator();
+            var (_, payloadEnforcer) = CacheHub.Core.Security.SecurityPolicyResolver.CreateEnforcer();
+            var payloadContent = payloadGenerator.GenerateMarkdown(manifest,
+                path => ResolveFileContent(workspace.RootPath, path), payloadEnforcer);
 
             return new Core.Benchmarks.Agent.AgentContextPackage
             {
                 TaskDescription = taskDescription,
                 SelectedFilePaths = paths,
-                FileSnippets = snippets,
+                FileSnippets = [payloadContent],
                 EstimatedTokens = manifest.Budget.ActualEstimate,
             };
         }

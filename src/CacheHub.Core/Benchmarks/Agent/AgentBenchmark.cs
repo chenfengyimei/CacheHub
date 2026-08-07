@@ -74,8 +74,8 @@ public sealed record AgentBenchmarkResult
     public required string ModelId { get; init; }
     public required IReadOnlyList<AgentRunResult> Runs { get; init; }
     public double SuccessRate => Runs.Count == 0 ? 0 : (double)Runs.Count(r => r.TaskCompleted) / Runs.Count;
-    public long TotalPromptTokens => Runs.Sum(r => (long)r.PromptTokens);
-    public long TotalCompletionTokens => Runs.Sum(r => (long)r.CompletionTokens);
+    public long TotalPromptTokens => Runs.Sum(r => (long)r.PromptTokens); // V6: Provider actual usage
+    public long TotalCompletionTokens => Runs.Sum(r => (long)r.CompletionTokens); // V6: Provider actual usage
     public long TotalTokens => TotalPromptTokens + TotalCompletionTokens;
     public double TotalCost => Runs.Sum(r => r.TotalCost);
     public double AvgRounds => Runs.Count == 0 ? 0 : Runs.Average(r => (double)r.Rounds);
@@ -126,8 +126,6 @@ public sealed class AgentBenchmarkRunner
             rounds++;
             var context = contextBuilder(task.TaskDescription);
             var prompt = ComposePrompt(task.TaskDescription, context.FileSnippets);
-            var promptTokens = _tokenizer.CountTokens(prompt);
-            totalPrompt += promptTokens;
 
             AgentModelResponse response;
             try
@@ -140,6 +138,8 @@ public sealed class AgentBenchmarkRunner
                 break;
             }
 
+            // V6: Use Provider's actual usage tokens, not local tokenizer estimate
+            totalPrompt += response.PromptTokens;
             totalCompletion += response.CompletionTokens;
             totalCost += response.Cost ?? 0;
 

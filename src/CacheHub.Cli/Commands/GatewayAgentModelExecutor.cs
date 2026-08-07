@@ -70,18 +70,40 @@ public sealed class GatewayAgentModelExecutor : Core.Benchmarks.Agent.IAgentMode
             Content = content,
             PromptTokens = promptTokens,
             CompletionTokens = completionTokens,
-            Cost = EstimateCost(promptTokens, completionTokens),
+            Cost = EstimateCost(promptTokens, completionTokens, _model),
         };
     }
 
     /// <summary>
-    /// Rough cost estimate (USD): 1M input/2M output for GPT-4o-class. User-provided costs are approximate.
+    /// V6: Per-model cost estimation (USD per 1M tokens).
+    /// Falls back to GPT-4o pricing for unknown models.
     /// </summary>
-    private static double? EstimateCost(int promptTokens, int completionTokens)
+    private static double? EstimateCost(int promptTokens, int completionTokens, string model = "gpt-4o")
     {
-        const double inputPer1M = 2.50;
-        const double outputPer1M = 10.00;
+        var (inputPer1M, outputPer1M) = GetModelPricing(model);
         return (promptTokens / 1_000_000.0) * inputPer1M + (completionTokens / 1_000_000.0) * outputPer1M;
+    }
+
+    private static (double inputPer1M, double outputPer1M) GetModelPricing(string model)
+    {
+        // Pricing as of 2026-08 (approximate, per 1M tokens)
+        var m = model.ToLowerInvariant();
+        return m switch
+        {
+            "gpt-4o" => (2.50, 10.00),
+            "gpt-4o-mini" => (0.15, 0.60),
+            "gpt-4-turbo" => (10.00, 30.00),
+            "gpt-3.5-turbo" => (0.50, 1.50),
+            "claude-3-5-sonnet" or "claude-3-5-sonnet-20241022" => (3.00, 15.00),
+            "claude-3-5-haiku" or "claude-3-5-haiku-20241022" => (0.80, 4.00),
+            "claude-3-opus" => (15.00, 75.00),
+            "gemini-1.5-pro" => (1.25, 5.00),
+            "gemini-1.5-flash" => (0.075, 0.30),
+            "deepseek-chat" or "deepseek-coder" => (0.14, 0.28),
+            "qwen-plus" => (0.40, 1.20),
+            "qwen-turbo" => (0.05, 0.20),
+            _ => (2.50, 10.00), // default: GPT-4o-class
+        };
     }
 
     public void Dispose()
