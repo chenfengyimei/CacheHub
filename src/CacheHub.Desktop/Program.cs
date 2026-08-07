@@ -1022,7 +1022,20 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
                 Confidence = r.Confidence,
             }).ToList();
         },
-        semanticSearch: DesktopSemanticHelper.CreateSemanticSearch(workspace.Id.Value));
+        semanticSearch: DesktopSemanticHelper.CreateSemanticSearch(workspace.Id.Value),
+        fileSymbolsProvider: path =>
+        {
+            var results = querySvc.GetFileSymbolsAsync(activeSnapshotId, path).GetAwaiter().GetResult();
+            return results.Select(r => new CacheHub.Context.Recall.SymbolHit
+            {
+                NormalizedPath = path,
+                Name = r.Name,
+                Kind = r.Kind,
+                StartLine = r.StartLine,
+                EndLine = r.EndLine,
+                ExactMatch = true,
+            }).ToList();
+        });
 
     await ctxRepo.SaveAsync(manifest);
 

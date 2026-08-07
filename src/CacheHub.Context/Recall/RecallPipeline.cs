@@ -119,7 +119,8 @@ public sealed class RecallPipeline
         Func<string, IReadOnlyList<SymbolHit>>? symbolSearchDetailed = null,
         Func<string, IReadOnlyList<RelationHit>>? relationSearch = null,
         Func<string, IReadOnlyList<SemanticHit>>? semanticSearch = null,
-        Func<string, IReadOnlyList<RelationHit>>? reverseRelationSearch = null)
+        Func<string, IReadOnlyList<RelationHit>>? reverseRelationSearch = null,
+        Func<string, IReadOnlyList<SymbolHit>>? fileSymbolsProvider = null)
     {
         var opts = options ?? new RecallOptions();
         var builders = new Dictionary<string, CandidateFileBuilder>(StringComparer.OrdinalIgnoreCase);
@@ -139,6 +140,7 @@ public sealed class RecallPipeline
             RelationSearch = relationSearch,
             ReverseRelationSearch = reverseRelationSearch,
             SemanticSearch = semanticSearch,
+            FileSymbolsProvider = fileSymbolsProvider,
             AlreadyMatchedPaths = matchedPaths,
         };
 

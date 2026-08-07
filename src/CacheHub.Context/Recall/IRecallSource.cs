@@ -107,6 +107,10 @@ public sealed record RecallContext
     /// <summary>Detailed symbol search callback (returns full symbol info with line ranges).</summary>
     public Func<string, IReadOnlyList<SymbolHit>>? SymbolSearchDetailed { get; init; }
 
+    /// <summary>V5-W08: Returns all symbols defined in a given file path (not a symbol name search).
+    /// Used by reverse relation recall to find what symbols a matched file defines.</summary>
+    public Func<string, IReadOnlyList<SymbolHit>>? FileSymbolsProvider { get; init; }
+
     /// <summary>Import search callback (queries file_imports table).</summary>
     public Func<string, IReadOnlyList<string>>? ImportSearch { get; init; }
 

@@ -709,11 +709,11 @@ public sealed class RelationRecallSource : IRecallSource
         // Reverse relation recall: "who calls X?" — find files that reference matched symbols
         if (context.ReverseRelationSearch is not null)
         {
-            // Collect symbols from matched files to search as reverse targets
+            // V5-W08: Use FileSymbolsProvider (not SymbolSearchDetailed) to get symbols BY file path
             var reverseTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var path in context.AlreadyMatchedPaths)
             {
-                var symbols = context.SymbolSearchDetailed?.Invoke(path);
+                var symbols = context.FileSymbolsProvider?.Invoke(path);
                 if (symbols is not null)
                 {
                     foreach (var s in symbols)

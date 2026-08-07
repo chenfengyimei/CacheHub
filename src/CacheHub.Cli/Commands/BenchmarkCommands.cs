@@ -210,7 +210,20 @@ public static class BenchmarkCommands
                     Confidence = r.Confidence,
                 }).ToList();
             },
-            semanticSearch: SemanticReferenceHelper.CreateSemanticSearch(appData.Root, workspace.Id.Value));
+            semanticSearch: SemanticReferenceHelper.CreateSemanticSearch(appData.Root, workspace.Id.Value),
+            fileSymbolsProvider: path =>
+            {
+                var results = querySvc.GetFileSymbolsAsync(activeSnapshotId, path).GetAwaiter().GetResult();
+                return results.Select(r => new Context.Recall.SymbolHit
+                {
+                    NormalizedPath = path,
+                    Name = r.Name,
+                    Kind = r.Kind,
+                    StartLine = r.StartLine,
+                    EndLine = r.EndLine,
+                    ExactMatch = true,
+                }).ToList();
+            });
 
         // Compute real metrics
         var gt = BenchmarkTaskSet.GetGroundTruth(taskId);
@@ -440,7 +453,20 @@ public static class BenchmarkCommands
                         Confidence = r.Confidence,
                     }).ToList();
                 },
-                semanticSearch: SemanticReferenceHelper.CreateSemanticSearch(appData.Root, workspace.Id.Value));
+                semanticSearch: SemanticReferenceHelper.CreateSemanticSearch(appData.Root, workspace.Id.Value),
+                fileSymbolsProvider: path =>
+                {
+                    var results = querySvc.GetFileSymbolsAsync(activeSnapshotId, path).GetAwaiter().GetResult();
+                    return results.Select(r => new Context.Recall.SymbolHit
+                    {
+                        NormalizedPath = path,
+                        Name = r.Name,
+                        Kind = r.Kind,
+                        StartLine = r.StartLine,
+                        EndLine = r.EndLine,
+                        ExactMatch = true,
+                    }).ToList();
+                });
 
             var paths = manifest.SelectedFiles.Select(f => f.Path).ToList();
             var snippets = paths

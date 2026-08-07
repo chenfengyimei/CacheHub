@@ -68,7 +68,8 @@ public sealed class ContextEngine
         Func<string, IReadOnlyList<SymbolHit>>? symbolSearchDetailed = null,
         Func<string, IReadOnlyList<RelationHit>>? relationSearch = null,
         Func<string, IReadOnlyList<SemanticHit>>? semanticSearch = null,
-        Func<string, IReadOnlyList<RelationHit>>? reverseRelationSearch = null)
+        Func<string, IReadOnlyList<RelationHit>>? reverseRelationSearch = null,
+        Func<string, IReadOnlyList<SymbolHit>>? fileSymbolsProvider = null)
     {
         var budget = (request.Budget ?? DefaultTokenBudgetPolicy.Create()).ValidateOrThrow();
         var profile = request.RankingProfile ?? DefaultRankingProfile.Create();
@@ -111,7 +112,7 @@ public sealed class ContextEngine
         }
 
         var parsedTask = _taskParser.Parse(request.Task);
-        var candidates = _recall.Recall(parsedTask, indexedFilesProvider(), request.GitDiffFiles, request.CurrentFile, ftsSearch, symbolSearch, importSearch, recallOptions, symbolSearchDetailed, relationSearch, semanticSearch, reverseRelationSearch);
+        var candidates = _recall.Recall(parsedTask, indexedFilesProvider(), request.GitDiffFiles, request.CurrentFile, ftsSearch, symbolSearch, importSearch, recallOptions, symbolSearchDetailed, relationSearch, semanticSearch, reverseRelationSearch, fileSymbolsProvider);
         var ranked = _ranking.Rank(candidates, profile, parsedTask, request.CurrentFile);
         var selected = _selection.Select(ranked, budget, contentProvider, hashProvider, tokenizer);
 

@@ -227,6 +227,20 @@ public static class ContextCommands
                     Confidence = r.Confidence,
                     SourcePath = r.NormalizedPath,
                 }).ToList();
+            },
+            fileSymbolsProvider: path =>
+            {
+                var querySvc = new SqliteIndexQueryService(factory);
+                var results = querySvc.GetFileSymbolsAsync(snapshotId, path).GetAwaiter().GetResult();
+                return results.Select(r => new Context.Recall.SymbolHit
+                {
+                    NormalizedPath = path,
+                    Name = r.Name,
+                    Kind = r.Kind,
+                    StartLine = r.StartLine,
+                    EndLine = r.EndLine,
+                    ExactMatch = true,
+                }).ToList();
             });
 
         // Persist manifest
