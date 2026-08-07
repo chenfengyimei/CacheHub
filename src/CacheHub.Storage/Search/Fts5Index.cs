@@ -113,6 +113,95 @@ public sealed class Fts5Index(SqliteConnectionFactory factory)
         cmd.Parameters.AddWithValue("$snapshot", snapshotId.Value);
         await cmd.ExecuteNonQueryAsync(ct);
     }
+
+    /// <summary>
+    /// R6-W001: Deletes a single file's FTS5 entry within a snapshot.
+    /// Allows incremental updates without clearing the entire snapshot.
+    /// </summary>
+    public async Task DeleteFileAsync(
+        IndexSnapshotId snapshotId,
+        string normalizedPath,
+        CancellationToken ct = default)
+    {
+        await using var connection = factory.CreateOpenConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            DELETE FROM file_contents_fts
+            WHERE snapshot_id = $snapshot AND normalized_path = $normPath;
+            """;
+        cmd.Parameters.AddWithValue("$snapshot", snapshotId.Value);
+        cmd.Parameters.AddWithValue("$normPath", normalizedPath);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>
+    /// R6-W001: Upserts (delete + insert) a single file's FTS5 entry within a snapshot.
+    /// If an entry for the same snapshot+path exists, it is replaced.
+    /// </summary>
+    public async Task UpsertFileAsync(
+        IndexSnapshotId snapshotId,
+        string path,
+        string normalizedPath,
+        string content,
+        string language,
+        string contentHash,
+        CancellationToken ct = default)
+    {
+        await using var connection = factory.CreateOpenConnection();
+        await using var transaction = await connection.BeginTransactionAsync(ct);
+
+        // Delete existing entry for this snapshot+path
+        using (var delCmd = connection.CreateCommand())
+        {
+            delCmd.Transaction = (Microsoft.Data.Sqlite.SqliteTransaction)transaction;
+            delCmd.CommandText = """
+                DELETE FROM file_contents_fts
+                WHERE snapshot_id = $snapshot AND normalized_path = $normPath;
+                """;
+            delCmd.Parameters.AddWithValue("$snapshot", snapshotId.Value);
+            delCmd.Parameters.AddWithValue("$normPath", normalizedPath);
+            await delCmd.ExecuteNonQueryAsync(ct);
+        }
+
+        // Insert new entry
+        using (var insCmd = connection.CreateCommand())
+        {
+            insCmd.Transaction = (Microsoft.Data.Sqlite.SqliteTransaction)transaction;
+            insCmd.CommandText = """
+                INSERT INTO file_contents_fts (path, normalized_path, content, language, content_hash, snapshot_id)
+                VALUES ($path, $normPath, $content, $lang, $hash, $snapshot);
+                """;
+            insCmd.Parameters.AddWithValue("$path", path);
+            insCmd.Parameters.AddWithValue("$normPath", normalizedPath);
+            insCmd.Parameters.AddWithValue("$content", content);
+            insCmd.Parameters.AddWithValue("$lang", language);
+            insCmd.Parameters.AddWithValue("$hash", contentHash);
+            insCmd.Parameters.AddWithValue("$snapshot", snapshotId.Value);
+            await insCmd.ExecuteNonQueryAsync(ct);
+        }
+
+        await transaction.CommitAsync(ct);
+    }
+
+    /// <summary>
+    /// R6-W001: Checks whether a file entry exists in FTS5 for a given snapshot+path.
+    /// </summary>
+    public async Task<bool> FileExistsAsync(
+        IndexSnapshotId snapshotId,
+        string normalizedPath,
+        CancellationToken ct = default)
+    {
+        await using var connection = factory.CreateOpenConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            SELECT COUNT(*) FROM file_contents_fts
+            WHERE snapshot_id = $snapshot AND normalized_path = $normPath;
+            """;
+        cmd.Parameters.AddWithValue("$snapshot", snapshotId.Value);
+        cmd.Parameters.AddWithValue("$normPath", normalizedPath);
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is long count && count > 0;
+    }
 }
 
 /// <summary>
