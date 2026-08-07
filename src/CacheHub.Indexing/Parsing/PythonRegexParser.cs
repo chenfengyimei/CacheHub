@@ -4,15 +4,30 @@ using CacheHub.Core.Parsing;
 namespace CacheHub.Indexing.Parsing;
 
 /// <summary>
-/// Regex-based Python parser: extracts classes, functions, imports, and decorators.
+/// Regex-based Python parser (regex-baseline):
+/// extracts classes, functions, imports, decorators, and module-level variables.
+/// Import relations are marked syntactic; call relations are heuristic.
 /// </summary>
 public sealed partial class PythonRegexParser : ICodeParser
 {
-    public string Id => "python-regex";
-    public string Version => "1.0";
+    public string Id => "python-regex-baseline";
+    public string Version => "2.0";
     public IReadOnlySet<string> SupportedExtensions { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         ".py",
+    };
+
+    private static readonly HashSet<string> NonCallKeywords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "if", "else", "elif", "for", "while", "return", "yield",
+        "import", "from", "as", "in", "not", "and", "or", "is",
+        "def", "class", "try", "except", "finally", "raise",
+        "with", "lambda", "pass", "break", "continue", "global",
+        "nonlocal", "assert", "del", "print", "len", "range",
+        "True", "False", "None", "self", "cls", "super",
+        "type", "isinstance", "issubclass", "getattr", "setattr",
+        "hasattr", "staticmethod", "classmethod", "property",
+        "async", "await", "asyncio",
     };
 
     public ParseResult Parse(string content, string filePath)
@@ -26,8 +41,13 @@ public sealed partial class PythonRegexParser : ICodeParser
         for (var i = 0; i < lines.Length; i++)
         {
             var line = lines[i].TrimEnd('\r');
+            var trimmed = line.TrimStart();
 
-            // import/from import
+            // Skip comments and empty lines
+            if (trimmed.StartsWith('#') || string.IsNullOrWhiteSpace(trimmed))
+                continue;
+
+            // from ... import ...
             var fromMatch = FromImportRegex().Match(line);
             if (fromMatch.Success)
             {
@@ -44,9 +64,18 @@ public sealed partial class PythonRegexParser : ICodeParser
                     StartLine = i + 1,
                     EndLine = i + 1,
                 });
+                relations.Add(new CodeRelation
+                {
+                    RelationType = RelationType.Syntactic,
+                    Relation = "imports",
+                    TargetName = fromMatch.Groups[1].Value,
+                    Confidence = 1.0,
+                    Source = Id,
+                });
                 continue;
             }
 
+            // import ...
             var importMatch = ImportRegex().Match(line);
             if (importMatch.Success)
             {
@@ -62,23 +91,54 @@ public sealed partial class PythonRegexParser : ICodeParser
                     StartLine = i + 1,
                     EndLine = i + 1,
                 });
+                relations.Add(new CodeRelation
+                {
+                    RelationType = RelationType.Syntactic,
+                    Relation = "imports",
+                    TargetName = importMatch.Groups[1].Value,
+                    Confidence = 1.0,
+                    Source = Id,
+                });
                 continue;
             }
 
-            // class
+            // class with optional base classes: class Name(Base1, Base2):
             var classMatch = ClassRegex().Match(line);
             if (classMatch.Success)
             {
+                var className = classMatch.Groups[1].Value;
                 symbols.Add(new CodeSymbol
                 {
-                    Name = classMatch.Groups[1].Value,
+                    Name = className,
                     Kind = SymbolKind.Class,
                     StartLine = i + 1,
                     EndLine = FindBlockEnd(lines, i),
                 });
+
+                // Base classes
+                if (classMatch.Groups[2].Success)
+                {
+                    var bases = classMatch.Groups[2].Value.Split(',', StringSplitOptions.TrimEntries);
+                    foreach (var baseType in bases)
+                    {
+                        var cleanBase = baseType.Split('[')[0].Trim();
+                        if (!string.IsNullOrEmpty(cleanBase) && cleanBase != "object")
+                        {
+                            relations.Add(new CodeRelation
+                            {
+                                RelationType = RelationType.Syntactic,
+                                Relation = "inherits",
+                                TargetName = cleanBase,
+                                Confidence = 0.9,
+                                Source = Id,
+                            });
+                        }
+                    }
+                }
+                continue;
             }
 
-            // function/def
+            // function/def (including async)
             var funcMatch = FunctionRegex().Match(line);
             if (funcMatch.Success)
             {
@@ -89,6 +149,7 @@ public sealed partial class PythonRegexParser : ICodeParser
                     StartLine = i + 1,
                     EndLine = FindBlockEnd(lines, i),
                 });
+                continue;
             }
 
             // decorator
@@ -102,20 +163,47 @@ public sealed partial class PythonRegexParser : ICodeParser
                     StartLine = i + 1,
                     EndLine = i + 1,
                 });
+                relations.Add(new CodeRelation
+                {
+                    RelationType = RelationType.Syntactic,
+                    Relation = "decorated_by",
+                    TargetName = decoMatch.Groups[1].Value,
+                    Confidence = 0.8,
+                    Source = Id,
+                });
+                continue;
             }
 
-            // call expressions (heuristic)
+            // module-level constant: UPPER_CASE = ...
+            var constMatch = ConstantRegex().Match(line);
+            if (constMatch.Success && GetIndent(line) == 0)
+            {
+                symbols.Add(new CodeSymbol
+                {
+                    Name = constMatch.Groups[1].Value,
+                    Kind = SymbolKind.Constant,
+                    StartLine = i + 1,
+                    EndLine = i + 1,
+                });
+            }
+
+            // call expressions (heuristic) — filtered
             var callMatches = CallRegex().Matches(line);
             foreach (System.Text.RegularExpressions.Match call in callMatches)
             {
                 var funcName = call.Groups[1].Value;
+                if (NonCallKeywords.Contains(funcName))
+                    continue;
+                if (funcName.Length < 2)
+                    continue;
+
                 calls.Add(new CallExpression { FunctionName = funcName, Line = i + 1 });
                 relations.Add(new CodeRelation
                 {
                     RelationType = RelationType.Heuristic,
                     Relation = "possible_call",
                     TargetName = funcName,
-                    Confidence = 0.5,
+                    Confidence = 0.45,
                     Source = Id,
                 });
             }
@@ -153,7 +241,8 @@ public sealed partial class PythonRegexParser : ICodeParser
     [GeneratedRegex(@"^\s*import\s+([\w.]+)")]
     private static partial Regex ImportRegex();
 
-    [GeneratedRegex(@"^\s*class\s+(\w+)")]
+    // class Name(Base1, Base2):
+    [GeneratedRegex(@"^\s*class\s+(\w+)\s*(?:\(([^)]*)\))?\s*:")]
     private static partial Regex ClassRegex();
 
     [GeneratedRegex(@"^\s*(?:async\s+)?def\s+(\w+)")]
@@ -161,6 +250,10 @@ public sealed partial class PythonRegexParser : ICodeParser
 
     [GeneratedRegex(@"^\s*@(\w+)")]
     private static partial Regex DecoratorRegex();
+
+    // UPPER_CASE = value (module-level constant)
+    [GeneratedRegex(@"^([A-Z][A-Z0-9_]*)\s*=")]
+    private static partial Regex ConstantRegex();
 
     [GeneratedRegex(@"(\w+)\s*\(")]
     private static partial Regex CallRegex();
