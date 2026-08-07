@@ -53,8 +53,19 @@ public static class BenchmarkCommands
             Console.WriteLine("Commands:");
             Console.WriteLine("  list    List available benchmark tasks");
             Console.WriteLine("  run     Run a retrieval benchmark (Recall/Token) against a real workspace");
-            Console.WriteLine("  agent   Run a real Agent Benchmark (task→model→patch→cost) via Gateway");
-            Console.WriteLine("  report  Generate aggregated report from all runs");
+            Console.WriteLine("  agent   Run a real Agent Benchmark (task→model→patch→test→cost) via Gateway");
+            Console.WriteLine("  report  Generate aggregated report from all retrieval benchmark runs");
+            Console.WriteLine();
+            Console.WriteLine("Agent options:");
+            Console.WriteLine("  --id=<workspace-id>     Workspace with active index (required)");
+            Console.WriteLine("  --task=<task-id>        Specific task (default: all tasks)");
+            Console.WriteLine("  --model=<model>         Model id (default: gpt-4o-mini)");
+            Console.WriteLine("  --gateway-url=<url>     Gateway URL (default: http://127.0.0.1:5218)");
+            Console.WriteLine("  --rounds=<n>            Max model rounds per task (default: 2)");
+            Console.WriteLine("  --compare               Run CacheHub vs Baseline side-by-side");
+            Console.WriteLine("  --real-test             Apply patch to git worktree + run real build/test");
+            Console.WriteLine("                          (SuccessRate from actual test exit code)");
+            Console.WriteLine("  --test-command=<cmd>    Build/test command for --real-test (default: dotnet test)");
             return 1;
         }
 

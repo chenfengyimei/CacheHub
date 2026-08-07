@@ -116,10 +116,32 @@ src/
   CacheHub.Cli/          — CLI commands (23 command groups incl. workflow/doctor, 12-language parser coverage)
   CacheHub.Desktop/      — ASP.NET Core Web UI + Local API (18 routes incl. contextual-completion, Bearer auth)
 tests/
-  CacheHub.Tests/        — 865 tests (unit + integration + security + gate regression + V3 closure + parser fixture)
+  CacheHub.Tests/        — 875 tests (unit + integration + security + gate regression + V3 closure + parser fixture)
 integration/             — Universal Skill, 3 Agent examples, protocol docs, tutorials
 Docs/                    — INSTALL.md, USAGE.md, ARCHITECTURE.md, ADRs, specs
 ```
+
+## Benchmark
+
+Prove CacheHub's value ("same success, fewer tokens") with real evidence:
+
+```bash
+# 1. Build index for the workspace
+cachehub index build --id=<workspace-id>
+
+# 2. Run retrieval benchmark (real ContextEngine recall + token reduction)
+cachehub benchmark run --task=<task-id> --id=<workspace-id>
+
+# 3. Run agent benchmark with REAL build/test verification (git worktree → apply patch → dotnet test)
+#    SuccessRate comes from the actual test exit code, not a heuristic
+cachehub benchmark agent --id=<workspace-id> --real-test --test-command="dotnet test -c Release"
+
+# 4. Compare CacheHub vs Baseline (full-repo) side-by-side
+cachehub benchmark agent --id=<workspace-id> --compare --real-test
+```
+
+`--real-test` requires the workspace to be a git repository. It creates a temp worktree,
+applies the model's diff, runs the build/test command, and reports the real pass/fail.
 
 ## Commit Convention
 

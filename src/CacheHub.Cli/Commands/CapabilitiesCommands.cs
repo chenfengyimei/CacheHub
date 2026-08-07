@@ -46,7 +46,7 @@ public static class CapabilitiesCommands
                 "Tokenizer: BPE model tokenizers (cl100k_base + o200k_base via Microsoft.ML.Tokenizers) + CodeTokenizer fallback",
                 "Gateway: multi-provider fallback, Responses API streaming, SSE Usage parsing, persistent SqliteCacheStore",
                 "Cache: ContextPackageCache wired (in-memory + persistent SqliteCacheStore) with complete CacheKey, Gateway raw cache persistent via SqliteCacheStore",
-                "Benchmark: retrieval (Recall@10 + TokenReduction) via real ContextEngine + Agent Benchmark (task→model→patch→cost) via Gateway",
+                "Benchmark: retrieval (Recall@10 + TokenReduction) via real ContextEngine + Agent Benchmark (task→model→patch→test→cost) via Gateway with --real-test git worktree apply/build/test",
             ],
         };
 
