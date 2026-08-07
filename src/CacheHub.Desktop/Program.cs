@@ -1039,7 +1039,9 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
     // Call Gateway if requested
     string? modelResponse = null;
     var gatewayCalled = false;
-    var extraTokens = 0;
+    var modelPromptTokens = 0;
+    var modelCompletionTokens = 0;
+    var modelTotalTokens = 0;
 
     if (req.CallGateway && !string.IsNullOrEmpty(req.ModelId))
     {
@@ -1087,9 +1089,12 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
                     .GetString();
                 gatewayCalled = true;
 
-                if (doc.RootElement.TryGetProperty("usage", out var usage) &&
-                    usage.TryGetProperty("total_tokens", out var t))
-                    extraTokens = t.GetInt32();
+                if (doc.RootElement.TryGetProperty("usage", out var usage))
+                {
+                    modelPromptTokens = usage.TryGetProperty("prompt_tokens", out var pt) ? pt.GetInt32() : 0;
+                    modelCompletionTokens = usage.TryGetProperty("completion_tokens", out var ct) ? ct.GetInt32() : 0;
+                    modelTotalTokens = usage.TryGetProperty("total_tokens", out var tt) ? tt.GetInt32() : (modelPromptTokens + modelCompletionTokens);
+                }
             }
             else
             {
@@ -1118,7 +1123,12 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
         userContent,
         gatewayCalled,
         modelResponse,
-        totalLifecycleTokens = manifest.Budget.ActualEstimate + extraTokens,
+        // V5-W10: No double-counting — model total already includes context
+        contextSelectedTokens = manifest.Budget.ActualEstimate,
+        modelPromptTokens,
+        modelCompletionTokens,
+        modelTotalTokens,
+        tokensSaved = manifest.Budget.ContextTarget - modelPromptTokens,
     });
 });
 

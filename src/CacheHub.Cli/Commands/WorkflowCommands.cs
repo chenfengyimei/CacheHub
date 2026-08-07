@@ -193,7 +193,7 @@ public static class WorkflowCommands
 
             try
             {
-                var (responseContent, usageTokens) = await CallGatewayAsync(
+                var (responseContent, promptTokens, completionTokens, totalTokens) = await CallGatewayAsync(
                     gatewayUrl, gatewayToken, model, systemPrompt, userContent);
 
                 var gatewayOutput = new
@@ -204,14 +204,18 @@ public static class WorkflowCommands
                         workspaceId = manifest.WorkspaceId.Value,
                         task = manifest.Task.OriginalText,
                         selectedFiles = manifest.SelectedFiles.Count,
-                        actualTokens = manifest.Budget.ActualEstimate,
+                        contextSelectedTokens = manifest.Budget.ActualEstimate,
                         targetTokens = manifest.Budget.ContextTarget,
                     },
                     systemPrompt,
                     userContent = userContent.Length > 500 ? userContent[..500] + "..." : userContent,
                     gatewayCalled = true,
                     modelResponse = responseContent,
-                    totalLifecycleTokens = manifest.Budget.ActualEstimate + usageTokens,
+                    // V5-W10: No double-counting — model total already includes context
+                    modelPromptTokens = promptTokens,
+                    modelCompletionTokens = completionTokens,
+                    modelTotalTokens = totalTokens,
+                    tokensSaved = manifest.Budget.ContextTarget - promptTokens,
                 };
 
                 Console.WriteLine(JsonSerializer.Serialize(gatewayOutput, _jsonOpts));
@@ -241,7 +245,7 @@ public static class WorkflowCommands
             systemPrompt,
             userContent = userContent.Length > 500 ? userContent[..500] + "..." : userContent,
             gatewayCalled = false,
-            totalLifecycleTokens = manifest.Budget.ActualEstimate,
+            contextSelectedTokens = manifest.Budget.ActualEstimate,
         };
 
         Console.WriteLine(JsonSerializer.Serialize(output, _jsonOpts));
@@ -259,9 +263,9 @@ public static class WorkflowCommands
 
     /// <summary>
     /// Calls the Gateway's /v1/chat/completions endpoint with the assembled prompt.
-    /// Returns (response content, total usage tokens).
+    /// Returns (response content, prompt tokens, completion tokens, total tokens).
     /// </summary>
-    private static async Task<(string content, int usageTokens)> CallGatewayAsync(
+    private static async Task<(string content, int promptTokens, int completionTokens, int totalTokens)> CallGatewayAsync(
         string gatewayUrl, string gatewayToken, string model,
         string systemPrompt, string userContent)
     {
@@ -295,13 +299,17 @@ public static class WorkflowCommands
             .GetProperty("content")
             .GetString() ?? "";
 
-        var usageTokens = 0;
+        var promptTokens = 0;
+        var completionTokens = 0;
+        var totalTokens = 0;
         if (doc.RootElement.TryGetProperty("usage", out var usage))
         {
-            usageTokens = usage.TryGetProperty("total_tokens", out var t) ? t.GetInt32() : 0;
+            promptTokens = usage.TryGetProperty("prompt_tokens", out var p) ? p.GetInt32() : 0;
+            completionTokens = usage.TryGetProperty("completion_tokens", out var c) ? c.GetInt32() : 0;
+            totalTokens = usage.TryGetProperty("total_tokens", out var t) ? t.GetInt32() : (promptTokens + completionTokens);
         }
 
-        return (content, usageTokens);
+        return (content, promptTokens, completionTokens, totalTokens);
     }
 
     private static string ResolveFileHash(SqliteConnectionFactory factory, IndexSnapshotId snapshotId, string path, string rootPath)
