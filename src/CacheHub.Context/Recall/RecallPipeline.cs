@@ -96,6 +96,7 @@ public sealed class RecallPipeline
         new ImportRelationRecallSource(),
         new TestRelationRecallSource(),
         new ConfigRelationRecallSource(),
+        new RepoMapRecallSource(),
         new DirectoryFallbackRecallSource(),
     ];
 

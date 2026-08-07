@@ -498,6 +498,56 @@ public sealed class ConfigRelationRecallSource : IRecallSource
 }
 
 /// <summary>
+/// Repo Map recall source: provides structural context as a low-cost adjacency source.
+/// When no direct candidates found, suggests files from important directories.
+/// </summary>
+public sealed class RepoMapRecallSource : IRecallSource
+{
+    public RecallSource SourceType => RecallSource.RepoMap;
+    public bool IsEnabled { get; init; } = true;
+
+    public IReadOnlyList<RecallHit> Recall(RecallContext context)
+    {
+        var hits = new List<RecallHit>();
+        if (!IsEnabled) return hits;
+
+        // RepoMap as adjacency: if some files are already matched,
+        // suggest files in the same directories (structural proximity)
+        if (context.AlreadyMatchedPaths.Count == 0) return hits;
+
+        var matchedDirs = context.AlreadyMatchedPaths
+            .Select(p => Path.GetDirectoryName(p))
+            .Where(d => !string.IsNullOrEmpty(d))
+            .Select(d => d!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var file in context.IndexedFiles)
+        {
+            if (context.AlreadyMatchedPaths.Contains(file.NormalizedPath)) continue;
+
+            var fileDir = Path.GetDirectoryName(file.NormalizedPath) ?? "";
+            if (matchedDirs.Contains(fileDir))
+            {
+                hits.Add(new RecallHit
+                {
+                    NormalizedPath = file.NormalizedPath,
+                    Source = SourceType,
+                    MatchedText = fileDir,
+                    Confidence = 0.3,
+                    ScoreHints =
+                    [
+                        new ScoreHint { Value = 0.3, Feature = "RepoMap", Confidence = 0.3 },
+                    ],
+                });
+            }
+        }
+
+        return hits;
+    }
+}
+
+/// <summary>
 /// Directory fallback recall source: when no candidates found, includes entry-point files.
 /// </summary>
 public sealed class DirectoryFallbackRecallSource : IRecallSource
