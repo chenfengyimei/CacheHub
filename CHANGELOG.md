@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.0-prealpha] — 2026-08-07
 
+### P1 Gap Fix Round (2026-08-07)
+
+Second audit-driven round: verified all 22 P1 issues (13 FIXED, 8 PARTIALLY FIXED, 0 OPEN) and closed the remaining gaps with production fixes and real verification tests.
+
+#### Verification
+- Confirmed production CLI (`ContextCommands.GetActiveSnapshotAsync`) and Desktop (`GetActiveSnapshotIdAsync`) bind real Active Snapshot — CTX-P0-001 FIXED
+- Confirmed `ResolveFileHash` computes real SHA-256 from disk (CLI + Desktop) — CTX-P0-002 FIXED
+- Confirmed Provider/Router/Budget real implementations — PROV-P1-001 FIXED
+
+#### Real-Data Verification Tests
+- `RealPipelineIntegrationTests`: added budget assertions (`payload.TotalEstimatedTokens <= ContextHardLimit`), phantom-file exclusion (`payload paths ⊆ manifest paths`), and empty-content checks
+- `RealBenchmarkTests.R12_RealBenchmark_MeasuresActualMetricsAgainstGateThresholds`: replaces mock assertions with real Context Engine runs over 3 tasks, measuring actual Recall@10, MissingContext, and TokenReduction vs full-repo baseline
+
+#### Production Fixes
+- **SEC-P1-002**: `PathNormalizer.IsWithinRoot` now uses `PathComparer.PhysicalPathComparison` (platform-aware case sensitivity)
+- **API-P1-002**: Gateway error responses (401/500/413) unified to `ErrorEnvelope`; added `ErrorCode.AuthRequired` and `RequestTooLarge`
+- **API-P1-001**: CLI Capability declaration aligned with Desktop (adds ContextFeedback/Cache/Gateway); Desktop adds `"error": 1` schema; stale Limitations removed
+- **CTX-P1-010**: `ContextEngine.Build` now accepts optional `ContextPackageCache` and checks/stores cache across calls
+
+#### Tests
+- 6 new `AuditFixVerificationTests` (hash computation, expand revision persistence, payload security, batch transaction parser persistence)
+- 3 new `ContextCacheIntegrationTests` (cache hit on identical request, miss on different task, no-cache default)
+- 1 new real benchmark measurement test
+- Enhanced E2E budget/phantom-file assertions
+
+Test count: 749 → 759.
+
 ### Audit Fix Round (2026-08-07)
 
 Comprehensive audit gap analysis and fix round based on `CacheHub_全面审计与改进策划案_V1.0`.
