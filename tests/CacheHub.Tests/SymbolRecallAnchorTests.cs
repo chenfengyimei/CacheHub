@@ -90,9 +90,12 @@ public class SymbolRecallAnchorTests
         {
             result.Add(new IndexedFileInfo
             {
-                Path = reader.GetString(0), NormalizedPath = reader.GetString(0),
-                Size = reader.GetInt64(1), Language = reader.GetString(2),
-                ContentHash = reader.GetString(3), Symbols = [],
+                Path = reader.GetString(0),
+                NormalizedPath = reader.GetString(0),
+                Size = reader.GetInt64(1),
+                Language = reader.GetString(2),
+                ContentHash = reader.GetString(3),
+                Symbols = [],
             });
         }
         return result;

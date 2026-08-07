@@ -219,8 +219,12 @@ public class CliApiConsistencyTests
             symbolSearch: sym => querySvc.SearchSymbolsAsync(snapshotId, sym).GetAwaiter().GetResult().Select(r => r.NormalizedPath).ToList(),
             symbolSearchDetailed: sym => querySvc.SearchSymbolsAsync(snapshotId, sym).GetAwaiter().GetResult().Select(r => new SymbolHit
             {
-                NormalizedPath = r.NormalizedPath, Name = r.Name, Kind = r.Kind,
-                StartLine = r.StartLine, EndLine = r.EndLine, ExactMatch = r.ExactMatch,
+                NormalizedPath = r.NormalizedPath,
+                Name = r.Name,
+                Kind = r.Kind,
+                StartLine = r.StartLine,
+                EndLine = r.EndLine,
+                ExactMatch = r.ExactMatch,
             }).ToList());
     }
 }
