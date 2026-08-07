@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "project": "CacheHub",
   "currentPhase": "V3-TRUE-CLOSURE-COMPLETE",
-  "currentTask": "V3 complete + remaining items fixed: all P0 (3/3), all P1 (16/16), plus 3 remaining items: SqliteCacheStore wired into Gateway (persistent cache), Benchmark CLI uses real ContextEngine (no more DEMO), Semantic bound to Snapshot/ContentHash (stale prevention). 772 tests passing.",
+  "currentTask": "V3 complete + remaining items fixed: all P0 (3/3), all P1 (16/16), plus 3 remaining items: SqliteCacheStore wired into Gateway (persistent cache), Benchmark CLI uses real ContextEngine (no more DEMO), Semantic bound to Snapshot/ContentHash (stale prevention). 789 tests passing (17 V3 closure tests added).",
   "repository": {
     "branch": "main",
     "dirty": false,
@@ -10,7 +10,7 @@
   },
   "qualityGates": {
     "build": "pass (0 errors, 0 warnings, warnings-as-errors enabled)",
-    "unitTests": "pass (772/774, 2 skipped)",
+    "unitTests": "pass (789/791, 2 skipped)",
     "integrationTests": "pass (real SQLite + FTS5 + Context Engine pipeline)",
     "securityTests": "pass (path traversal, auth, XSS, secret scan, symlink, offline mode, unified export enforcement)",
     "format": "pass"
@@ -89,12 +89,12 @@
       "CacheHub.Gateway (server, provider, SSE, router — separated from Core)",
       "CacheHub.Cli (CLI entry, 21 command groups)",
       "CacheHub.Desktop (Web UI, Minimal API, 17 routes)",
-      "CacheHub.Tests (772 tests)"
+      "CacheHub.Tests (789 tests)"
     ],
     "dependencyChain": "Core ← Storage, Indexing, Gateway; Context ← Core+Storage+Indexing; Cli/Desktop ← all",
     "databaseMigrations": 10
   },
   "totalAuditIssuesFixed": 62,
-  "testCount": 772,
-  "lastUpdated": "2026-08-07T16:45:00Z"
+  "testCount": 789,
+  "lastUpdated": "2026-08-07T18:00:00Z"
 }
