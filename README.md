@@ -201,15 +201,16 @@ CacheHub/
 ├── install.ps1 / install.sh        # 安装脚本
 │
 ├── src/                            # 源代码
-│   ├── CacheHub.Core/              # 领域核心：模型、错误、标识符、上下文、安全、Tokenizer、Gateway、Provider、Semantic、LSP、Ecosystem
+│   ├── CacheHub.Core/              # 领域核心：模型、错误、标识符、上下文、安全、Tokenizer、Semantic、LSP 契约
 │   ├── CacheHub.Storage/           # 存储层：SQLite、9 个迁移、Workspace/ContextPackage/Feedback 仓储、FTS5 搜索、CacheStore
 │   ├── CacheHub.Indexing/          # 索引层：目录扫描、忽略规则、文件检测、4 语言解析器 v2.0、RepoMap、缓存
 │   ├── CacheHub.Context/           # 上下文层：任务解析、9 源召回、7 维排序、锚点分块、预算验证、PayloadPlan、扩展修订
+│   ├── CacheHub.Gateway/           # 可选网关：Gateway Server、Provider 路由、SSE 流式（独立于 Core）
 │   ├── CacheHub.Cli/               # CLI 入口：21 个命令组、55 个子命令、单文件发布
 │   └── CacheHub.Desktop/           # Web UI：ASP.NET Core 最小 API + 17 个 Local API 路由 + 6 个页面
 │
 ├── tests/
-│   └── CacheHub.Tests/             # 749 单元/集成/Gate 测试
+│   └── CacheHub.Tests/             # 771 单元/集成/Gate/安全 测试
 │
 ├── integration/                    # Agent 集成套件
 │   ├── skills/universal/           # Universal Skill（通用技能）
@@ -377,11 +378,11 @@ cachehub context export --id=<ctx-id> --format=file
 
 | 类别 | 数量 | 说明 |
 |------|------|------|
-| 单元测试 | 749 通过 | 覆盖模型、工具函数、存储、索引、上下文引擎 |
+| 单元测试 | 771 通过 | 覆盖模型、工具函数、存储、索引、上下文引擎、安全、Gateway |
 | 跳过（需真实 Git 环境） | 2 | |
 | Gate 回归测试 | 60+ | R4-R15 阶段门验证（FTS/符号/锚点/预算/缓存/Gateway/安全/Benchmark） |
 | 真实 SQLite 集成测试 | 10+ | index→context→payload 完整闭环 |
-| **总计** | **751** | |
+| **总计** | **773** | |
 
 ---
 
