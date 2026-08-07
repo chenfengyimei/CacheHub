@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\CacheHub.Core\CacheHub.Core.csproj" />
+    <ProjectReference Include="..\CacheHub.Storage\CacheHub.Storage.csproj" />
     <ProjectReference Include="..\CacheHub.Context\CacheHub.Context.csproj" />
     <ProjectReference Include="..\CacheHub.Indexing\CacheHub.Indexing.csproj" />
   </ItemGroup>
