@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using CacheHub.Core.Paths;
 
 namespace CacheHub.Indexing.IgnoreRules;
 
@@ -175,7 +176,7 @@ public sealed class IgnoreRuleEngine
             if (dirPattern.StartsWith("**/"))
             {
                 var target = dirPattern[3..];
-                return path.Split('/').Any(seg => string.Equals(seg, target, StringComparison.OrdinalIgnoreCase));
+                return path.Split('/').Any(seg => string.Equals(seg, target, PathComparer.PhysicalPathComparison));
             }
             // If the directory pattern contains wildcards, use glob matching
             if (dirPattern.Contains('*') || dirPattern.Contains('?'))
@@ -206,14 +207,14 @@ public sealed class IgnoreRuleEngine
     private static bool MatchSegments(string path, string pattern, bool rootAnchored)
     {
         if (rootAnchored)
-            return string.Equals(path, pattern, StringComparison.OrdinalIgnoreCase)
-                   || path.StartsWith(pattern + "/", StringComparison.OrdinalIgnoreCase);
+            return string.Equals(path, pattern, PathComparer.PhysicalPathComparison)
+                   || path.StartsWith(pattern + "/", PathComparer.PhysicalPathComparison);
 
         // Direct match or if pattern matches any file in path
-        if (string.Equals(GetFileName(path), pattern, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(GetFileName(path), pattern, PathComparer.PhysicalPathComparison))
             return true;
 
-        return path.Split('/').Any(seg => string.Equals(seg, pattern, StringComparison.OrdinalIgnoreCase));
+        return path.Split('/').Any(seg => string.Equals(seg, pattern, PathComparer.PhysicalPathComparison));
     }
 
     /// <summary>
