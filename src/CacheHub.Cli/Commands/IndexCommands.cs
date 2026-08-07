@@ -247,6 +247,7 @@ public static class IndexCommands
         }
 
         // FTS indexing (separate transaction — FTS5 virtual tables don't support DDL in DML transactions)
+        var ftsBuildFailed = false;
         try
         {
             foreach (var (relativePath, _, _, language, _, hash, content) in filesToIndex)
@@ -256,19 +257,22 @@ public static class IndexCommands
         }
         catch (Exception ex)
         {
+            ftsBuildFailed = true;
             Console.Error.WriteLine($"Warning: FTS indexing partially failed: {ex.Message}");
-            // Don't fail the whole build — FTS is a search optimization, not critical
         }
 
-        // Activate snapshot only after all data is written successfully
-        await ActivateSnapshotAsync(factory, snapshotId, workspace.Id, fileCount);
-        await repo.UpdateStatusAsync(workspace.Id, WorkspaceStatus.Ready);
+        // Activate snapshot — use Degraded status if FTS failed (FTS is a core recall source)
+        var snapshotStatus = ftsBuildFailed ? "ActiveDegraded" : "Active";
+        await ActivateSnapshotAsync(factory, snapshotId, workspace.Id, fileCount, snapshotStatus);
+        await repo.UpdateStatusAsync(workspace.Id, ftsBuildFailed ? WorkspaceStatus.Indexing : WorkspaceStatus.Ready);
 
         Console.WriteLine($"Index build complete:");
         Console.WriteLine($"  Indexed: {fileCount}");
         Console.WriteLine($"  Ignored: {ignoredCount}");
         Console.WriteLine($"  Failed: {failedCount}");
         Console.WriteLine($"  Snapshot: {snapshotId.Value}");
+        if (ftsBuildFailed)
+            Console.WriteLine($"  ⚠️ FTS build failed — snapshot is ActiveDegraded. Full-text search may not work correctly.");
         return 0;
     }
 
@@ -564,7 +568,9 @@ public static class IndexCommands
         await UpdateSnapshotFileCountAsync(factory, snapshotId, newFileCount);
 
         // Atomically activate Building snapshot and supersede old Active
-        await ActivateSnapshotAsync(factory, buildingSnapshotId, workspace.Id, newFileCount);
+        // Use Degraded status if FTS had failures
+        var refreshStatus = ftsFailedPaths.Count > 0 ? "ActiveDegraded" : "Active";
+        await ActivateSnapshotAsync(factory, buildingSnapshotId, workspace.Id, newFileCount, refreshStatus);
 
         // Clean up old snapshot data (files, symbols, imports, relations, FTS)
         await DeleteSnapshotDataAsync(factory, oldSnapshotId);
@@ -578,7 +584,7 @@ public static class IndexCommands
         Console.WriteLine($"  Snapshot: {buildingSnapshotId.Value} (was {oldSnapshotId.Value})");
         if (ftsFailedPaths.Count > 0)
         {
-            Console.WriteLine($"  ⚠️ FTS failures: {ftsFailedPaths.Count} files — full-text search may return stale results for these files");
+            Console.WriteLine($"  ⚠️ FTS failures: {ftsFailedPaths.Count} files — snapshot is ActiveDegraded");
             Console.Error.WriteLine($"  FTS failed paths: {string.Join(", ", ftsFailedPaths)}");
         }
         return 0;
@@ -1041,7 +1047,7 @@ public static class IndexCommands
         await cmd.ExecuteNonQueryAsync();
     }
 
-    private static async Task ActivateSnapshotAsync(SqliteConnectionFactory factory, IndexSnapshotId snapshotId, WorkspaceId workspaceId, int fileCount)
+    private static async Task ActivateSnapshotAsync(SqliteConnectionFactory factory, IndexSnapshotId snapshotId, WorkspaceId workspaceId, int fileCount, string status = "Active")
     {
         await using var conn = factory.CreateOpenConnection();
         await using var tx = await conn.BeginTransactionAsync();
@@ -1058,11 +1064,12 @@ public static class IndexCommands
         activateCmd.Transaction = (SqliteTransaction)tx;
         activateCmd.CommandText =
             """
-            UPDATE index_snapshots SET status = 'Active', file_count = $count, completed_at = datetime('now')
+            UPDATE index_snapshots SET status = $status, file_count = $count, completed_at = datetime('now')
             WHERE id = $id;
             """;
         activateCmd.Parameters.AddWithValue("$id", snapshotId.Value);
         activateCmd.Parameters.AddWithValue("$count", fileCount);
+        activateCmd.Parameters.AddWithValue("$status", status);
         await activateCmd.ExecuteNonQueryAsync();
 
         await tx.CommitAsync();
