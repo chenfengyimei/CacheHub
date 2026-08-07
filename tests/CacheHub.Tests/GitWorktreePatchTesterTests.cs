@@ -4,9 +4,18 @@ using Xunit;
 namespace CacheHub.Tests;
 
 /// <summary>
+/// Flaky git-worktree tests are forced to run serially (not in parallel with other classes),
+/// because concurrent `git worktree add`/temp-repo creation on Windows can race on temp paths.
+/// </summary>
+[CollectionDefinition("GitWorktreeTest", DisableParallelization = true)]
+public sealed class GitWorktreeSerialCollection { }
+
+/// <summary>
 /// V6: Tests for GitWorktreePatchTester — real apply-patch/build/test for Agent Benchmark.
 /// Uses an isolated temporary git repo (NOT the real CacheHub repo) to avoid side effects.
+/// Runs in a serialized collection to avoid intermittent temp-dir/git races on CI.
 /// </summary>
+[Collection("GitWorktreeTest")]
 public class GitWorktreePatchTesterTests
 {
     private static string CreateTempGitRepo()
