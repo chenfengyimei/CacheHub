@@ -1,5 +1,17 @@
 # CacheHub 安装脚本 (PowerShell)
 
+param(
+    [switch]$SkipTests,
+    [switch]$Help
+)
+
+if ($Help) {
+    Write-Host "Usage: install.ps1 [-SkipTests] [-Help]"
+    Write-Host "  -SkipTests  Skip test suite (not recommended for production)"
+    Write-Host "  -Help       Show this help message"
+    exit 0
+}
+
 Write-Host "CacheHub Installation" -ForegroundColor Cyan
 Write-Host "===================" -ForegroundColor Cyan
 Write-Host ""
@@ -23,14 +35,18 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "  Build successful." -ForegroundColor Green
 
 # Test
-Write-Host "[3/4] Running tests..." -ForegroundColor Yellow
-dotnet test CacheHub.sln -c Release --no-build --nologo --verbosity quiet 2>&1 | Out-Null
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "Error: Tests failed. Aborting installation." -ForegroundColor Red
-    Write-Host "  Use -SkipTests flag to bypass (not recommended for production)." -ForegroundColor Yellow
-    exit 1
+if (!$SkipTests) {
+    Write-Host "[3/4] Running tests..." -ForegroundColor Yellow
+    dotnet test CacheHub.sln -c Release --no-build --nologo --verbosity quiet 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Error: Tests failed. Aborting installation." -ForegroundColor Red
+        Write-Host "  Use -SkipTests flag to bypass (not recommended for production)." -ForegroundColor Yellow
+        exit 1
+    } else {
+        Write-Host "  All tests passed." -ForegroundColor Green
+    }
 } else {
-    Write-Host "  All tests passed." -ForegroundColor Green
+    Write-Host "[3/4] Skipping tests (-SkipTests flag set)." -ForegroundColor Yellow
 }
 
 # Publish single-file
