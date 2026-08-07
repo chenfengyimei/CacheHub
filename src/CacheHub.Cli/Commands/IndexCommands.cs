@@ -683,6 +683,7 @@ public static class IndexCommands
             ".go" => new GoRegexParser(),
             ".rs" => new RustRegexParser(),
             ".java" => new JavaRegexParser(),
+            ".c" or ".h" or ".cpp" or ".hpp" or ".cc" or ".cxx" => new CppRegexParser(),
             ".md" or ".markdown" => new MarkdownParser(),
             _ => new TextParser(),
         };

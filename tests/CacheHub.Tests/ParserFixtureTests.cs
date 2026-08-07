@@ -557,4 +557,93 @@ public class ParserFixtureTests
         Assert.Equal("1.0", parser.Version);
         Assert.Equal("java-regex-baseline", parser.Id);
     }
+
+    // === C/C++ Parser Tests ===
+
+    [Fact]
+    public void Cpp_ShouldExtractFunctions()
+    {
+        var code = """
+            int compute_hash(const char* data) {
+                return 0;
+            }
+            void process_request(int id) {
+                return;
+            }
+            """;
+        var result = new CppRegexParser().Parse(code, "main.c");
+
+        Assert.Contains(result.Symbols, s => s.Name == "compute_hash" && s.Kind == SymbolKind.Function);
+        Assert.Contains(result.Symbols, s => s.Name == "process_request" && s.Kind == SymbolKind.Function);
+    }
+
+    [Fact]
+    public void Cpp_ShouldExtractIncludes()
+    {
+        var code = """
+            #include <stdio.h>
+            #include "utils.h"
+            """;
+        var result = new CppRegexParser().Parse(code, "main.c");
+
+        Assert.Contains(result.Imports, i => i.Module == "stdio.h");
+        Assert.Contains(result.Imports, i => i.Module == "utils.h");
+        Assert.Contains(result.Relations, r => r.Relation == "imports" && r.TargetName == "stdio.h");
+    }
+
+    [Fact]
+    public void Cpp_ShouldExtractClassAndStruct()
+    {
+        var code = """
+            class Server {
+            public:
+                void start();
+            };
+            struct Config {
+                int port;
+            };
+            """;
+        var result = new CppRegexParser().Parse(code, "types.h");
+
+        Assert.Contains(result.Symbols, s => s.Name == "Server" && s.Kind == SymbolKind.Class);
+        Assert.Contains(result.Symbols, s => s.Name == "Config" && s.Kind == SymbolKind.Struct);
+        // Methods inside class body
+        Assert.Contains(result.Symbols, s => s.Name == "start" && s.Kind == SymbolKind.Method);
+    }
+
+    [Fact]
+    public void Cpp_ShouldExtractEnumAndDefine()
+    {
+        var code = """
+            #define MAX_CONNECTIONS 100
+            enum Status {
+                ACTIVE,
+                INACTIVE
+            };
+            """;
+        var result = new CppRegexParser().Parse(code, "constants.h");
+
+        Assert.Contains(result.Symbols, s => s.Name == "MAX_CONNECTIONS" && s.Kind == SymbolKind.Constant);
+        Assert.Contains(result.Symbols, s => s.Name == "Status" && s.Kind == SymbolKind.Enum);
+    }
+
+    [Fact]
+    public void Cpp_ShouldExtractInheritance()
+    {
+        var code = """
+            class Dog : public Animal {
+            };
+            """;
+        var result = new CppRegexParser().Parse(code, "dog.h");
+
+        Assert.Contains(result.Relations, r => r.Relation == "inherits" && r.TargetName == "Animal");
+    }
+
+    [Fact]
+    public void Cpp_ParserVersion_ShouldBe1()
+    {
+        var parser = new CppRegexParser();
+        Assert.Equal("1.0", parser.Version);
+        Assert.Equal("cpp-regex-baseline", parser.Id);
+    }
 }
