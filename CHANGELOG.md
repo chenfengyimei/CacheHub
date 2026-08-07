@@ -25,7 +25,11 @@ Closing the gap between "module exists" and "module is on the production main ch
 - **CacheKey completed**: Added currentFile, gitDiff, modelId, tokenizerId to CacheKey.FullKey via ContextHash component.
 - **ContextPackageCache wired**: CLI creates cache and passes to ContextEngine. Desktop DI registers cache singleton. Repeated context build calls now hit cache.
 - **RelationRecallSource implemented**: New IRecallSource that queries file_relations for matched files, expands to target symbol definitions via SymbolSearch. RecallSource enum gains `Relation` value.
-- **Documentation consistency**: AI_DEV_STATE.json now has moduleStatus with accurate levels (Integrated/Component Implemented/Scaffold/Experimental). Capabilities Limitations updated to match reality.
+- **Contextual Completion entry**: `cachehub workflow completion` CLI command + `POST /api/v1/workflows/contextual-completion` API endpoint. Builds context → assembles prompt → returns system+user prompt.
+- **Gateway multi-provider fallback**: GatewayConfig.FallbackProviders + GetAllProviders(). ForwardToProviderWithStatusAsync, HandleModelsAsync, HandleStreamingAsync, HandleResponsesAsync all support fallback on 429/5xx. /v1/models now includes Authorization header.
+- **Semantic stable hash**: FNV-1a replaces string.GetHashCode() in LocalHashEmbeddingProvider. Vectors now stable across process restarts.
+- **FTS failure tracking**: Refresh no longer silently swallows FTS errors. Failures tracked, reported to user, and logged to stderr.
+- **Documentation consistency**: AI_DEV_STATE.json has moduleStatus with accurate levels. Capabilities Limitations updated to match reality.
 
 ### Documentation & Quality Final Round (2026-08-07)
 
