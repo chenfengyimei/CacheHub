@@ -4,12 +4,13 @@ using CacheHub.Core.Parsing;
 namespace CacheHub.Indexing.Parsing;
 
 /// <summary>
-/// Regex-based C# parser: extracts namespaces, types, methods, properties, and imports.
+/// Regex-based C# parser (regex-baseline): extracts namespaces, types, methods, properties, and imports.
 /// All relations are marked as syntactic — this is NOT a semantic analysis.
+/// PARSE-P2-001: This is a regex-baseline parser; Tree-sitter integration is deferred to R2-W004.
 /// </summary>
 public sealed partial class CSharpRegexParser : ICodeParser
 {
-    public string Id => "csharp-regex";
+    public string Id => "csharp-regex-baseline";
     public string Version => "1.0";
     public IReadOnlySet<string> SupportedExtensions { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {

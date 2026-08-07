@@ -85,7 +85,7 @@ public class ParserTests
         {
             Assert.Equal(RelationType.Heuristic, r.RelationType);
             Assert.True(r.Confidence is > 0 and <= 1);
-            Assert.Equal("csharp-regex", r.Source);
+            Assert.Equal("csharp-regex-baseline", r.Source);
         });
     }
 
@@ -239,14 +239,14 @@ public class ParserTests
     {
         var parseResult = new ParseResult
         {
-            ParserId = "csharp-regex",
+            ParserId = "csharp-regex-baseline",
             ParserVersion = "1.0",
             Language = "csharp",
         };
 
         var outline = DeterministicOutlineGenerator.Generate(parseResult, "test.cs");
 
-        Assert.Equal("csharp-regex", outline.ParserId);
+        Assert.Equal("csharp-regex-baseline", outline.ParserId);
         Assert.Equal("1.0", outline.ParserVersion);
         Assert.Equal("csharp", outline.Language);
     }
@@ -260,7 +260,7 @@ public class ParserTests
             Relation = "import",
             TargetName = "System.Linq",
             Confidence = 1.0,
-            Source = "csharp-regex",
+            Source = "csharp-regex-baseline",
         };
 
         Assert.Equal(RelationType.Syntactic, relation.RelationType);

@@ -61,6 +61,7 @@ public static class IndexCommands
         new Migration0005ContextPackageDetails(),
         new Migration0006SchemaV2(),
         new Migration0007ContextPackageFields(),
+        new Migration0008ContextPackageFk(),
         ]);
         runner.Migrate();
 
@@ -289,6 +290,7 @@ public static class IndexCommands
         new Migration0005ContextPackageDetails(),
         new Migration0006SchemaV2(),
         new Migration0007ContextPackageFields(),
+        new Migration0008ContextPackageFk(),
         ]);
         runner.Migrate();
 
