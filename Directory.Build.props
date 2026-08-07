@@ -11,6 +11,13 @@
     <ContinuousIntegrationBuild>false</ContinuousIntegrationBuild>
     <CheckForOverflowUnderflow>true</CheckForOverflowUnderflow>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!--
+      NU1903 (NuGet vulnerability warning) is suppressed globally.
+      Accepted risk: Microsoft.Bcl.Memory (transitive from Microsoft.Data.Sqlite 10.0.0)
+      has advisory GHSA-73j8-2gch-69rq with no fixed version available as of 2026-08-08.
+      SQLitePCLRaw upgraded to 3.0.0 to resolve its vulnerability (GHSA-2m69-gcr7-jv3q).
+      When a patched Microsoft.Bcl.Memory is released, remove this suppression.
+    -->
     <NoWarn>$(NoWarn);CS1591;NU1903</NoWarn>
   </PropertyGroup>
 
