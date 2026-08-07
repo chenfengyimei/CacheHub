@@ -714,6 +714,26 @@ app.MapGet("/api/v1/context/{id}/payload", async (string id, IContextPackageRepo
 
     var generator = new PayloadGenerator();
     var enforcer = new CacheHub.Core.Security.SecurityPolicyEnforcer();
+
+    // Pre-pass: identify blocked/approval-required files before generating payload
+    var blockedFiles = new List<object>();
+    foreach (var file in manifest.SelectedFiles)
+    {
+        var fullPath = SafeResolvePath(ws.RootPath, file.Path);
+        if (fullPath is null || !File.Exists(fullPath)) continue;
+        var content = await File.ReadAllTextAsync(fullPath);
+        var decision = enforcer.EvaluateFile(file.Path, content);
+        if (!decision.IsAllowed)
+        {
+            blockedFiles.Add(new
+            {
+                path = file.Path,
+                approvalRequired = decision.IsApprovalRequired,
+                reason = decision.Reason ?? "Blocked by security policy",
+            });
+        }
+    }
+
     var payload = generator.Generate(manifest, path =>
     {
         var fullPath = SafeResolvePath(ws.RootPath, path);
@@ -733,6 +753,7 @@ app.MapGet("/api/v1/context/{id}/payload", async (string id, IContextPackageRepo
             startLine = i.StartLine,
             endLine = i.EndLine,
         }),
+        blockedFiles = blockedFiles.Count > 0 ? blockedFiles : null,
     });
 });
 
