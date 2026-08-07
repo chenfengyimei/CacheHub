@@ -238,7 +238,8 @@ cachehub stats --output=json
 
 ```bash
 dotnet run --project src/CacheHub.Desktop
-# 访问 http://localhost:5000
+# 访问 http://localhost:5099
+# API Token 打印在终端中，所有 /api/ 请求需 Authorization: Bearer <token>
 ```
 
 ### 页面功能
@@ -289,17 +290,20 @@ cachehub context expand --id=<ctx-id> --file=<path> --reason="需要查看实现
 通过 HTTP API 集成，适合程序化调用：
 
 ```bash
-# 构建上下文
-curl -X POST http://localhost:5000/api/v1/context/build \
+# 构建上下文（需 Bearer Token 认证）
+curl -X POST http://localhost:5099/api/v1/context/build \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
   -d '{"workspaceId":"<id>","task":"Fix login bug"}'
 
 # 获取 Payload
-curl http://localhost:5000/api/v1/context/<ctx-id>/payload
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:5099/api/v1/context/<ctx-id>/payload
 
 # 扩展上下文
-curl -X POST http://localhost:5000/api/v1/context/<ctx-id>/expand \
+curl -X POST http://localhost:5099/api/v1/context/<ctx-id>/expand \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
   -d '{"file":"src/auth.ts","reason":"Missing auth"}'
 ```
 
@@ -460,9 +464,11 @@ internal/legacy/
 启动 OpenAI 兼容的 API 网关：
 
 ```bash
+# 设置环境变量（不要通过命令行参数传递密钥）
+export CACHEHUB_PROVIDER_KEY=sk-xxx
+
 cachehub gateway start \
   --provider-url=https://api.openai.com \
-  --provider-key=sk-xxx \
   --port=5218
 
 # 查看状态
