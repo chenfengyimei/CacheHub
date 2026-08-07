@@ -43,6 +43,17 @@ $TotalCount = $Count + $SkippedCount
 
 Write-Host "Test count: $Count (total $TotalCount, skipped $SkippedCount)" -ForegroundColor Green
 
+# V6 (#28): read .NET version info from global.json + Directory.Build.props so docs never drift
+$globalJsonPath = Join-Path $RepoRoot "global.json"
+$buildPropsPath = Join-Path $RepoRoot "Directory.Build.props"
+$SdkVersion = ""
+$DotNetMajor = ""
+if (Test-Path $globalJsonPath) {
+    $gj = [System.IO.File]::ReadAllText($globalJsonPath, [System.Text.Encoding]::UTF8)
+    if ($gj -match '"version":\s*"(\d+\.\d+\.\d+)"') { $SdkVersion = $Matches[1] }
+    if ($gj -match '"version":\s*"(\d+)\.') { $DotNetMajor = $Matches[1] }
+}
+
 # Helper: read/write with UTF-8 (no BOM)
 function Update-FileUtf8 {
     param([string]$Path, [scriptblock]$Updater)
@@ -74,6 +85,15 @@ if (Test-Path $readmePath) {
         $content = $content -replace '# \d+ 测试', "# $Count 测试"
         $content = $content -replace '\d+ 通过 \| 覆盖全部模块', "$Count 通过 | 覆盖全部模块"
         $content = $content -replace '通过 \d+ 个测试验证', "通过 $Count 个测试验证"
+        # V6 (#28): sync .NET version from global.json so docs never drift
+        if ($DotNetMajor) {
+            $content = $content -replace 'badge/\.NET-\d+\.\d+', "badge/.NET-$DotNetMajor.0"
+            $content = $content -replace 'dotnet/\d+\.\d+', "dotnet/$DotNetMajor.0"
+            $content = $content -replace '\.NET \d+ \(LTS\)', ".NET $DotNetMajor (LTS)"
+        }
+        if ($SdkVersion) {
+            $content = $content -replace 'SDK \| \d+\.\d+\.\d+', "SDK | $SdkVersion"
+        }
         return $content
     }
 }

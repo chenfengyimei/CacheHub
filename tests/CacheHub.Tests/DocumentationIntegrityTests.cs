@@ -98,4 +98,25 @@ public class DocumentationIntegrityTests
         // README must reference the current major
         Assert.Contains($".NET {majorVersion}", readme);
     }
+
+    // Review #28: README "SDK | <version>" must match global.json's exact SDK version,
+    // so sync-test-count.ps1's auto-sync is locked (no manual doc drift).
+    [Fact]
+    public void Readme_SdkVersion_MatchesGlobalJson()
+    {
+        var root = GetRepoRoot();
+
+        var globalJson = File.ReadAllText(Path.Combine(root, "global.json"));
+        var marker = "\"version\": \"";
+        var idx = globalJson.IndexOf(marker, StringComparison.Ordinal);
+        Assert.True(idx >= 0, "global.json should contain sdk.version");
+        var start = idx + marker.Length;
+        var end = globalJson.IndexOf('"', start);
+        var sdkVersion = globalJson[start..end];
+        Assert.Matches(@"^\d+\.\d+\.\d+$", sdkVersion);
+
+        var readme = File.ReadAllText(Path.Combine(root, "README.md"));
+        // The tech-stack table row: "| SDK | 10.0.302 (global.json 锁定) |"
+        Assert.Contains($"| SDK | {sdkVersion}", readme);
+    }
 }
