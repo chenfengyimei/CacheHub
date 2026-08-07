@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.0-prealpha] — 2026-08-07
 
+### Documentation & Quality Final Round (2026-08-07)
+
+Final quality sweep: CI multi-OS, format compliance, doc alignment, ADR, and repomap fix.
+
+#### CI
+- Multi-OS matrix: ubuntu-latest + windows-latest + macos-latest with `fail-fast: false`
+- Format check fix: 5 test files charset encoding corrected, IDE1006 suppressed for Gateway project
+
+#### Documentation
+- USAGE.md: port 5000→5099, Bearer Token auth in curl examples, `--provider-key` → environment variable
+- AGENTS.md: project structure updated (Gateway project, 9 migrations, 772 tests)
+- README: project structure includes CacheHub.Gateway, test count 772
+- ARCHITECTURE.md: port 5099, 9 migrations, Gateway removed from Core layer, test count 772
+- INSTALL.md: port 5099 + Bearer Token note
+- integration/protocol/context-api.md: fully rewritten — 17 routes, Bearer auth, Gateway API, error code table
+- AI_DEV_STATE.json: updated to V2.0-COMPLETE + AUDIT-62-RESOLVED
+- ADR-0005: Gateway separation decision documented
+- ADR-0004: stale port 5217→5099 fixed
+- ADR README index: ADR-0004 and ADR-0005 added
+
+#### Production Fixes
+- install.ps1: added `-SkipTests` and `-Help` parameter parsing (matches install.sh)
+- Desktop /export: repomap placeholder replaced with real directory tree generation (scans files, builds tree, language breakdown)
+- .gitignore: broadened to cover `.codely-cli/auto-saves/` and transient files
+
+#### Tests
+- 8 new `SecurityGapTests`: symlink escape, XSS in content, offline mode, restricted mode, traversal variants
+- 2 new `GatewayTests`: upstream error status code passthrough (401/429/500 not rewritten to 200), error responses not cached
+- 1 new `SqliteDatabaseTests`: migration incremental upgrade v5→v9 (phase 1: migrate 1-5, verify; phase 2: migrate 6-9, verify)
+- 1 new `RealBenchmarkTests`: R12 real benchmark measurement with actual Context Engine metrics
+
+Test count: 761 → 772.
+
 ### Architecture Refactor (2026-08-07)
 
 Closed the final 2 P2 architecture issues. All 62 audit issues now fully resolved (0 OPEN).
