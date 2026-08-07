@@ -526,18 +526,21 @@ public static class IndexCommands
         }
 
         // Phase 3: FTS updates (separate — FTS5 virtual tables don't support DDL in DML transactions)
+        // Track FTS failures instead of silently swallowing them — FTS consistency is critical for recall accuracy
+        var ftsFailedPaths = new List<string>();
+
         // Delete FTS entries for removed/modified files
         foreach (var path in filesToDelete)
         {
             try { await fts.DeleteFileAsync(snapshotId, path); }
-            catch { /* FTS deletion failure is non-critical */ }
+            catch (Exception ftsEx) { ftsFailedPaths.Add(path); Console.Error.WriteLine($"  Warning: FTS delete failed for {path}: {ftsEx.Message}"); }
         }
 
         // Index new/modified files in FTS
         foreach (var (path, _, _, language, _, _, hash, content, _, _, _) in filesToAdd)
         {
             try { await fts.IndexFileAsync(snapshotId, path, path, content, language, hash); }
-            catch { /* FTS indexing failure is non-critical */ }
+            catch (Exception ftsEx) { ftsFailedPaths.Add(path); Console.Error.WriteLine($"  Warning: FTS index failed for {path}: {ftsEx.Message}"); }
         }
 
         // Update snapshot file count
@@ -550,6 +553,13 @@ public static class IndexCommands
         Console.WriteLine($"  Deleted: {deletedCount}");
         Console.WriteLine($"  Failed: {failedCount}");
         Console.WriteLine($"  Total files: {newFileCount}");
+        if (ftsFailedPaths.Count > 0)
+        {
+            Console.WriteLine($"  ⚠️ FTS failures: {ftsFailedPaths.Count} files — full-text search may return stale results for these files");
+            Console.Error.WriteLine($"  FTS failed paths: {string.Join(", ", ftsFailedPaths)}");
+            // TODO: Implement immutable snapshot pattern — create new "Building" snapshot, write all data,
+            // then atomically switch to avoid partial FTS state on active snapshot.
+        }
         return 0;
     }
 
