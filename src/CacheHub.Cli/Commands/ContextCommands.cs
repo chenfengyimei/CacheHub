@@ -10,6 +10,7 @@ using CacheHub.Core.Workspaces;
 using CacheHub.Storage;
 using CacheHub.Storage.Database;
 using CacheHub.Storage.Database.Migrations;
+using CacheHub.Storage.Query;
 using CacheHub.Storage.Repositories;
 
 namespace CacheHub.Cli.Commands;
@@ -113,7 +114,25 @@ public static class ContextCommands
             },
             () => indexedFiles,
             path => ResolveFileContent(workspace.RootPath, path),
-            path => ResolveFileHash(factory, snapshotId, path));
+            path => ResolveFileHash(factory, snapshotId, path),
+            ftsSearch: keyword =>
+            {
+                var querySvc = new SqliteIndexQueryService(factory);
+                var results = querySvc.SearchFtsAsync(snapshotId, keyword, 50).GetAwaiter().GetResult();
+                return results.Select(r => new FtsMatch(r.Path, r.Language, r.Snippet)).ToList();
+            },
+            symbolSearch: symbol =>
+            {
+                var querySvc = new SqliteIndexQueryService(factory);
+                var results = querySvc.SearchSymbolsAsync(snapshotId, symbol).GetAwaiter().GetResult();
+                return results.Select(r => r.NormalizedPath).ToList();
+            },
+            importSearch: symbol =>
+            {
+                var querySvc = new SqliteIndexQueryService(factory);
+                var results = querySvc.GetFilesByImportedSymbolAsync(snapshotId, symbol).GetAwaiter().GetResult();
+                return results.ToList();
+            });
 
         // Persist manifest
         var ctxRepo = new SqliteContextPackageRepository(factory);

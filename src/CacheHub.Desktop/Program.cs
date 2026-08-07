@@ -334,7 +334,25 @@ app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextE
             var fullPath = SafeResolvePath(ws.RootPath, path);
             return fullPath is not null && File.Exists(fullPath) ? File.ReadAllTextAsync(fullPath).GetAwaiter().GetResult() : "";
         },
-        path => ResolveFileHashFromDb(factory, activeSnapshotId, path));
+        path => ResolveFileHashFromDb(factory, activeSnapshotId, path),
+        ftsSearch: keyword =>
+        {
+            var querySvc = new CacheHub.Storage.Query.SqliteIndexQueryService(factory);
+            var results = querySvc.SearchFtsAsync(activeSnapshotId, keyword, 50).GetAwaiter().GetResult();
+            return results.Select(r => new CacheHub.Context.Recall.FtsMatch(r.Path, r.Language, r.Snippet)).ToList();
+        },
+        symbolSearch: symbol =>
+        {
+            var querySvc = new CacheHub.Storage.Query.SqliteIndexQueryService(factory);
+            var results = querySvc.SearchSymbolsAsync(activeSnapshotId, symbol).GetAwaiter().GetResult();
+            return results.Select(r => r.NormalizedPath).ToList();
+        },
+        importSearch: symbol =>
+        {
+            var querySvc = new CacheHub.Storage.Query.SqliteIndexQueryService(factory);
+            var results = querySvc.GetFilesByImportedSymbolAsync(activeSnapshotId, symbol).GetAwaiter().GetResult();
+            return results.ToList();
+        });
 
     await ctxRepo.SaveAsync(manifest);
 
