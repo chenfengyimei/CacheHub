@@ -57,13 +57,24 @@ public sealed class FullTextRecallSource : IRecallSource
             foreach (var keyword in context.Task.ExtractedKeywords)
             {
                 var ftsResults = context.FtsSearch(keyword);
+                if (ftsResults.Count == 0) continue;
+
+                // FTS5 BM25 rank: negative values, more negative = better match.
+                // Normalize within this batch using min-max scaling so that:
+                //   - Most relevant (lowest rank) → highest score (1.0)
+                //   - Least relevant (highest rank) → lowest score (approaching 0)
+                var minRank = ftsResults.Min(r => r.RankScore);
+                var maxRank = ftsResults.Max(r => r.RankScore);
+                var range = maxRank - minRank;
+
                 foreach (var match in ftsResults)
                 {
-                    // Normalize BM25 rank: FTS5 rank is negative (more negative = better).
-                    // Convert to 0..1 score: use 1/(1+|rank|) as a normalized relevance score.
-                    var normalizedScore = match.RankScore < 0
-                        ? Math.Min(1.0 / (1.0 + Math.Abs(match.RankScore)), 1.0)
-                        : match.RankScore > 0 ? Math.Min(1.0 / (1.0 + match.RankScore), 1.0) : 0.5;
+                    // Inverted normalization: lower rank (more negative) → higher score
+                    double normalizedScore;
+                    if (Math.Abs(range) < 1e-10)
+                        normalizedScore = 0.9; // All results have same rank — treat as equally relevant
+                    else
+                        normalizedScore = (maxRank - match.RankScore) / range;
 
                     hits.Add(new RecallHit
                     {
