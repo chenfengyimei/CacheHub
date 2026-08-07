@@ -7,6 +7,7 @@ using CacheHub.Context.Recall;
 using CacheHub.Core.Context;
 using CacheHub.Core.Feedback;
 using CacheHub.Core.Identifiers;
+using CacheHub.Core.Semantic;
 using CacheHub.Core.Security;
 using CacheHub.Core.Workspaces;
 using CacheHub.Storage;
@@ -16,6 +17,67 @@ using CacheHub.Storage.Query;
 using CacheHub.Storage.Repositories;
 
 namespace CacheHub.Cli.Commands;
+
+/// <summary>
+/// Helper for wiring SemanticReferenceRecall into ContextEngine's semanticSearch callback.
+/// Reference-only: provides historical task/error/feedback context, does not reuse model answers.
+/// </summary>
+internal static class SemanticReferenceHelper
+{
+    private static readonly LocalHashEmbeddingProvider _embedding = new();
+    private static PersistentVectorStore? _store;
+
+    /// <summary>
+    /// Gets or creates a persistent vector store at the app data path.
+    /// </summary>
+    private static PersistentVectorStore GetStore(string appDataRoot)
+    {
+        if (_store is not null) return _store;
+        var dir = Path.Combine(appDataRoot, "semantic");
+        Directory.CreateDirectory(dir);
+        _store = new PersistentVectorStore(Path.Combine(dir, "references.json"));
+        return _store;
+    }
+
+    /// <summary>
+    /// Creates a semanticSearch callback for ContextEngine.Build.
+    /// Returns null if no references exist (engine will skip SemanticRecallSource).
+    /// </summary>
+    public static Func<string, IReadOnlyList<SemanticHit>>? CreateSemanticSearch(
+        string appDataRoot, string? workspaceId = null)
+    {
+        var store = GetStore(appDataRoot);
+        if (store.Count == 0) return null;
+
+        return queryText =>
+        {
+            var recall = new SemanticReferenceRecall(store, _embedding);
+            var results = recall.RecallAsync(queryText, workspaceId, topK: 5, minSimilarity: 0.1)
+                .GetAwaiter().GetResult();
+            return results.Select(r => new SemanticHit
+            {
+                Content = r.Reference.Content,
+                Similarity = r.Similarity,
+                ReferenceType = r.Reference.Type.ToString(),
+                TaskDescription = r.Reference.TaskDescription,
+            }).ToList();
+        };
+    }
+
+    /// <summary>
+    /// Records a task reference for future semantic recall.
+    /// </summary>
+    public static void RecordReference(
+        string appDataRoot, string content, string? workspaceId,
+        string? taskDescription, string? snapshotId)
+    {
+        var store = GetStore(appDataRoot);
+        var recall = new SemanticReferenceRecall(store, _embedding);
+        recall.RecordAsync(content, SemanticReferenceType.Task,
+            workspaceId, taskDescription, taskCompleted: null,
+            snapshotId, workspaceContentHash: null).GetAwaiter().GetResult();
+    }
+}
 
 public static class ContextCommands
 {
@@ -57,6 +119,8 @@ public static class ContextCommands
 
         var (factory, workspace) = await ResolveWorkspaceAsync(wsId);
         if (workspace is null) return 1;
+
+        var appData = new AppDataDirectory();
 
         Console.Error.WriteLine($"Building context for: {workspace.Name}");
         Console.Error.WriteLine($"  Task: {task}");
@@ -161,7 +225,8 @@ public static class ContextCommands
                     Relation = r.Relation,
                     Confidence = r.Confidence,
                 }).ToList();
-            });
+            },
+            semanticSearch: SemanticReferenceHelper.CreateSemanticSearch(appData.Root, workspace.Id.Value));
 
         // Persist manifest
         var ctxRepo = new SqliteContextPackageRepository(factory);

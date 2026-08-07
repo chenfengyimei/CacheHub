@@ -17,6 +17,7 @@ using CacheHub.Core.Identifiers;
 using CacheHub.Core.Paths;
 using Microsoft.Data.Sqlite;
 using CacheHub.Core.Parsing;
+using CacheHub.Core.Semantic;
 using CacheHub.Core.Workspaces;
 using CacheHub.Indexing.Parsing;
 using CacheHub.Storage;
@@ -496,7 +497,8 @@ app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextE
                 Relation = r.Relation,
                 Confidence = r.Confidence,
             }).ToList();
-        });
+        },
+        semanticSearch: DesktopSemanticHelper.CreateSemanticSearch(ws.Id.Value));
 
     await ctxRepo.SaveAsync(manifest);
 
@@ -984,7 +986,8 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
                 Relation = r.Relation,
                 Confidence = r.Confidence,
             }).ToList();
-        });
+        },
+        semanticSearch: DesktopSemanticHelper.CreateSemanticSearch(workspace.Id.Value));
 
     await ctxRepo.SaveAsync(manifest);
 
@@ -1086,3 +1089,54 @@ record ContextualCompletionApiRequest(string WorkspaceId, string Task, string? M
 
 // Make Program class accessible for integration testing
 public partial class Program { }
+
+/// <summary>
+/// Desktop semantic reference helper: provides a semanticSearch callback
+/// using a persistent vector store and local hash embedding.
+/// Reference-only: provides historical task/error context, does not reuse model answers.
+/// </summary>
+internal static class DesktopSemanticHelper
+{
+    private static readonly LocalHashEmbeddingProvider _embedding = new();
+    private static PersistentVectorStore? _store;
+
+    private static PersistentVectorStore GetStore()
+    {
+        if (_store is not null) return _store;
+        var appData = new AppDataDirectory();
+        var dir = Path.Combine(appData.Root, "semantic");
+        Directory.CreateDirectory(dir);
+        _store = new PersistentVectorStore(Path.Combine(dir, "references.json"));
+        return _store;
+    }
+
+    public static Func<string, IReadOnlyList<CacheHub.Context.Recall.SemanticHit>>? CreateSemanticSearch(string workspaceId)
+    {
+        var store = GetStore();
+        if (store.Count == 0) return null;
+
+        return queryText =>
+        {
+            var recall = new SemanticReferenceRecall(store, _embedding);
+            var results = recall.RecallAsync(queryText, workspaceId, topK: 5, minSimilarity: 0.1)
+                .GetAwaiter().GetResult();
+            return results.Select(r => new CacheHub.Context.Recall.SemanticHit
+            {
+                Content = r.Reference.Content,
+                Similarity = r.Similarity,
+                ReferenceType = r.Reference.Type.ToString(),
+                TaskDescription = r.Reference.TaskDescription,
+            }).ToList();
+        };
+    }
+
+    public static void RecordReference(string content, string? workspaceId,
+        string? taskDescription, string? snapshotId)
+    {
+        var store = GetStore();
+        var recall = new SemanticReferenceRecall(store, _embedding);
+        recall.RecordAsync(content, SemanticReferenceType.Task,
+            workspaceId, taskDescription, taskCompleted: null,
+            snapshotId, workspaceContentHash: null).GetAwaiter().GetResult();
+    }
+}

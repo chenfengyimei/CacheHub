@@ -163,7 +163,8 @@ public static class WorkflowCommands
                     Relation = r.Relation,
                     Confidence = r.Confidence,
                 }).ToList();
-            });
+            },
+            semanticSearch: SemanticReferenceHelper.CreateSemanticSearch(appData.Root, workspace.Id.Value));
 
         var ctxRepo = new SqliteContextPackageRepository(factory);
         await ctxRepo.SaveAsync(manifest);

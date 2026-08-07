@@ -206,7 +206,8 @@ public static class BenchmarkCommands
                     Relation = r.Relation,
                     Confidence = r.Confidence,
                 }).ToList();
-            });
+            },
+            semanticSearch: SemanticReferenceHelper.CreateSemanticSearch(appData.Root, workspace.Id.Value));
 
         // Compute real metrics
         var gt = BenchmarkTaskSet.GetGroundTruth(taskId);
