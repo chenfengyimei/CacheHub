@@ -154,8 +154,14 @@ public sealed class GatewayServer : IDisposable
                 req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
 
                 var providerResp = await _httpClient.SendAsync(req, ct);
+                var statusCode = (int)providerResp.StatusCode;
                 var body = await providerResp.Content.ReadAsStringAsync(ct);
-                resp.StatusCode = (int)providerResp.StatusCode;
+
+                // On 429/5xx, try next provider instead of returning the error
+                if (statusCode == 429 || statusCode >= 500)
+                    continue;
+
+                resp.StatusCode = statusCode;
                 resp.ContentType = "application/json";
                 var bytes = System.Text.Encoding.UTF8.GetBytes(body);
                 resp.ContentLength64 = bytes.Length;
