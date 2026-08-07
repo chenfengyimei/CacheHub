@@ -380,7 +380,8 @@ public static class IndexCommands
             {
                 // Delete old entry
                 await DeleteFileFromSnapshotAsync(factory, snapshotId, path);
-                await fts.ClearSnapshotAsync(snapshotId); // Note: FTS5 doesn't support per-file delete easily
+                // R6-W001: Delete only this file's FTS entry, not the entire snapshot
+                await fts.DeleteFileAsync(snapshotId, path);
 
                 // Re-insert
                 var fullPath = Path.Combine(workspace.RootPath, path.Replace('/', Path.DirectorySeparatorChar));
@@ -413,6 +414,8 @@ public static class IndexCommands
             try
             {
                 await DeleteFileFromSnapshotAsync(factory, snapshotId, path);
+                // R6-W001: Also delete from FTS
+                await fts.DeleteFileAsync(snapshotId, path);
                 deletedCount++;
             }
             catch (Exception ex)
