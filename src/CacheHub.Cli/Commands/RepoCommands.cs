@@ -1,4 +1,11 @@
+using CacheHub.Core.Identifiers;
 using CacheHub.Core.Repository;
+using CacheHub.Core.Workspaces;
+using CacheHub.Indexing.Detection;
+using CacheHub.Storage;
+using CacheHub.Storage.Database;
+using CacheHub.Storage.Database.Migrations;
+using CacheHub.Storage.Repositories;
 
 namespace CacheHub.Cli.Commands;
 
@@ -21,6 +28,7 @@ public static class RepoCommands
             "status" => await StatusAsync(args.AsSpan(1).ToArray(), git),
             "diff" => await DiffAsync(args.AsSpan(1).ToArray(), git),
             "pull" => await PullAsync(args.AsSpan(1).ToArray(), git),
+            "bootstrap" => await BootstrapAsync(args.AsSpan(1).ToArray(), git),
             _ => 1,
         };
     }
@@ -185,5 +193,122 @@ public static class RepoCommands
             Console.Error.WriteLine("  CacheHub does not auto-merge, rebase, or reset. Resolve manually.");
             return 1;
         }
+    }
+
+    /// <summary>
+    /// V5-W14+: `cachehub repo bootstrap` — one-step URL→clone→detect→import→index.
+    /// Chains all existing capabilities into a single command so users don't need to run 5 separate CLI commands.
+    /// </summary>
+    private static async Task<int> BootstrapAsync(string[] args, GitProcessWrapper git)
+    {
+        var url = args.FirstOrDefault();
+        if (string.IsNullOrEmpty(url))
+        {
+            Console.Error.WriteLine("Error: URL is required");
+            Console.Error.WriteLine("Usage: cachehub repo bootstrap <url> [--dest <path>] [--name <name>]");
+            Console.Error.WriteLine("  Chains: inspect → clone → detect → import → index");
+            return 1;
+        }
+
+        // Parse optional arguments
+        var dest = args.SkipWhile(a => a != "--dest").Skip(1).FirstOrDefault();
+        var name = args.SkipWhile(a => a != "--name").Skip(1).FirstOrDefault();
+
+        // Step 1: Inspect URL
+        var parsed = RepositoryUrlParser.Parse(url);
+        Console.Error.WriteLine($"[1/4] Inspecting URL: {parsed.Owner}/{parsed.RepoName} ({parsed.Source})");
+
+        // Step 2: Clone
+        dest ??= Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.DoNotVerify),
+            "CacheHub", "repos", parsed.RepoName ?? "repo");
+
+        if (Directory.Exists(dest) && Directory.EnumerateFileSystemEntries(dest).Any())
+        {
+            Console.Error.WriteLine($"  Destination already exists and is not empty: {dest}");
+            Console.Error.WriteLine("  Skipping clone. Use a different --dest or remove the directory.");
+        }
+        else
+        {
+            Console.Error.WriteLine($"[2/4] Cloning to: {dest}");
+            var clonePlan = new ClonePlan
+            {
+                Url = url,
+                Destination = dest,
+                Depth = 1, // shallow clone for speed
+                IncludeSubmodules = false,
+                IncludeLfs = false,
+                Risks = ["Clone writes to disk", "Network access required"],
+            };
+            var cloneResult = await git.CloneAsync(clonePlan);
+            if (!cloneResult.Success)
+            {
+                Console.Error.WriteLine($"  Clone failed: {cloneResult.ErrorMessage}");
+                return 1;
+            }
+            Console.Error.WriteLine("  Clone completed.");
+        }
+
+        // Step 3: Detect
+        Console.Error.WriteLine($"[3/4] Detecting project type...");
+        var detectEngine = new ProjectDetectionEngine();
+        var detection = detectEngine.Detect(dest);
+
+        if (detection.Components.Count > 0)
+        {
+            Console.Error.WriteLine($"  Found {detection.Components.Count} component(s):");
+            foreach (var comp in detection.Components)
+                Console.Error.WriteLine($"    - {comp.Language}" + (comp.Framework is not null ? $" ({comp.Framework})" : "") + $" at {comp.Path}");
+        }
+        else
+        {
+            Console.Error.WriteLine("  No recognized project components found (files will still be indexed).");
+        }
+
+        // Step 4: Import workspace
+        name ??= parsed.RepoName ?? new DirectoryInfo(dest).Name;
+        Console.Error.WriteLine($"[4/4] Importing workspace '{name}'...");
+        var appData = new AppDataDirectory();
+        appData.EnsureCreated();
+        var dbPath = appData.GetWorkspaceDatabasePath("main");
+        var factory = new SqliteConnectionFactory(dbPath);
+        var runner = new MigrationRunner(factory, dbPath,
+        [
+            new Migration0001Initial(),
+            new Migration0002Fts5(),
+            new Migration0003ContextPackages(),
+            new Migration0004Feedback(),
+            new Migration0005ContextPackageDetails(),
+            new Migration0006SchemaV2(),
+            new Migration0007ContextPackageFields(),
+            new Migration0008ContextPackageFk(),
+            new Migration0009PersistentCache(),
+            new Migration0010RelationSourceColumn(),
+        ]);
+        runner.Migrate();
+
+        var wsRepo = new SqliteWorkspaceRepository(factory);
+        var workspace = Workspace.CreateValidated(name, dest);
+        await wsRepo.InsertAsync(workspace);
+        Console.Error.WriteLine($"  Workspace imported: {workspace.Id.Value}");
+
+        // Step 5: Build index
+        Console.Error.WriteLine("  Building index...");
+        var exitCode = await IndexCommands.HandleAsync(["build", $"--id={workspace.Id.Value}"]);
+
+        if (exitCode == 0)
+        {
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("Bootstrap complete!");
+            Console.Error.WriteLine($"  Workspace: {workspace.Id.Value}");
+            Console.Error.WriteLine($"  Path:      {dest}");
+            Console.Error.WriteLine($"  Components: {detection.Components.Count}");
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("Next steps:");
+            Console.Error.WriteLine($"  cachehub context build --workspace={workspace.Id.Value} --task=\"<your task>\"");
+            Console.WriteLine($"{{ \"bootstrapped\": true, \"workspaceId\": \"{workspace.Id.Value}\", \"path\": \"{dest.Replace('\\', '/')}\", \"components\": {detection.Components.Count} }}");
+        }
+
+        return exitCode;
     }
 }

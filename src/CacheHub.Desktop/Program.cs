@@ -256,6 +256,53 @@ app.MapPost("/api/v1/workspaces/import", async (ImportRequest req, IWorkspaceRep
     return Results.Ok(new { id = workspace.Id.Value, name = workspace.Name, status = workspace.Status.ToString() });
 });
 
+// === V5: Bootstrap from URL — clone→detect→import→index in one API call ===
+app.MapPost("/api/v1/workspaces/bootstrap", async (BootstrapApiRequest req, IWorkspaceRepository repo, SqliteConnectionFactory factory) =>
+{
+    if (string.IsNullOrEmpty(req.Url))
+        return Results.BadRequest(ErrorEnvelope.From(ErrorCode.InvalidArgument, "Url is required"));
+
+    // Parse URL
+    var parsed = CacheHub.Core.Repository.RepositoryUrlParser.Parse(req.Url);
+    var repoName = parsed.RepoName ?? "repo";
+    var dest = req.Dest ?? Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.DoNotVerify),
+        "CacheHub", "repos", repoName);
+
+    // Clone
+    var git = new CacheHub.Core.Repository.GitProcessWrapper();
+    var clonePlan = new CacheHub.Core.Repository.ClonePlan
+    {
+        Url = req.Url,
+        Destination = dest,
+        Depth = 1,
+        IncludeSubmodules = false,
+        IncludeLfs = false,
+        Risks = ["Clone writes to disk", "Network access required"],
+    };
+    var cloneResult = await git.CloneAsync(clonePlan);
+    if (!cloneResult.Success)
+        return Results.BadRequest(ErrorEnvelope.From(ErrorCode.ProviderError, $"Clone failed: {cloneResult.ErrorMessage}"));
+
+    // Detect
+    var detectEngine = new CacheHub.Indexing.Detection.ProjectDetectionEngine();
+    var detection = detectEngine.Detect(dest);
+
+    // Import
+    var workspace = Workspace.CreateValidated(req.Name ?? repoName, dest);
+    await repo.InsertAsync(workspace);
+
+    return Results.Ok(new
+    {
+        bootstrapped = true,
+        workspaceId = workspace.Id.Value,
+        path = dest,
+        components = detection.Components.Select(c => new { language = c.Language, framework = c.Framework, path = c.Path }).ToList(),
+        isMonorepo = detection.IsMonorepo,
+        nextStep = $"POST /api/v1/workspaces/{workspace.Id.Value}/index to build the index",
+    });
+});
+
 app.MapGet("/api/v1/workspaces/{id}/status", async (string id, IWorkspaceRepository repo) =>
 {
     var ws = await repo.FindByIdAsync(WorkspaceId.Parse(id));
@@ -1166,6 +1213,7 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
 app.Run();
 
 record ImportRequest(string Path, string? Name);
+record BootstrapApiRequest(string Url, string? Dest = null, string? Name = null);
 record ContextBuildApiRequest(string WorkspaceId, string Task);
 record ExpandApiRequest(string? Symbol, string? File, string? Reason);
 record FeedbackApiRequest(string? ClientId, bool TaskCompleted, bool MissingContextReported, IReadOnlyList<string>? FilesActuallyRead);

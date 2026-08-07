@@ -32,6 +32,7 @@ if (args.Length == 0)
     Console.WriteLine("  repo status [path]                  Show Git status");
     Console.WriteLine("  repo diff [path]                    Show changed files");
     Console.WriteLine("  repo pull [path]                    Pull with --ff-only (safe)");
+    Console.WriteLine("  repo bootstrap <url> [--dest <path>] Clone→detect→import→index in one step");
     Console.WriteLine("  version [--output=json]             Show version info");
     Console.WriteLine("  help [command]                      Show help (all or command-specific)");
     Console.WriteLine("  explain --id=<ctx-id>               Explain context selection and potential misses");
