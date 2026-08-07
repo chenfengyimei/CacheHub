@@ -24,7 +24,10 @@ public static class CapabilitiesCommands
                 Capability.ContextBuild,
                 Capability.ContextExpand,
                 Capability.ContextExplain,
-                Capability.FileExport),
+                Capability.ContextFeedback,
+                Capability.FileExport,
+                Capability.Cache,
+                Capability.Gateway),
             SchemaVersions = new Dictionary<string, int>
             {
                 ["contextPackage"] = 1,
@@ -36,10 +39,8 @@ public static class CapabilitiesCommands
                 "No Semantic Search",
                 "No LSP",
                 "Tokenizer is rough estimate (chars/4)",
-                "Gateway: experimental, no streaming, no real usage tracking",
-                "Cache: in-memory only, not cross-session",
-                "Context Build: no symbol recall, no FTS recall",
-                "Incremental index: not implemented",
+                "Gateway: SSE + status passthrough supported, Provider router/budget experimental",
+                "Cache: persistent via SqliteCacheStore, in-memory contexts not cached",
             ],
         };
 

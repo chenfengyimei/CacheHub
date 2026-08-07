@@ -189,6 +189,7 @@ app.MapGet("/api/v1/capabilities", () => Results.Ok(new CapabilityDiscovery
     {
         ["contextPackage"] = 1,
         ["capabilityDiscovery"] = 1,
+        ["error"] = 1,
     },
     Limitations = ["No Semantic", "No LSP"],
 }));
