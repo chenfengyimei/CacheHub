@@ -97,6 +97,18 @@ public class DocumentationIntegrityTests
         Assert.DoesNotContain("SDK 9.", readme);
         // README must reference the current major
         Assert.Contains($".NET {majorVersion}", readme);
+
+        // Install scripts must also reference the current major (were drifting at ".NET 9")
+        foreach (var script in new[] { "install.ps1", "install.sh" })
+        {
+            var sp = Path.Combine(root, script);
+            if (File.Exists(sp))
+            {
+                var content = File.ReadAllText(sp);
+                Assert.DoesNotContain(".NET 9", content);
+                Assert.Contains($".NET {majorVersion}", content);
+            }
+        }
     }
 
     // Review #28: README "SDK | <version>" must match global.json's exact SDK version,

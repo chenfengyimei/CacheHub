@@ -10,7 +10,7 @@
   },
   "qualityGates": {
     "build": "pass (0 errors, 0 warnings, warnings-as-errors enabled)",
-    "unitTests": "pass (892/894)))))))), 2 skipped)",
+    "unitTests": "pass (892/894))))))))), 2 skipped)",
     "integrationTests": "pass (real SQLite + FTS5 + Context Engine pipeline + Snapshot Clone + Agent Benchmark + Cache Invalidate)",
     "securityTests": "pass (path traversal, auth, XSS, secret scan, symlink, offline mode, unified SecurityPolicyResolver, offline hard-block before gateway, Gateway Offline final defense V6-W04)",
     "format": "pass"
