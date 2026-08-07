@@ -113,6 +113,9 @@ public sealed record RecallContext
     /// <summary>Relation search callback (queries file_relations table for a given file path).</summary>
     public Func<string, IReadOnlyList<RelationHit>>? RelationSearch { get; init; }
 
+    /// <summary>Semantic search callback (queries historical references for similar tasks/errors).</summary>
+    public Func<string, IReadOnlyList<SemanticHit>>? SemanticSearch { get; init; }
+
     /// <summary>Paths already matched by earlier sources (for expansion).</summary>
     public IReadOnlySet<string> AlreadyMatchedPaths { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 }
@@ -160,4 +163,16 @@ public sealed record RelationHit
     public required string RelationType { get; init; }
     public required string Relation { get; init; }
     public required double Confidence { get; init; }
+}
+
+/// <summary>
+/// A semantic hit: a historical reference similar to the current task.
+/// Used by SemanticRecallSource to provide reference-only context.
+/// </summary>
+public sealed record SemanticHit
+{
+    public required string Content { get; init; }
+    public required double Similarity { get; init; }
+    public required string ReferenceType { get; init; }
+    public string? TaskDescription { get; init; }
 }

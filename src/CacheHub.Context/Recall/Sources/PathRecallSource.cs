@@ -698,3 +698,62 @@ public sealed class RelationRecallSource : IRecallSource
         return hits;
     }
 }
+
+/// <summary>
+/// Semantic recall source: finds historical references similar to the current task.
+/// Uses lexical similarity embedding (not deep semantic) as a reference signal.
+/// Returns hints only — does not directly reuse old answers.
+/// </summary>
+public sealed class SemanticRecallSource : IRecallSource
+{
+    public RecallSource SourceType => RecallSource.Semantic;
+    public bool IsEnabled { get; init; } = true;
+
+    public IReadOnlyList<RecallHit> Recall(RecallContext context)
+    {
+        var hits = new List<RecallHit>();
+        if (!IsEnabled || context.SemanticSearch is null) return hits;
+
+        var taskText = context.Task.OriginalText;
+        var semanticResults = context.SemanticSearch(taskText);
+
+        foreach (var result in semanticResults)
+        {
+            var mentionedPaths = ExtractFilePaths(result.Content, context.IndexedFiles);
+
+            foreach (var path in mentionedPaths)
+            {
+                if (context.AlreadyMatchedPaths.Contains(path)) continue;
+
+                hits.Add(new RecallHit
+                {
+                    NormalizedPath = path,
+                    Source = SourceType,
+                    MatchedText = result.TaskDescription ?? result.Content[..Math.Min(100, result.Content.Length)],
+                    Snippet = result.Content[..Math.Min(200, result.Content.Length)],
+                    Confidence = result.Similarity * 0.6,
+                    ScoreHints =
+                    [
+                        new ScoreHint { Value = result.Similarity * 0.5, Feature = "TextMatch", Confidence = result.Similarity * 0.6 },
+                    ],
+                });
+            }
+        }
+
+        return hits;
+    }
+
+    private static List<string> ExtractFilePaths(string content, IReadOnlyList<IndexedFileInfo> indexedFiles)
+    {
+        var result = new List<string>();
+        foreach (var file in indexedFiles)
+        {
+            if (content.Contains(file.NormalizedPath, StringComparison.OrdinalIgnoreCase) ||
+                content.Contains(Path.GetFileName(file.NormalizedPath), StringComparison.OrdinalIgnoreCase))
+            {
+                result.Add(file.NormalizedPath);
+            }
+        }
+        return result;
+    }
+}
