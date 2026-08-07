@@ -1,3 +1,4 @@
+using CacheHub.Core.Identifiers;
 using CacheHub.Storage.Database;
 using CacheHub.Storage.Database.Migrations;
 using CacheHub.Storage.Search;
@@ -8,8 +9,8 @@ namespace CacheHub.Tests;
 
 /// <summary>
 /// V4-W002: Integration test for immutable snapshot Refresh.
-/// Verifies that CloneSnapshotDataAsync (the ID-mapping clone) works correctly
-/// on a non-empty snapshot without UNIQUE constraint failures.
+/// V5 quality fix: tests now call the PRODUCTION CloneSnapshotDataAsync directly
+/// (previously used a copied CloneWithIdMappingAsync helper that could drift from production).
 /// </summary>
 [Collection("SQLite")]
 public class SnapshotCloneIntegrationTests
@@ -25,10 +26,9 @@ public class SnapshotCloneIntegrationTests
             var wsId = "ws_clone_test_001";
             await InsertWorkspaceAsync(factory, wsId, "CloneTest");
 
-            // Create active snapshot with real data
-            var oldSnap = "snap_old_active_001";
-            var newSnap = "snap_new_building_001";
-            await InsertSnapshotAsync(factory, oldSnap, wsId, "Active");
+            var oldSnap = IndexSnapshotId.Parse("snap_old_active_001");
+            var newSnap = IndexSnapshotId.Parse("snap_new_building_001");
+            await InsertSnapshotAsync(factory, oldSnap.Value, wsId, "Active");
 
             // Insert 3 files with symbols, imports, and relations
             var fileIds = new List<string>();
@@ -36,48 +36,41 @@ public class SnapshotCloneIntegrationTests
             {
                 var fileId = $"file_old_{i:D3}";
                 fileIds.Add(fileId);
-                await InsertFileAsync(factory, fileId, oldSnap, $"src/file{i}.ts", $"sha256:hash{i}");
+                await InsertFileAsync(factory, fileId, oldSnap.Value, $"src/file{i}.ts", $"sha256:hash{i}");
 
-                // Insert 2 symbols per file
                 for (int s = 0; s < 2; s++)
-                    await InsertSymbolAsync(factory, $"sym_old_{i}_{s}", fileId, oldSnap, $"Symbol{i}_{s}", "Method", 10 + s, 20 + s);
+                    await InsertSymbolAsync(factory, $"sym_old_{i}_{s}", fileId, oldSnap.Value, $"Symbol{i}_{s}", "Method", 10 + s, 20 + s);
 
-                // Insert 1 import per file
-                await InsertImportAsync(factory, $"imp_old_{i}", fileId, oldSnap, $"module{i}", $"Name{i}", 1);
-
-                // Insert 1 relation per file
-                await InsertRelationAsync(factory, $"rel_old_{i}", fileId, oldSnap, $"Source{i}", $"Target{i}", "Call", 5, "parser");
+                await InsertImportAsync(factory, $"imp_old_{i}", fileId, oldSnap.Value, $"module{i}", $"Name{i}", 1);
+                await InsertRelationAsync(factory, $"rel_old_{i}", fileId, oldSnap.Value, $"Source{i}", $"Target{i}", "Call", 5, "parser");
             }
 
             // Insert FTS entries
             var fts = new Fts5Index(factory);
             for (int i = 0; i < 3; i++)
-                await fts.IndexFileAsync(
-                    IndexSnapshotIdFor(oldSnap),
-                    $"src/file{i}.ts", $"src/file{i}.ts",
-                    $"content of file {i} with keyword token{i}",
-                    "typescript", $"sha256:hash{i}");
+                await fts.IndexFileAsync(oldSnap, $"src/file{i}.ts", $"src/file{i}.ts",
+                    $"content of file {i} with keyword token{i}", "typescript", $"sha256:hash{i}");
 
             // Verify source data exists
-            Assert.Equal(3L, await CountRowsAsync(factory, "files", oldSnap));
-            Assert.Equal(6L, await CountRowsAsync(factory, "file_symbols", oldSnap));
-            Assert.Equal(3L, await CountRowsAsync(factory, "file_imports", oldSnap));
-            Assert.Equal(3L, await CountRowsAsync(factory, "file_relations", oldSnap));
+            Assert.Equal(3L, await CountRowsAsync(factory, "files", oldSnap.Value));
+            Assert.Equal(6L, await CountRowsAsync(factory, "file_symbols", oldSnap.Value));
+            Assert.Equal(3L, await CountRowsAsync(factory, "file_imports", oldSnap.Value));
+            Assert.Equal(3L, await CountRowsAsync(factory, "file_relations", oldSnap.Value));
 
             // Create building snapshot
-            await InsertSnapshotAsync(factory, newSnap, wsId, "Building");
+            await InsertSnapshotAsync(factory, newSnap.Value, wsId, "Building");
 
-            // Clone using the corrected approach (ID mapping, no PK copy)
-            await CloneWithIdMappingAsync(factory, oldSnap, newSnap);
+            // V5: Call the PRODUCTION SnapshotCloneService directly
+            await SnapshotCloneService.CloneSnapshotDataAsync(factory, oldSnap, newSnap);
 
             // Verify: no PK conflict occurred, data cloned correctly
-            Assert.Equal(3L, await CountRowsAsync(factory, "files", newSnap));
-            Assert.Equal(6L, await CountRowsAsync(factory, "file_symbols", newSnap));
-            Assert.Equal(3L, await CountRowsAsync(factory, "file_imports", newSnap));
-            Assert.Equal(3L, await CountRowsAsync(factory, "file_relations", newSnap));
+            Assert.Equal(3L, await CountRowsAsync(factory, "files", newSnap.Value));
+            Assert.Equal(6L, await CountRowsAsync(factory, "file_symbols", newSnap.Value));
+            Assert.Equal(3L, await CountRowsAsync(factory, "file_imports", newSnap.Value));
+            Assert.Equal(3L, await CountRowsAsync(factory, "file_relations", newSnap.Value));
 
             // Verify: new snapshot has different file IDs than old
-            var newFileIds = await GetFileIdsAsync(factory, newSnap);
+            var newFileIds = await GetFileIdsAsync(factory, newSnap.Value);
             foreach (var newId in newFileIds)
                 Assert.DoesNotContain(newId, fileIds);
 
@@ -89,18 +82,18 @@ public class SnapshotCloneIntegrationTests
                 JOIN files f ON s.file_id = f.id
                 WHERE s.snapshot_id = $snap AND f.snapshot_id != $snap;
                 """;
-            cmd.Parameters.AddWithValue("$snap", newSnap);
+            cmd.Parameters.AddWithValue("$snap", newSnap.Value);
             var orphanedSymbols = (long)cmd.ExecuteScalar()!;
             Assert.Equal(0L, orphanedSymbols);
 
             // Verify: FTS search works on new snapshot
-            var searchResults = await fts.SearchAsync(IndexSnapshotIdFor(newSnap), "token0", limit: 10);
+            var searchResults = await fts.SearchAsync(newSnap, "token0", limit: 10);
             Assert.NotEmpty(searchResults);
             Assert.Contains(searchResults, r => r.Path == "src/file0.ts");
 
             // Verify: old snapshot data still intact (not affected by clone)
-            Assert.Equal(3L, await CountRowsAsync(factory, "files", oldSnap));
-            Assert.Equal(6L, await CountRowsAsync(factory, "file_symbols", oldSnap));
+            Assert.Equal(3L, await CountRowsAsync(factory, "files", oldSnap.Value));
+            Assert.Equal(6L, await CountRowsAsync(factory, "file_symbols", oldSnap.Value));
         }
         finally
         {
@@ -120,39 +113,39 @@ public class SnapshotCloneIntegrationTests
             var wsId = "ws_clone_test_002";
             await InsertWorkspaceAsync(factory, wsId, "CloneTest2");
 
-            var oldSnap = "snap_old_active_002";
-            var newSnap = "snap_new_building_002";
-            await InsertSnapshotAsync(factory, oldSnap, wsId, "Active");
-            await InsertSnapshotAsync(factory, newSnap, wsId, "Building");
+            var oldSnap = IndexSnapshotId.Parse("snap_old_active_002");
+            var newSnap = IndexSnapshotId.Parse("snap_new_building_002");
+            await InsertSnapshotAsync(factory, oldSnap.Value, wsId, "Active");
+            await InsertSnapshotAsync(factory, newSnap.Value, wsId, "Building");
 
             // Insert a file in old snapshot
             var oldFileId = "file_old_unique_002";
-            await InsertFileAsync(factory, oldFileId, oldSnap, "src/app.ts", "sha256:apphash");
-            await InsertSymbolAsync(factory, "sym_old_app", oldFileId, oldSnap, "AppComponent", "Class", 1, 100);
+            await InsertFileAsync(factory, oldFileId, oldSnap.Value, "src/app.ts", "sha256:apphash");
+            await InsertSymbolAsync(factory, "sym_old_app", oldFileId, oldSnap.Value, "AppComponent", "Class", 1, 100);
 
-            // Clone
-            await CloneWithIdMappingAsync(factory, oldSnap, newSnap);
+            // V5: Call the PRODUCTION SnapshotCloneService directly
+            await SnapshotCloneService.CloneSnapshotDataAsync(factory, oldSnap, newSnap);
 
             // Delete the file from new snapshot (simulating Refresh modification)
             await using var delConn = factory.CreateOpenConnection();
             using var delCmd = delConn.CreateCommand();
             delCmd.CommandText = "DELETE FROM files WHERE snapshot_id = $snap AND normalized_path = $path;";
-            delCmd.Parameters.AddWithValue("$snap", newSnap);
+            delCmd.Parameters.AddWithValue("$snap", newSnap.Value);
             delCmd.Parameters.AddWithValue("$path", "src/app.ts");
             await delCmd.ExecuteNonQueryAsync();
 
-            // Also delete child rows
+            // Also delete orphaned child rows
             using var delSymCmd = delConn.CreateCommand();
             delSymCmd.CommandText = "DELETE FROM file_symbols WHERE snapshot_id = $snap AND file_id NOT IN (SELECT id FROM files WHERE snapshot_id = $snap);";
-            delSymCmd.Parameters.AddWithValue("$snap", newSnap);
+            delSymCmd.Parameters.AddWithValue("$snap", newSnap.Value);
             await delSymCmd.ExecuteNonQueryAsync();
 
             // Verify: old snapshot still has the file and symbol
-            Assert.Equal(1L, await CountRowsAsync(factory, "files", oldSnap));
-            Assert.Equal(1L, await CountRowsAsync(factory, "file_symbols", oldSnap));
+            Assert.Equal(1L, await CountRowsAsync(factory, "files", oldSnap.Value));
+            Assert.Equal(1L, await CountRowsAsync(factory, "file_symbols", oldSnap.Value));
 
             // Verify: new snapshot has 0 files (was cloned then deleted)
-            Assert.Equal(0L, await CountRowsAsync(factory, "files", newSnap));
+            Assert.Equal(0L, await CountRowsAsync(factory, "files", newSnap.Value));
         }
         finally
         {
@@ -165,7 +158,6 @@ public class SnapshotCloneIntegrationTests
     public async Task CloneSnapshot_OldBuggyApproach_WouldFailWithUniqueConstraint()
     {
         // This test documents the bug: copying PKs directly causes UNIQUE constraint failure.
-        // We verify the OLD approach fails, confirming the fix is necessary.
         var dbPath = GetTempDbPath();
         try
         {
@@ -179,7 +171,6 @@ public class SnapshotCloneIntegrationTests
             await InsertSnapshotAsync(factory, oldSnap, wsId, "Active");
             await InsertSnapshotAsync(factory, newSnap, wsId, "Building");
 
-            // Insert a file with a specific PK
             await InsertFileAsync(factory, "file_pk_test_003", oldSnap, "src/test.ts", "sha256:test");
 
             // Attempt the OLD buggy approach: copy id directly
@@ -193,7 +184,6 @@ public class SnapshotCloneIntegrationTests
             cmd.Parameters.AddWithValue("$from", oldSnap);
             cmd.Parameters.AddWithValue("$to", newSnap);
 
-            // This should throw UNIQUE constraint failed
             await Assert.ThrowsAsync<SqliteException>(() => cmd.ExecuteNonQueryAsync());
         }
         finally
@@ -202,168 +192,6 @@ public class SnapshotCloneIntegrationTests
             TryDelete(dbPath);
         }
     }
-
-    #region Helpers — replicate the corrected CloneSnapshotDataAsync logic
-
-    /// <summary>
-    /// Replicates the corrected clone logic: reads source data, generates new PKs,
-    /// builds old_file_id→new_file_id mapping, and inserts into target snapshot.
-    /// </summary>
-    private static async Task CloneWithIdMappingAsync(SqliteConnectionFactory factory, string fromSnap, string toSnap)
-    {
-        await using var conn = factory.CreateOpenConnection();
-        await using var tx = await conn.BeginTransactionAsync();
-
-        var fileIdMap = new Dictionary<string, string>(StringComparer.Ordinal);
-
-        // Clone files with new IDs
-        using (var readCmd = conn.CreateCommand())
-        {
-            readCmd.Transaction = (SqliteTransaction)tx;
-            readCmd.CommandText = """
-                SELECT id, path, normalized_path, size, content_hash, language, is_binary, status, hash_kind, mtime, parser_id, parser_version
-                FROM files WHERE snapshot_id = $from;
-                """;
-            readCmd.Parameters.AddWithValue("$from", fromSnap);
-            await using var reader = await readCmd.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-            {
-                var oldFileId = reader.GetString(0);
-                var newFileId = Guid.NewGuid().ToString("N");
-                fileIdMap[oldFileId] = newFileId;
-
-                using var insCmd = conn.CreateCommand();
-                insCmd.Transaction = (SqliteTransaction)tx;
-                insCmd.CommandText = """
-                    INSERT INTO files (id, snapshot_id, path, normalized_path, size, content_hash, language, is_binary, status, hash_kind, mtime, parser_id, parser_version)
-                    VALUES ($id, $snap, $path, $norm, $size, $hash, $lang, $bin, $status, $hashKind, $mtime, $parserId, $parserVer);
-                    """;
-                insCmd.Parameters.AddWithValue("$id", newFileId);
-                insCmd.Parameters.AddWithValue("$snap", toSnap);
-                insCmd.Parameters.AddWithValue("$path", reader.GetString(1));
-                insCmd.Parameters.AddWithValue("$norm", reader.GetString(2));
-                insCmd.Parameters.AddWithValue("$size", reader.GetInt64(3));
-                insCmd.Parameters.AddWithValue("$hash", reader.GetString(4));
-                insCmd.Parameters.AddWithValue("$lang", reader.GetString(5));
-                insCmd.Parameters.AddWithValue("$bin", reader.GetInt32(6));
-                insCmd.Parameters.AddWithValue("$status", reader.GetString(7));
-                insCmd.Parameters.AddWithValue("$hashKind", reader.GetString(8));
-                insCmd.Parameters.AddWithValue("$mtime", reader.IsDBNull(9) ? DBNull.Value : reader.GetString(9));
-                insCmd.Parameters.AddWithValue("$parserId", reader.IsDBNull(10) ? DBNull.Value : reader.GetString(10));
-                insCmd.Parameters.AddWithValue("$parserVer", reader.IsDBNull(11) ? DBNull.Value : reader.GetString(11));
-                await insCmd.ExecuteNonQueryAsync();
-            }
-        }
-
-        // Clone symbols
-        using (var readCmd = conn.CreateCommand())
-        {
-            readCmd.Transaction = (SqliteTransaction)tx;
-            readCmd.CommandText = "SELECT id, file_id, name, kind, start_line, end_line, modifier, confidence FROM file_symbols WHERE snapshot_id = $from;";
-            readCmd.Parameters.AddWithValue("$from", fromSnap);
-            await using var reader = await readCmd.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-            {
-                var oldFileId = reader.GetString(1);
-                if (!fileIdMap.TryGetValue(oldFileId, out var newFileId)) continue;
-
-                using var insCmd = conn.CreateCommand();
-                insCmd.Transaction = (SqliteTransaction)tx;
-                insCmd.CommandText = """
-                    INSERT INTO file_symbols (id, file_id, snapshot_id, name, kind, start_line, end_line, modifier, confidence)
-                    VALUES ($id, $fid, $snap, $name, $kind, $sl, $el, $mod, $conf);
-                    """;
-                insCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
-                insCmd.Parameters.AddWithValue("$fid", newFileId);
-                insCmd.Parameters.AddWithValue("$snap", toSnap);
-                insCmd.Parameters.AddWithValue("$name", reader.GetString(2));
-                insCmd.Parameters.AddWithValue("$kind", reader.GetString(3));
-                insCmd.Parameters.AddWithValue("$sl", reader.GetInt32(4));
-                insCmd.Parameters.AddWithValue("$el", reader.GetInt32(5));
-                insCmd.Parameters.AddWithValue("$mod", reader.IsDBNull(6) ? DBNull.Value : reader.GetString(6));
-                insCmd.Parameters.AddWithValue("$conf", reader.GetString(7));
-                await insCmd.ExecuteNonQueryAsync();
-            }
-        }
-
-        // Clone imports
-        using (var readCmd = conn.CreateCommand())
-        {
-            readCmd.Transaction = (SqliteTransaction)tx;
-            readCmd.CommandText = "SELECT id, file_id, module, imported_name, line FROM file_imports WHERE snapshot_id = $from;";
-            readCmd.Parameters.AddWithValue("$from", fromSnap);
-            await using var reader = await readCmd.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-            {
-                var oldFileId = reader.GetString(1);
-                if (!fileIdMap.TryGetValue(oldFileId, out var newFileId)) continue;
-
-                using var insCmd = conn.CreateCommand();
-                insCmd.Transaction = (SqliteTransaction)tx;
-                insCmd.CommandText = """
-                    INSERT INTO file_imports (id, file_id, snapshot_id, module, imported_name, line)
-                    VALUES ($id, $fid, $snap, $mod, $name, $line);
-                    """;
-                insCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
-                insCmd.Parameters.AddWithValue("$fid", newFileId);
-                insCmd.Parameters.AddWithValue("$snap", toSnap);
-                insCmd.Parameters.AddWithValue("$mod", reader.GetString(2));
-                insCmd.Parameters.AddWithValue("$name", reader.IsDBNull(3) ? DBNull.Value : reader.GetString(3));
-                insCmd.Parameters.AddWithValue("$line", reader.GetInt32(4));
-                await insCmd.ExecuteNonQueryAsync();
-            }
-        }
-
-        // Clone relations
-        using (var readCmd = conn.CreateCommand())
-        {
-            readCmd.Transaction = (SqliteTransaction)tx;
-            readCmd.CommandText = "SELECT id, file_id, source_symbol, target_symbol, relation_type, confidence, line, source FROM file_relations WHERE snapshot_id = $from;";
-            readCmd.Parameters.AddWithValue("$from", fromSnap);
-            await using var reader = await readCmd.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-            {
-                var oldFileId = reader.GetString(1);
-                if (!fileIdMap.TryGetValue(oldFileId, out var newFileId)) continue;
-
-                using var insCmd = conn.CreateCommand();
-                insCmd.Transaction = (SqliteTransaction)tx;
-                insCmd.CommandText = """
-                    INSERT INTO file_relations (id, file_id, snapshot_id, source_symbol, target_symbol, relation_type, confidence, line, source)
-                    VALUES ($id, $fid, $snap, $src, $tgt, $rt, $conf, $line, $source);
-                    """;
-                insCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
-                insCmd.Parameters.AddWithValue("$fid", newFileId);
-                insCmd.Parameters.AddWithValue("$snap", toSnap);
-                insCmd.Parameters.AddWithValue("$src", reader.GetString(2));
-                insCmd.Parameters.AddWithValue("$tgt", reader.GetString(3));
-                insCmd.Parameters.AddWithValue("$rt", reader.GetString(4));
-                insCmd.Parameters.AddWithValue("$conf", reader.GetString(5));
-                insCmd.Parameters.AddWithValue("$line", reader.IsDBNull(6) ? DBNull.Value : reader.GetInt32(6));
-                insCmd.Parameters.AddWithValue("$source", reader.IsDBNull(7) ? DBNull.Value : reader.GetString(7));
-                await insCmd.ExecuteNonQueryAsync();
-            }
-        }
-
-        await tx.CommitAsync();
-
-        // Clone FTS entries
-        using var ftsConn = factory.CreateOpenConnection();
-        using var ftsCmd = ftsConn.CreateCommand();
-        ftsCmd.CommandText = """
-            INSERT INTO file_contents_fts (path, normalized_path, content, language, content_hash, snapshot_id)
-            SELECT path, normalized_path, content, language, content_hash, $to
-            FROM file_contents_fts WHERE snapshot_id = $from;
-            """;
-        ftsCmd.Parameters.AddWithValue("$from", fromSnap);
-        ftsCmd.Parameters.AddWithValue("$to", toSnap);
-        await ftsCmd.ExecuteNonQueryAsync();
-    }
-
-    private static CacheHub.Core.Identifiers.IndexSnapshotId IndexSnapshotIdFor(string value) =>
-        CacheHub.Core.Identifiers.IndexSnapshotId.Parse(value);
-
-    #endregion
 
     #region DB Helpers
 
