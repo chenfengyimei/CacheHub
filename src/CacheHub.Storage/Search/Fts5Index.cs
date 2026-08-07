@@ -103,8 +103,8 @@ public sealed class Fts5Index(SqliteConnectionFactory factory)
             var rankScore = reader.IsDBNull(3) ? 0 : reader.GetDouble(3);
             var content = reader.IsDBNull(4) ? "" : reader.GetString(4);
 
-            // Find the first line matching the query keywords for anchor precision
-            var hitLine = FindHitLine(content, query);
+            // Prefer the actual FTS5 snippet-highlighted match position over the first keyword occurrence.
+            var hitLine = FindHitLine(content, snippet, query);
 
             results.Add(new FtsSearchResult(path, language, snippet, rankScore, hitLine));
         }
@@ -112,20 +112,46 @@ public sealed class Fts5Index(SqliteConnectionFactory factory)
     }
 
     /// <summary>
-    /// Finds the 1-based line number of the first occurrence of any query keyword in the content.
+    /// Finds the 1-based line number that best matches the FTS5 snippet's highlighted region.
+    /// Strategy:
+    ///   1. If the snippet contains highlighted terms, locate the line holding the longest highlighted
+    ///      phrase first — this is closer to the actual BM25-chosen context.
+    ///   2. Fallback to the first occurrence of any query keyword (original behavior).
     /// </summary>
-    private static int? FindHitLine(string content, string query)
+    private static int? FindHitLine(string content, string snippet, string query)
     {
-        if (string.IsNullOrEmpty(content) || string.IsNullOrEmpty(query)) return null;
+        if (string.IsNullOrEmpty(content)) return null;
 
-        var keywords = query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var lines = content.Split('\n');
+        if (lines.Length == 0) return null;
 
+        // 1. Try to locate the snippet's highlighted region in the content.
+        var highlighted = ExtractHighlightedTerms(snippet);
+        if (highlighted.Count > 0)
+        {
+            // Strategy A: If the snippet has surrounding context, try to find the full
+            // snippet fragment (with <mark> tags stripped) in the content.
+            var snippetText = StripMarkTags(snippet).Trim();
+            if (snippetText.Length > 10)
+            {
+                var idx = content.IndexOf(snippetText, StringComparison.OrdinalIgnoreCase);
+                if (idx >= 0)
+                    return LineFromOffset(content, idx);
+            }
+
+            // Strategy B: Find the line containing the most highlighted terms.
+            // Prefer non-comment lines (lines not starting with // or #) when there's a tie.
+            var best = FindLineWithLongest(lines, highlighted);
+            if (best is not null) return best.Value + 1;
+        }
+
+        // 2. Fallback: first occurrence of any query keyword.
+        if (string.IsNullOrEmpty(query)) return null;
+        var keywords = query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         foreach (var keyword in keywords)
         {
             var cleanKeyword = keyword.Trim('"', '*', '(', ')');
             if (string.IsNullOrEmpty(cleanKeyword)) continue;
-
             for (var i = 0; i < lines.Length; i++)
             {
                 if (lines[i].Contains(cleanKeyword, StringComparison.OrdinalIgnoreCase))
@@ -134,6 +160,118 @@ public sealed class Fts5Index(SqliteConnectionFactory factory)
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Strips &lt;mark&gt; and &lt;/mark&gt; tags from a string.
+    /// </summary>
+    private static string StripMarkTags(string snippet)
+    {
+        if (string.IsNullOrEmpty(snippet)) return snippet;
+        return snippet
+            .Replace("<mark>", "", StringComparison.Ordinal)
+            .Replace("</mark>", "", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Returns the 1-based line number for a character offset in the content.
+    /// </summary>
+    private static int LineFromOffset(string content, int offset)
+    {
+        var line = 1;
+        for (var i = 0; i < offset && i < content.Length; i++)
+        {
+            if (content[i] == '\n') line++;
+        }
+        return line;
+    }
+
+    /// <summary>
+    /// Extracts highlighted terms (inside &lt;mark&gt; tags) from the FTS5 snippet.
+    /// </summary>
+    private static List<string> ExtractHighlightedTerms(string snippet)
+    {
+        var terms = new List<string>();
+        if (string.IsNullOrEmpty(snippet)) return terms;
+
+        const string startTag = "<mark>";
+        const string endTag = "</mark>";
+        var index = 0;
+        while (index < snippet.Length)
+        {
+            var start = snippet.IndexOf(startTag, index, StringComparison.Ordinal);
+            if (start < 0) break;
+            start += startTag.Length;
+            var end = snippet.IndexOf(endTag, start, StringComparison.Ordinal);
+            if (end < 0) break;
+            var term = snippet[start..end].Trim();
+            if (term.Length > 0) terms.Add(term);
+            index = end + endTag.Length;
+        }
+        return terms;
+    }
+
+    /// <summary>
+    /// Returns the index (0-based) of the line containing the most highlighted terms.
+    /// Prefers non-comment lines when counts tie (comments are less likely to be the
+    /// BM25-chosen context), then breaks ties by total matched term length.
+    /// </summary>
+    private static int? FindLineWithLongest(string[] lines, IReadOnlyList<string> highlighted)
+    {
+        var bestIndex = -1;
+        var bestMatches = -1;
+        var bestLength = -1;
+        var bestIsComment = false;
+
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var lineText = lines[i];
+            var matchCount = 0;
+            var matchLength = 0;
+            foreach (var term in highlighted)
+            {
+                if (lineText.Contains(term, StringComparison.OrdinalIgnoreCase))
+                {
+                    matchCount++;
+                    matchLength += term.Length;
+                }
+            }
+
+            if (matchCount == 0) continue;
+
+            var isComment = IsCommentLine(lineText);
+            var better = false;
+            if (matchCount > bestMatches)
+                better = true;
+            else if (matchCount == bestMatches)
+            {
+                // Prefer non-comment lines over comment lines.
+                if (bestIsComment && !isComment)
+                    better = true;
+                else if (bestIsComment == isComment && matchLength > bestLength)
+                    better = true;
+            }
+
+            if (better)
+            {
+                bestMatches = matchCount;
+                bestLength = matchLength;
+                bestIndex = i;
+                bestIsComment = isComment;
+            }
+        }
+
+        return bestIndex >= 0 ? bestIndex : null;
+    }
+
+    private static bool IsCommentLine(string line)
+    {
+        var trimmed = line.TrimStart();
+        if (trimmed.StartsWith("//", StringComparison.Ordinal) ||
+            trimmed.StartsWith('#') ||
+            trimmed.StartsWith("/*", StringComparison.Ordinal))
+            return true;
+        return false;
     }
 
     /// <summary>

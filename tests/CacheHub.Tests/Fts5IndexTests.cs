@@ -9,6 +9,22 @@ namespace CacheHub.Tests;
 [Collection("SQLite")]
 public class Fts5IndexTests
 {
+    private static readonly string PaymentContent = string.Join("\n", new[]
+    {
+        "export class PaymentService {",
+        "  // transaction is handled elsewhere",
+        "",
+        "  configure() {",
+        "    return { enabled: false };",
+        "  }",
+        "",
+        "  processTransaction(amount: number) {",
+        "    // transaction core logic",
+        "    return amount * 1.0;",
+        "  }",
+        "}",
+    });
+
     [Fact]
     public async Task Fts5Index_IndexFileAsync_ShouldStoreContent()
     {
@@ -115,6 +131,41 @@ public class Fts5IndexTests
 
             var results = await fts.SearchAsync(snapshotId, "content");
             Assert.Empty(results);
+        }
+        finally { Cleanup(dbPath); }
+    }
+
+    /// <summary>
+    /// V4: FTS Anchor should locate the line matching the snippet's highlighted terms,
+    /// not just the first occurrence of any query keyword in the file.
+    /// </summary>
+    [Fact]
+    public async Task Fts5Index_SearchAsync_HitLine_PrefersSnippetHighlightedPosition()
+    {
+        var dbPath = GetTempDbPath();
+        try
+        {
+            var factory = SetupFactory(dbPath);
+            var snapshotId = IndexSnapshotId.New();
+            var fts = new Fts5Index(factory);
+
+            // Construct content where "transaction" appears first in a comment (line 2)
+            // but the actual implementation is at line 8.
+            var content = PaymentContent;
+
+            await fts.IndexFileAsync(snapshotId, "payment.ts", "payment.ts", content, "typescript", "h1");
+
+            var results = await fts.SearchAsync(snapshotId, "transaction");
+            Assert.NotEmpty(results);
+            var hitLine = results[0].HitLine;
+
+            // The HitLine should be near the snippet's highlighted region.
+            // The snippet function with 10 fragments should highlight "transaction" near the processTransaction method.
+            // Both line 2 (comment) and line 8/9 (implementation) contain "transaction",
+            // but with multiple highlighted terms (e.g., "processTransaction", "transaction"),
+            // the line containing the most highlighted terms should win.
+            Assert.NotNull(hitLine);
+            Assert.True(hitLine >= 7, $"Expected hit line near the implementation (>=7), got {hitLine}");
         }
         finally { Cleanup(dbPath); }
     }
