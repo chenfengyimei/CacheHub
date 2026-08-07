@@ -22,12 +22,33 @@ public sealed record GatewayConfig
     /// <summary>Maximum total cache size in bytes (0 = unlimited).</summary>
     public long MaxCacheBytes { get; init; } = 64 * 1024 * 1024;
 
+    /// <summary>Additional fallback providers. Primary provider is always first.</summary>
+    public IReadOnlyList<FallbackProvider> FallbackProviders { get; init; } = [];
+
     /// <summary>Allowed response headers to forward to clients. Empty = forward all safe headers.</summary>
     public IReadOnlyList<string> AllowedResponseHeaders { get; init; } =
     [
         "Content-Type", "Retry-After", "X-Request-ID", "X-RateLimit-Limit",
         "X-RateLimit-Remaining", "X-RateLimit-Reset",
     ];
+
+    /// <summary>All providers in order: primary + fallbacks.</summary>
+    public IReadOnlyList<(string BaseUrl, string ApiKey)> GetAllProviders()
+    {
+        var list = new List<(string, string)> { (ProviderBaseUrl, ProviderApiKey) };
+        foreach (var fp in FallbackProviders)
+            list.Add((fp.BaseUrl, fp.ApiKey));
+        return list;
+    }
+}
+
+/// <summary>
+/// A fallback provider for multi-provider routing.
+/// </summary>
+public sealed record FallbackProvider
+{
+    public required string BaseUrl { get; init; }
+    public required string ApiKey { get; init; }
 }
 
 /// <summary>

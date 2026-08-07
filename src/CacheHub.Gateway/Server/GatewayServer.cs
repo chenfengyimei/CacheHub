@@ -144,14 +144,35 @@ public sealed class GatewayServer : IDisposable
 
     private async Task HandleModelsAsync(HttpListenerResponse resp, CancellationToken ct)
     {
-        // Forward to provider
-        var providerResp = await _httpClient.GetAsync($"{_config.ProviderBaseUrl}/v1/models", ct);
-        var body = await providerResp.Content.ReadAsStringAsync(ct);
-        resp.StatusCode = (int)providerResp.StatusCode;
+        var providers = _config.GetAllProviders();
+        foreach (var (baseUrl, apiKey) in providers)
+        {
+            try
+            {
+                using var req = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/v1/models");
+                req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+
+                var providerResp = await _httpClient.SendAsync(req, ct);
+                var body = await providerResp.Content.ReadAsStringAsync(ct);
+                resp.StatusCode = (int)providerResp.StatusCode;
+                resp.ContentType = "application/json";
+                var bytes = System.Text.Encoding.UTF8.GetBytes(body);
+                resp.ContentLength64 = bytes.Length;
+                await resp.OutputStream.WriteAsync(bytes, ct);
+                return;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                continue;
+            }
+        }
+
+        resp.StatusCode = 502;
         resp.ContentType = "application/json";
-        var bytes = System.Text.Encoding.UTF8.GetBytes(body);
-        resp.ContentLength64 = bytes.Length;
-        await resp.OutputStream.WriteAsync(bytes, ct);
+        var errBytes = System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+            ErrorEnvelope.From(ErrorCode.ProviderUnavailable, "All providers failed for /v1/models")));
+        resp.ContentLength64 = errBytes.Length;
+        await resp.OutputStream.WriteAsync(errBytes, ct);
     }
 
     private async Task HandleChatCompletionsAsync(HttpListenerRequest req, HttpListenerResponse resp, CancellationToken ct)
@@ -294,20 +315,52 @@ public sealed class GatewayServer : IDisposable
     /// </summary>
     private async Task HandleStreamingAsync(string requestBody, string model, HttpListenerResponse resp, CancellationToken ct)
     {
-        using var msg = new HttpRequestMessage(HttpMethod.Post, $"{_config.ProviderBaseUrl}/v1/chat/completions");
-        msg.Content = new StringContent(requestBody, System.Text.Encoding.UTF8, "application/json");
-        msg.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _config.ProviderApiKey);
+        var providers = _config.GetAllProviders();
+        Exception? lastError = null;
 
-        var response = await _httpClient.SendAsync(msg, HttpCompletionOption.ResponseHeadersRead, ct);
+        foreach (var (baseUrl, apiKey) in providers)
+        {
+            try
+            {
+                using var msg = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/v1/chat/completions");
+                msg.Content = new StringContent(requestBody, System.Text.Encoding.UTF8, "application/json");
+                msg.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
 
-        resp.StatusCode = (int)response.StatusCode;
-        resp.ContentType = response.Content.Headers.ContentType?.ToString() ?? "text/event-stream";
-        ForwardAllowedHeaders(response.Headers, resp);
+                var response = await _httpClient.SendAsync(msg, HttpCompletionOption.ResponseHeadersRead, ct);
+                var statusCode = (int)response.StatusCode;
 
-        // Stream the response body directly to the client
-        using var stream = await response.Content.ReadAsStreamAsync(ct);
-        await stream.CopyToAsync(resp.OutputStream, 8192, ct);
-        resp.OutputStream.Flush();
+                // On 429 or 5xx, try next provider (but only before streaming starts)
+                if (statusCode == 429 || statusCode >= 500)
+                {
+                    lastError = new HttpRequestException($"Provider {baseUrl} returned {statusCode}");
+                    response.Dispose();
+                    continue;
+                }
+
+                resp.StatusCode = statusCode;
+                resp.ContentType = response.Content.Headers.ContentType?.ToString() ?? "text/event-stream";
+                ForwardAllowedHeaders(response.Headers, resp);
+
+                // Stream the response body directly to the client
+                using var stream = await response.Content.ReadAsStreamAsync(ct);
+                await stream.CopyToAsync(resp.OutputStream, 8192, ct);
+                resp.OutputStream.Flush();
+                return;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                lastError = ex;
+                continue;
+            }
+        }
+
+        // All providers failed for streaming
+        resp.StatusCode = 502;
+        resp.ContentType = "application/json";
+        var errBytes = System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+            ErrorEnvelope.From(ErrorCode.ProviderUnavailable, $"All providers failed. Last error: {lastError?.Message ?? "unknown"}")));
+        resp.ContentLength64 = errBytes.Length;
+        await resp.OutputStream.WriteAsync(errBytes, ct);
     }
 
     /// <summary>
@@ -346,13 +399,42 @@ public sealed class GatewayServer : IDisposable
 
     private async Task<ProviderResponse> ForwardToProviderWithStatusAsync(string requestBody, string model, CancellationToken ct)
     {
-        using var msg = new HttpRequestMessage(HttpMethod.Post, $"{_config.ProviderBaseUrl}/v1/chat/completions");
-        msg.Content = new StringContent(requestBody, System.Text.Encoding.UTF8, "application/json");
-        msg.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _config.ProviderApiKey);
+        var providers = _config.GetAllProviders();
+        Exception? lastError = null;
 
-        var response = await _httpClient.SendAsync(msg, ct);
-        var body = await response.Content.ReadAsStringAsync(ct);
-        return new ProviderResponse((int)response.StatusCode, body, response.Headers);
+        foreach (var (baseUrl, apiKey) in providers)
+        {
+            try
+            {
+                using var msg = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/v1/chat/completions");
+                msg.Content = new StringContent(requestBody, System.Text.Encoding.UTF8, "application/json");
+                msg.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+
+                var response = await _httpClient.SendAsync(msg, ct);
+                var body = await response.Content.ReadAsStringAsync(ct);
+                var statusCode = (int)response.StatusCode;
+
+                // On 429 (rate limit) or 5xx (server error), try next provider
+                if (statusCode == 429 || statusCode >= 500)
+                {
+                    lastError = new HttpRequestException($"Provider {baseUrl} returned {statusCode}");
+                    continue;
+                }
+
+                return new ProviderResponse(statusCode, body, response.Headers);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                lastError = ex;
+                continue;
+            }
+        }
+
+        // All providers failed — return last error as 502
+        var errorBody = JsonSerializer.Serialize(ErrorEnvelope.From(
+            ErrorCode.ProviderUnavailable,
+            $"All providers failed. Last error: {lastError?.Message ?? "unknown"}"));
+        return new ProviderResponse(502, errorBody, null);
     }
 
     /// <summary>
@@ -392,23 +474,55 @@ public sealed class GatewayServer : IDisposable
 
         try
         {
-            // Forward to provider's /v1/responses endpoint
-            using var msg = new HttpRequestMessage(HttpMethod.Post, $"{_config.ProviderBaseUrl}/v1/responses");
-            msg.Content = new StringContent(requestBody, System.Text.Encoding.UTF8, "application/json");
-            msg.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _config.ProviderApiKey);
+            // Forward to provider's /v1/responses endpoint with fallback
+            var providers = _config.GetAllProviders();
+            Exception? lastError = null;
 
-            var response = await _httpClient.SendAsync(msg, ct);
-            var responseBody = await response.Content.ReadAsStringAsync(ct);
+            foreach (var (baseUrl, apiKey) in providers)
+            {
+                try
+                {
+                    using var msg = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/v1/responses");
+                    msg.Content = new StringContent(requestBody, System.Text.Encoding.UTF8, "application/json");
+                    msg.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
 
+                    var response = await _httpClient.SendAsync(msg, ct);
+                    var responseBody = await response.Content.ReadAsStringAsync(ct);
+                    var statusCode = (int)response.StatusCode;
+
+                    // On 429 or 5xx, try next provider
+                    if (statusCode == 429 || statusCode >= 500)
+                    {
+                        lastError = new HttpRequestException($"Provider {baseUrl} returned {statusCode}");
+                        continue;
+                    }
+
+                    sw.Stop();
+                    LogRequest("responses", model, sw.Elapsed, statusCode, false, 0, 0);
+
+                    resp.StatusCode = statusCode;
+                    resp.ContentType = "application/json";
+                    ForwardAllowedHeaders(response.Headers, resp);
+                    var respBytes = System.Text.Encoding.UTF8.GetBytes(responseBody);
+                    resp.ContentLength64 = respBytes.Length;
+                    await resp.OutputStream.WriteAsync(respBytes, ct);
+                    return;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    lastError = ex;
+                    continue;
+                }
+            }
+
+            // All providers failed
             sw.Stop();
-            LogRequest("responses", model, sw.Elapsed, (int)response.StatusCode, false, 0, 0);
-
-            resp.StatusCode = (int)response.StatusCode;
+            resp.StatusCode = 502;
             resp.ContentType = "application/json";
-            ForwardAllowedHeaders(response.Headers, resp);
-            var respBytes = System.Text.Encoding.UTF8.GetBytes(responseBody);
-            resp.ContentLength64 = respBytes.Length;
-            await resp.OutputStream.WriteAsync(respBytes, ct);
+            var errBytes = System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+                ErrorEnvelope.From(ErrorCode.ProviderUnavailable, $"All providers failed. Last error: {lastError?.Message ?? "unknown"}")));
+            resp.ContentLength64 = errBytes.Length;
+            await resp.OutputStream.WriteAsync(errBytes, ct);
         }
         finally
         {

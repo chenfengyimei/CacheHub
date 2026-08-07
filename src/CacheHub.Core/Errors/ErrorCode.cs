@@ -46,4 +46,5 @@ public enum ErrorCode
     ProviderError = 7002,
     AuthRequired = 7003,
     RequestTooLarge = 7004,
+    ProviderUnavailable = 7005,
 }
