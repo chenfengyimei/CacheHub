@@ -1330,7 +1330,7 @@ internal static class DesktopSemanticHelper
                 Similarity = r.Similarity,
                 ReferenceType = r.Reference.Type.ToString(),
                 TaskDescription = r.Reference.TaskDescription,
-                HistoricalFiles = [..r.Reference.SelectedFiles, ..r.Reference.FilesActuallyRead],
+                HistoricalFiles = [.. r.Reference.SelectedFiles, .. r.Reference.FilesActuallyRead],
             }).ToList();
         };
     }
