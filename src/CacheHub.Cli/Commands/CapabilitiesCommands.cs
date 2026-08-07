@@ -38,10 +38,10 @@ public static class CapabilitiesCommands
             [
                 "Semantic Search: lexical similarity (FNV-1a hash embedding), wired as reference, bound to Snapshot/ContentHash",
                 "LSP: scaffold only, regex-based parsing fallback",
-                "Tokenizer: CodeTokenizer default (code-aware word splitting), no BPE model tokenizers",
+                "Tokenizer: BPE model tokenizers (cl100k_base + o200k_base via Microsoft.ML.Tokenizers) + CodeTokenizer fallback",
                 "Gateway: multi-provider fallback, Responses API streaming, SSE Usage parsing, persistent SqliteCacheStore",
-                "Cache: ContextPackageCache wired (in-memory) with complete CacheKey, Gateway raw cache persistent via SqliteCacheStore",
-                "Benchmark: CLI benchmark uses real ContextEngine (Recall@10 + TokenReduction), not Agent-level evaluation",
+                "Cache: ContextPackageCache wired (in-memory + persistent SqliteCacheStore) with complete CacheKey, Gateway raw cache persistent via SqliteCacheStore",
+                "Benchmark: retrieval (Recall@10 + TokenReduction) via real ContextEngine + Agent Benchmark (task→model→patch→cost) via Gateway",
             ],
         };
 

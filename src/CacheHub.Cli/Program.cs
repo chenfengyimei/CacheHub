@@ -36,7 +36,7 @@ if (args.Length == 0)
     Console.WriteLine("  help [command]                      Show help (all or command-specific)");
     Console.WriteLine("  explain --id=<ctx-id>               Explain context selection and potential misses");
     Console.WriteLine("  search <query> [--workspace=<id>]   Search indexed files (FTS5)");
-    Console.WriteLine("  benchmark <list|run|report>        Run benchmark tasks and generate reports");
+    Console.WriteLine("  benchmark <list|run|agent|report>  Run benchmark tasks and generate reports");
     Console.WriteLine("  outline <file> [--output=json]      Extract file outline (symbols/imports)");
     Console.WriteLine("  repomap <dir> [--max-tokens=N]       Generate repository map");
     Console.WriteLine("  clean <temp|cache|exports|all>       Clean CacheHub data [--dry-run]");

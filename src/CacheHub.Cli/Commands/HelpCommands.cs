@@ -49,7 +49,7 @@ public static class HelpCommands
                 version               Show version information
                 integration           Verify installation (verify)
                 workflow              Context→Gateway unified workflow (completion)
-                benchmark             Run benchmark tasks (list/run/report)
+                benchmark             Run benchmark tasks (list/run/agent/report)
                 doctor                Diagnose environment and installation
                 help                  Show this help or command-specific help
 
