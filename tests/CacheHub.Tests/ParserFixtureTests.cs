@@ -869,4 +869,78 @@ public class ParserFixtureTests
         Assert.Equal("1.0", parser.Version);
         Assert.Equal("kotlin-regex-baseline", parser.Id);
     }
+
+    // === Swift Parser Tests ===
+
+    [Fact]
+    public void Swift_ShouldExtractClassAndMethods()
+    {
+        var code = """
+            class UserService {
+                func handleRequest() {
+                    return
+                }
+                private func computeScore(_ data: String) -> Int {
+                    return 0
+                }
+            }
+            """;
+        var result = new SwiftRegexParser().Parse(code, "UserService.swift");
+
+        Assert.Contains(result.Symbols, s => s.Name == "UserService" && s.Kind == SymbolKind.Class);
+        Assert.Contains(result.Symbols, s => s.Name == "handleRequest" && s.Kind == SymbolKind.Method);
+        Assert.Contains(result.Symbols, s => s.Name == "computeScore" && s.Kind == SymbolKind.Method);
+    }
+
+    [Fact]
+    public void Swift_ShouldExtractImports()
+    {
+        var code = """
+            import Foundation
+            import UIKit
+            """;
+        var result = new SwiftRegexParser().Parse(code, "main.swift");
+
+        Assert.Contains(result.Imports, i => i.Module == "Foundation");
+        Assert.Contains(result.Imports, i => i.Module == "UIKit");
+        Assert.Contains(result.Relations, r => r.Relation == "imports" && r.TargetName == "Foundation");
+    }
+
+    [Fact]
+    public void Swift_ShouldExtractStructAndProtocol()
+    {
+        var code = """
+            struct Config {
+                let port: Int
+            }
+            protocol Repository {
+                func save()
+            }
+            """;
+        var result = new SwiftRegexParser().Parse(code, "types.swift");
+
+        Assert.Contains(result.Symbols, s => s.Name == "Config" && s.Kind == SymbolKind.Struct);
+        Assert.Contains(result.Symbols, s => s.Name == "Repository" && s.Kind == SymbolKind.Interface);
+    }
+
+    [Fact]
+    public void Swift_ShouldExtractInheritance()
+    {
+        var code = """
+            class AdminViewController : UIViewController, UITableViewDelegate {
+            }
+            """;
+        var result = new SwiftRegexParser().Parse(code, "admin.swift");
+
+        Assert.Contains(result.Relations, r => r.Relation == "inherits" && r.TargetName == "UIViewController");
+        Assert.Contains(result.Relations, r => r.Relation == "inherits" && r.TargetName == "UITableViewDelegate");
+    }
+
+    [Fact]
+    public void Swift_ParserVersion_ShouldBe1()
+    {
+        var parser = new SwiftRegexParser();
+        Assert.Equal("1.0", parser.Version);
+        Assert.Equal("swift-regex-baseline", parser.Id);
+    }
 }

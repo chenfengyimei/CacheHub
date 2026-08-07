@@ -815,6 +815,7 @@ static ICodeParser SelectParser(string filePath)
         ".php" => new PhpRegexParser(),
         ".rb" => new RubyRegexParser(),
         ".kt" or ".kts" => new KotlinRegexParser(),
+        ".swift" => new SwiftRegexParser(),
         ".md" or ".markdown" => new MarkdownParser(),
         _ => new TextParser(),
     };
