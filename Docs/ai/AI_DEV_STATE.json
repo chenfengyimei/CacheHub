@@ -36,7 +36,7 @@
     "semanticReference": "Production Ready — LocalHashEmbedding (FNV-1a), PersistentVectorStore, wired into CLI/Desktop semanticSearch, RecordReference called on task completion (V5-W09), Reference-only mode",
     "contextualCompletion": "Production Ready — CLI + API entry points, Gateway call with unified SecurityPolicyResolver (V5-W02), Offline hard-block, token breakdown without double-counting (V5-W10)",
     "securityEnforcement": "Production Ready — unified SecurityPolicyResolver (V5-W02), all paths load from ConfigManager, Offline blocks gateway calls",
-    "realBenchmark": "Production Ready — real ContextEngine, Recall@10 with Take(10), unified BPE Tokenizer, Report aggregates persisted runs",
+    "realBenchmark": "Production Ready — real ContextEngine, Recall@10 with Take(10), unified BPE Tokenizer, Report aggregates persisted runs. Report SuccessRate is Retrieval Quality proxy (not Agent Task Success).",
     "agentBenchmark": "Beta — real ContextEngine output (V5-W03 fixed: no longer uses RequiredFiles), ContainsSubstantiveCode evaluation, real model calls via Gateway. Still needs real apply-patch/build/test for true success rate.",
     "treeSitter": "Scaffold — regex-baseline covers 13 languages",
     "lsp": "Scaffold",

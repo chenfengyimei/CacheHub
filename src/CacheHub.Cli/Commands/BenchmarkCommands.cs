@@ -498,7 +498,7 @@ public static class BenchmarkCommands
                             && !p.Contains("\\obj\\", StringComparison.OrdinalIgnoreCase)
                             && !p.Contains("/bin/", StringComparison.OrdinalIgnoreCase)
                             && !p.Contains("/obj/", StringComparison.OrdinalIgnoreCase))
-                .Take(200) // cap to avoid absurd context
+                .Take(500) // V5: increased from 200 to 500 for fairer baseline representation
                 .ToList();
 
             var snippets = new List<string>();
