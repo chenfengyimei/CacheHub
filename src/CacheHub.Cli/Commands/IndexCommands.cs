@@ -344,7 +344,10 @@ public static class IndexCommands
         var deletedCount = 0;
         var failedCount = 0;
 
-        // Process added files
+        // Phase 1: Collect all file data (read, hash, parse) into memory
+        var filesToAdd = new List<(string path, string fullPath, long size, string language, bool isBinary, string mtime, string hash, string content, string parserId, string parserVersion, Core.Parsing.ParseResult parseResult)>();
+        var filesToDelete = new List<string>(result.DeletedPaths);
+
         foreach (var path in result.AddedPaths)
         {
             try
@@ -359,11 +362,8 @@ public static class IndexCommands
                 var parser = SelectParser(path);
                 var parseResult = parser.Parse(content, path);
 
-                await InsertFileWithParserAsync(factory, snapshotId, path, path, info.Length, hash.Hash,
-                    typeInfo.Language, typeInfo.IsBinary, info.LastWriteTimeUtc.ToString("O"),
-                    parser.Id, parser.Version, parseResult);
-
-                await fts.IndexFileAsync(snapshotId, path, path, content, typeInfo.Language, hash.Hash);
+                filesToAdd.Add((path, fullPath, info.Length, typeInfo.Language, typeInfo.IsBinary,
+                    info.LastWriteTimeUtc.ToString("O"), hash.Hash, content, parser.Id, parser.Version, parseResult));
                 addedCount++;
             }
             catch (Exception ex)
@@ -373,17 +373,10 @@ public static class IndexCommands
             }
         }
 
-        // Process modified files (delete old + insert new)
         foreach (var path in result.ModifiedPaths)
         {
             try
             {
-                // Delete old entry
-                await DeleteFileFromSnapshotAsync(factory, snapshotId, path);
-                // R6-W001: Delete only this file's FTS entry, not the entire snapshot
-                await fts.DeleteFileAsync(snapshotId, path);
-
-                // Re-insert
                 var fullPath = Path.Combine(workspace.RootPath, path.Replace('/', Path.DirectorySeparatorChar));
                 var info = new FileInfo(fullPath);
                 var typeInfo = FileTypeDetector.Detect(fullPath, info.Length);
@@ -394,11 +387,10 @@ public static class IndexCommands
                 var parser = SelectParser(path);
                 var parseResult = parser.Parse(content, path);
 
-                await InsertFileWithParserAsync(factory, snapshotId, path, path, info.Length, hash.Hash,
-                    typeInfo.Language, typeInfo.IsBinary, info.LastWriteTimeUtc.ToString("O"),
-                    parser.Id, parser.Version, parseResult);
-
-                await fts.IndexFileAsync(snapshotId, path, path, content, typeInfo.Language, hash.Hash);
+                // Modified = delete old + add new
+                filesToDelete.Add(path);
+                filesToAdd.Add((path, fullPath, info.Length, typeInfo.Language, typeInfo.IsBinary,
+                    info.LastWriteTimeUtc.ToString("O"), hash.Hash, content, parser.Id, parser.Version, parseResult));
                 modifiedCount++;
             }
             catch (Exception ex)
@@ -408,21 +400,127 @@ public static class IndexCommands
             }
         }
 
-        // Process deleted files
-        foreach (var path in result.DeletedPaths)
+        // Phase 2: Batch DB writes — single connection, single transaction
+        await using var batchConn = factory.CreateOpenConnection();
+        await using var batchTx = await batchConn.BeginTransactionAsync();
+
+        try
         {
-            try
+            // Delete all removed/modified files
+            foreach (var path in filesToDelete)
             {
-                await DeleteFileFromSnapshotAsync(factory, snapshotId, path);
-                // R6-W001: Also delete from FTS
-                await fts.DeleteFileAsync(snapshotId, path);
-                deletedCount++;
+                using var delCmd = batchConn.CreateCommand();
+                delCmd.Transaction = (SqliteTransaction)batchTx;
+                delCmd.CommandText = "DELETE FROM files WHERE snapshot_id = $snap AND normalized_path = $path;";
+                delCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
+                delCmd.Parameters.AddWithValue("$path", path);
+                await delCmd.ExecuteNonQueryAsync();
             }
-            catch (Exception ex)
+            deletedCount = result.DeletedPaths.Count;
+
+            // Insert all new/modified files
+            foreach (var (path, _, size, language, isBinary, mtime, hash, content, parserId, parserVersion, parseResult) in filesToAdd)
             {
-                failedCount++;
-                Console.Error.WriteLine($"  Failed to delete: {path} - {ex.Message}");
+                var fileId = Guid.NewGuid().ToString("N");
+                using var fileCmd = batchConn.CreateCommand();
+                fileCmd.Transaction = (SqliteTransaction)batchTx;
+                fileCmd.CommandText = """
+                    INSERT INTO files (id, snapshot_id, path, normalized_path, size, content_hash, language, is_binary, status, hash_kind, mtime, parser_id, parser_version)
+                    VALUES ($id, $snap, $path, $norm, $size, $hash, $lang, $bin, 'Indexed', $hashKind, $mtime, $parserId, $parserVer);
+                    """;
+                fileCmd.Parameters.AddWithValue("$id", fileId);
+                fileCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
+                fileCmd.Parameters.AddWithValue("$path", path);
+                fileCmd.Parameters.AddWithValue("$norm", path);
+                fileCmd.Parameters.AddWithValue("$size", size);
+                fileCmd.Parameters.AddWithValue("$hash", hash);
+                fileCmd.Parameters.AddWithValue("$lang", language);
+                fileCmd.Parameters.AddWithValue("$bin", isBinary ? 1 : 0);
+                fileCmd.Parameters.AddWithValue("$hashKind", hash.StartsWith("fp:", StringComparison.Ordinal) ? "fingerprint" : "full");
+                fileCmd.Parameters.AddWithValue("$mtime", mtime);
+                fileCmd.Parameters.AddWithValue("$parserId", parserId);
+                fileCmd.Parameters.AddWithValue("$parserVer", parserVersion);
+                await fileCmd.ExecuteNonQueryAsync();
+
+                foreach (var symbol in parseResult.Symbols)
+                {
+                    using var symCmd = batchConn.CreateCommand();
+                    symCmd.Transaction = (SqliteTransaction)batchTx;
+                    symCmd.CommandText = """
+                        INSERT INTO file_symbols (id, file_id, snapshot_id, name, kind, start_line, end_line, modifier, confidence)
+                        VALUES ($id, $fid, $snap, $name, $kind, $sl, $el, $mod, $conf);
+                        """;
+                    symCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+                    symCmd.Parameters.AddWithValue("$fid", fileId);
+                    symCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
+                    symCmd.Parameters.AddWithValue("$name", symbol.Name);
+                    symCmd.Parameters.AddWithValue("$kind", symbol.Kind.ToString());
+                    symCmd.Parameters.AddWithValue("$sl", symbol.StartLine);
+                    symCmd.Parameters.AddWithValue("$el", symbol.EndLine);
+                    symCmd.Parameters.AddWithValue("$mod", (object?)symbol.Modifier ?? DBNull.Value);
+                    symCmd.Parameters.AddWithValue("$conf", "syntactic");
+                    await symCmd.ExecuteNonQueryAsync();
+                }
+
+                foreach (var import in parseResult.Imports)
+                {
+                    using var impCmd = batchConn.CreateCommand();
+                    impCmd.Transaction = (SqliteTransaction)batchTx;
+                    impCmd.CommandText = """
+                        INSERT INTO file_imports (id, file_id, snapshot_id, module, imported_name, line)
+                        VALUES ($id, $fid, $snap, $mod, $name, $line);
+                        """;
+                    impCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+                    impCmd.Parameters.AddWithValue("$fid", fileId);
+                    impCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
+                    impCmd.Parameters.AddWithValue("$mod", import.Module);
+                    impCmd.Parameters.AddWithValue("$name", (object?)import.ImportedName ?? DBNull.Value);
+                    impCmd.Parameters.AddWithValue("$line", import.Line);
+                    await impCmd.ExecuteNonQueryAsync();
+                }
+
+                foreach (var relation in parseResult.Relations)
+                {
+                    using var relCmd = batchConn.CreateCommand();
+                    relCmd.Transaction = (SqliteTransaction)batchTx;
+                    relCmd.CommandText = """
+                        INSERT INTO file_relations (id, file_id, snapshot_id, source_symbol, target_symbol, relation_type, confidence, line)
+                        VALUES ($id, $fid, $snap, $src, $tgt, $rt, $conf, $line);
+                        """;
+                    relCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+                    relCmd.Parameters.AddWithValue("$fid", fileId);
+                    relCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
+                    relCmd.Parameters.AddWithValue("$src", relation.Relation);
+                    relCmd.Parameters.AddWithValue("$tgt", relation.TargetName);
+                    relCmd.Parameters.AddWithValue("$rt", relation.RelationType.ToString());
+                    relCmd.Parameters.AddWithValue("$conf", relation.Source.ToString());
+                    relCmd.Parameters.AddWithValue("$line", (object?)relation.Confidence ?? DBNull.Value);
+                    await relCmd.ExecuteNonQueryAsync();
+                }
             }
+
+            await batchTx.CommitAsync();
+        }
+        catch (Exception ex)
+        {
+            await batchTx.RollbackAsync();
+            Console.Error.WriteLine($"Error: Batch refresh failed, transaction rolled back: {ex.Message}");
+            return 1;
+        }
+
+        // Phase 3: FTS updates (separate — FTS5 virtual tables don't support DDL in DML transactions)
+        // Delete FTS entries for removed/modified files
+        foreach (var path in filesToDelete)
+        {
+            try { await fts.DeleteFileAsync(snapshotId, path); }
+            catch { /* FTS deletion failure is non-critical */ }
+        }
+
+        // Index new/modified files in FTS
+        foreach (var (path, _, _, language, _, _, hash, content, _, _, _) in filesToAdd)
+        {
+            try { await fts.IndexFileAsync(snapshotId, path, path, content, language, hash); }
+            catch { /* FTS indexing failure is non-critical */ }
         }
 
         // Update snapshot file count
