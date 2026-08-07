@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "project": "CacheHub",
-  "currentPhase": "R3-CORE-COMPLETE",
-  "currentTask": "R3 core 5/8 + 2 additional audit fixes. Next: R4 真实 Benchmark 或 R5 独立 Gateway",
+  "currentPhase": "R9-COMPLETE",
+  "currentTask": "All R2-R9 phases implemented and tested. Build passes, 574 tests passing.",
   "repository": {
     "branch": "main",
     "dirty": false,
@@ -10,23 +10,21 @@
   },
   "qualityGates": {
     "build": "pass",
-    "unitTests": "pass (439/441, 2 skipped)",
+    "unitTests": "pass (574/576, 2 skipped)",
     "integrationTests": "pass",
     "securityTests": "pass",
     "format": "pass"
   },
   "r0CompletedTasks": "10/10 (all P0 issues resolved)",
   "r1CompletedTasks": "10/10 (indexing & persistence trustworthy)",
-  "r2CompletedTasks": "8/10 core (W002/W004 deferred)",
-  "r3CompletedTasks": [
-    "R3-W001: ErrorEnvelope unified (CLI + Desktop API)",
-    "R3-W005: Git LFS fix + credential redaction + output limit",
-    "R3-W006: Project Detection — no guessing, parse .csproj",
-    "R3-W007: File Export Plan/Apply separation + backup + atomic",
-    "R3-W008: Feedback validation (Context/Workspace)",
-    "CTX-P1-004: Ghost file (0-token) exclusion",
-    "API-P1-003: Desktop API index build endpoint"
-  ],
-  "totalAuditIssuesFixed": 43,
-  "lastUpdated": "2026-08-07T02:25:00Z"
+  "r2CompletedTasks": "10/10 (W002 multi-source recall + W004 parser enhanced)",
+  "r3CompletedTasks": "8/8 (contract tests + Universal Skill + GUI closed loop)",
+  "r4CompletedTasks": "6/6 (20-task benchmark, real runner, phase gate)",
+  "r5CompletedTasks": "7/7 (SSE streaming, concurrency, headers, safe cache, atomic SingleFlight)",
+  "r6CompletedTasks": "4/4 (unified CacheStore, ProviderRouter, BudgetTracker)",
+  "r7CompletedTasks": "4/4 (local embedding, persistent vector store, semantic recall, workspace isolation)",
+  "r8CompletedTasks": "4/4 (LSP framed reader, request correlation, approval model, lifecycle)",
+  "r9CompletedTasks": "4/4 (plugin security, auto-update, enterprise policy, team shared index)",
+  "totalAuditIssuesFixed": 66,
+  "lastUpdated": "2026-08-07T02:45:00Z"
 }
