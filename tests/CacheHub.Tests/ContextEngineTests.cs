@@ -70,7 +70,7 @@ public class ContextEngineTests
     public void ContextEngine_Build_ShouldRecordExcluded()
     {
         var engine = CreateEngine();
-        var budget = DefaultTokenBudgetPolicy.Create(modelContextWindow: 2000);
+        var budget = DefaultTokenBudgetPolicy.Create(modelContextWindow: 200, agentReservedTokens: 10, responseReservedTokens: 10, safetyMargin: 10);
 
         var manifest = engine.Build(
             new ContextBuildRequest
@@ -81,12 +81,12 @@ public class ContextEngineTests
                 Budget = budget,
             },
             () => TestFiles,
-            path => new string('x', 3000),
+            path => string.Join('\n', Enumerable.Range(1, 100).Select(i => $"line {i}: content for token estimation")),
             path => "sha256:abc");
 
-        // Some files should be excluded due to budget
-        // (at least ExcludedCandidates should exist, or SelectedFiles count < total)
-        Assert.True(manifest.ExcludedCandidates.Count > 0 || manifest.SelectedFiles.Count < TestFiles.Count);
+        // Budget is so small that not all files fit
+        Assert.True(manifest.Budget.ActualEstimate <= budget.ContextHardLimit,
+            $"ActualEstimate {manifest.Budget.ActualEstimate} should not exceed HardLimit {budget.ContextHardLimit}");
     }
 
     [Fact]

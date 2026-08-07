@@ -48,7 +48,36 @@ public sealed record TokenBudget
     /// </summary>
     public bool IsValid => ContextTarget <= MaxAvailable
         && ContextHardLimit <= ModelContextWindow
-        && ContextHardLimit >= ContextTarget;
+        && ContextHardLimit >= ContextTarget
+        && TotalReserved < ModelContextWindow;
+
+    /// <summary>
+    /// Validates the budget and throws if invalid.
+    /// R5-W005: ContextTarget and HardLimit must be verified before build.
+    /// </summary>
+    /// <exception cref="ArgumentException">Thrown when budget is inconsistent.</exception>
+    public TokenBudget ValidateOrThrow()
+    {
+        if (TotalReserved >= ModelContextWindow)
+            throw new ArgumentException(
+                $"Total reserved tokens ({TotalReserved}) must be less than model context window ({ModelContextWindow}). " +
+                $"AgentReserved={AgentReservedTokens}, ResponseReserved={ResponseReservedTokens}, SafetyMargin={SafetyMargin}");
+
+        if (ContextTarget > MaxAvailable)
+            throw new ArgumentException(
+                $"ContextTarget ({ContextTarget}) exceeds MaxAvailable ({MaxAvailable}). " +
+                $"Reduce target or reserved tokens.");
+
+        if (ContextHardLimit > ModelContextWindow)
+            throw new ArgumentException(
+                $"ContextHardLimit ({ContextHardLimit}) exceeds ModelContextWindow ({ModelContextWindow}).");
+
+        if (ContextHardLimit < ContextTarget)
+            throw new ArgumentException(
+                $"ContextHardLimit ({ContextHardLimit}) must be >= ContextTarget ({ContextTarget}).");
+
+        return this;
+    }
 }
 
 /// <summary>

@@ -64,7 +64,7 @@ public sealed class ContextEngine
         RecallOptions? recallOptions = null,
         Func<string, IReadOnlyList<SymbolHit>>? symbolSearchDetailed = null)
     {
-        var budget = request.Budget ?? DefaultTokenBudgetPolicy.Create();
+        var budget = (request.Budget ?? DefaultTokenBudgetPolicy.Create()).ValidateOrThrow();
         var profile = request.RankingProfile ?? DefaultRankingProfile.Create();
         var tokenizer = request.ModelId is not null
             ? _tokenizers.GetForModel(request.ModelId)
