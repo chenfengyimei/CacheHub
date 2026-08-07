@@ -65,6 +65,10 @@ public static class CapabilitiesCommands
             Console.WriteLine($"  Semantic:        {cd.Capabilities.Semantic}");
             Console.WriteLine($"  LSP:              {cd.Capabilities.Lsp}");
             Console.WriteLine();
+            Console.WriteLine("Parser Coverage (12 languages):");
+            Console.WriteLine("  C# / TypeScript / JavaScript / Python / Go / Rust");
+            Console.WriteLine("  Java / C / C++ / PHP / Ruby / Kotlin / Swift + Markdown");
+            Console.WriteLine();
             Console.WriteLine("Schema Versions:");
             if (cd.SchemaVersions is not null)
                 foreach (var kv in cd.SchemaVersions)
@@ -74,6 +78,8 @@ public static class CapabilitiesCommands
             if (cd.Limitations is not null)
                 foreach (var lim in cd.Limitations)
                     Console.WriteLine($"  - {lim}");
+            Console.WriteLine();
+            Console.WriteLine("Diagnostic: Run 'cachehub doctor' to check environment");
         }
 
         return 0;
