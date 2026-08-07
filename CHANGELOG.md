@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.0-prealpha] — 2026-08-07
 
+### Audit Fix Round (2026-08-07)
+
+Comprehensive audit gap analysis and fix round based on `CacheHub_全面审计与改进策划案_V1.0`.
+
+#### Install & CI
+- `install.sh`: abort on test failure (exit 1), add `--skip-tests` danger flag (matches `install.ps1`)
+
+#### Index Integrity
+- Desktop API `/workspaces/{id}/index`: rewritten to use batch transaction + parser persistence (symbols/imports/relations), matching CLI pattern
+- FTS indexing separated to independent transaction (FTS5 virtual table limitation)
+- Snapshot activation uses independent transaction for workspace-scoped atomic switch
+
+#### Context Engine
+- `/expand` endpoint: now calls `ContextExpander.CreateRevision` and persists child package to DB (ParentPackageId + cumulative budget)
+- `ResolveFileHash` (CLI + Desktop): computes real SHA-256 from disk when DB hash is `pending` or `fp:` fingerprint, instead of returning `sha256:pending`
+- `/payload` endpoint: pre-pass security evaluation returns `blockedFiles` list with `approvalRequired` and `reason` for each blocked file
+
+#### Documentation
+- README: full maturity matrix update — 20+ items upgraded from Experimental to Implemented
+- README: security, Gateway, indexing, recall, chunking, budget, and expand descriptions corrected to match actual code state
+- Test count updated: 379 → 755
+- Port corrected: 5000 → 5099
+
+#### Tests
+- 6 new `AuditFixVerificationTests`: hash computation, expand revision persistence, payload security, batch transaction parser persistence
+
 ### Security Fixes (R0)
 - Local API: loopback-only binding + random access token + Host header validation
 - SafePathResolver: workspace-scoped path resolution, symlink escape detection
