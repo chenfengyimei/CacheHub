@@ -335,4 +335,152 @@ public class ParserFixtureTests
         Assert.Contains(result.Symbols, s => s.Name == "connect" && s.Kind == SymbolKind.Function);
         Assert.Contains(result.Symbols, s => s.Name == "Logger" && s.Kind == SymbolKind.Class);
     }
+
+    // === Go Parser Tests ===
+
+    [Fact]
+    public void Go_ShouldExtractFunctionsAndMethods()
+    {
+        var code = """
+            package main
+
+            func ComputeHash(data string) string {
+                return data
+            }
+
+            func (s *Server) HandleRequest() {
+                return
+            }
+            """;
+        var result = new GoRegexParser().Parse(code, "main.go");
+
+        Assert.Contains(result.Symbols, s => s.Name == "ComputeHash" && s.Kind == SymbolKind.Function);
+        Assert.Contains(result.Symbols, s => s.Name == "HandleRequest" && s.Kind == SymbolKind.Method);
+    }
+
+    [Fact]
+    public void Go_ShouldExtractImports()
+    {
+        var code = """
+            package main
+
+            import "fmt"
+            import (
+                "os"
+                "strings"
+            )
+            """;
+        var result = new GoRegexParser().Parse(code, "main.go");
+
+        Assert.Contains(result.Imports, i => i.Module == "fmt");
+        Assert.Contains(result.Imports, i => i.Module == "os");
+        Assert.Contains(result.Imports, i => i.Module == "strings");
+        Assert.Contains(result.Relations, r => r.Relation == "imports" && r.TargetName == "fmt");
+    }
+
+    [Fact]
+    public void Go_ShouldExtractTypes()
+    {
+        var code = """
+            type Config struct {
+                Port int
+            }
+            type Handler interface {
+                Serve()
+            }
+            type Score float64
+            """;
+        var result = new GoRegexParser().Parse(code, "types.go");
+
+        Assert.Contains(result.Symbols, s => s.Name == "Config" && s.Kind == SymbolKind.Struct);
+        Assert.Contains(result.Symbols, s => s.Name == "Handler" && s.Kind == SymbolKind.Interface);
+        Assert.Contains(result.Symbols, s => s.Name == "Score" && s.Kind == SymbolKind.TypeAlias);
+    }
+
+    [Fact]
+    public void Go_ParserVersion_ShouldBe1()
+    {
+        var parser = new GoRegexParser();
+        Assert.Equal("1.0", parser.Version);
+        Assert.Equal("go-regex-baseline", parser.Id);
+    }
+
+    // === Rust Parser Tests ===
+
+    [Fact]
+    public void Rust_ShouldExtractFunctionsAndMethods()
+    {
+        var code = """
+            fn compute_hash(data: &str) -> String {
+                return data.to_string();
+            }
+
+            impl Server {
+                fn handle_request(&self) {
+                    return;
+                }
+            }
+            """;
+        var result = new RustRegexParser().Parse(code, "main.rs");
+
+        Assert.Contains(result.Symbols, s => s.Name == "compute_hash" && s.Kind == SymbolKind.Function);
+        Assert.Contains(result.Symbols, s => s.Name == "handle_request" && s.Kind == SymbolKind.Method);
+    }
+
+    [Fact]
+    public void Rust_ShouldExtractUseDeclarations()
+    {
+        var code = """
+            use std::collections::HashMap;
+            use std::io::{Read, Write};
+            """;
+        var result = new RustRegexParser().Parse(code, "main.rs");
+
+        Assert.Contains(result.Imports, i => i.Module == "std::collections::HashMap");
+        Assert.Contains(result.Imports, i => i.Module == "std::io");
+        Assert.Contains(result.Relations, r => r.Relation == "imports" && r.TargetName == "std::collections::HashMap");
+    }
+
+    [Fact]
+    public void Rust_ShouldExtractTypes()
+    {
+        var code = """
+            struct Config {
+                port: u16,
+            }
+            enum Status {
+                Active,
+                Inactive,
+            }
+            trait Handler {
+                fn serve(&self);
+            }
+            """;
+        var result = new RustRegexParser().Parse(code, "types.rs");
+
+        Assert.Contains(result.Symbols, s => s.Name == "Config" && s.Kind == SymbolKind.Struct);
+        Assert.Contains(result.Symbols, s => s.Name == "Status" && s.Kind == SymbolKind.Enum);
+        Assert.Contains(result.Symbols, s => s.Name == "Handler" && s.Kind == SymbolKind.Interface);
+    }
+
+    [Fact]
+    public void Rust_ShouldExtractImplRelations()
+    {
+        var code = """
+            impl Handler for Server {
+                fn serve(&self) {}
+            }
+            """;
+        var result = new RustRegexParser().Parse(code, "impl.rs");
+
+        Assert.Contains(result.Relations, r => r.Relation == "implements" && r.TargetName == "Handler");
+    }
+
+    [Fact]
+    public void Rust_ParserVersion_ShouldBe1()
+    {
+        var parser = new RustRegexParser();
+        Assert.Equal("1.0", parser.Version);
+        Assert.Equal("rust-regex-baseline", parser.Id);
+    }
 }

@@ -680,6 +680,8 @@ public static class IndexCommands
             ".cs" => new CSharpRegexParser(),
             ".ts" or ".tsx" or ".js" or ".jsx" => new TypeScriptRegexParser(),
             ".py" => new PythonRegexParser(),
+            ".go" => new GoRegexParser(),
+            ".rs" => new RustRegexParser(),
             ".md" or ".markdown" => new MarkdownParser(),
             _ => new TextParser(),
         };
