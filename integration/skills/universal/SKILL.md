@@ -22,23 +22,36 @@ cachehub capabilities --output=json
 
 确认 `repositoryClone` 和 `projectDetection` 已启用。
 
-### A2. 检查仓库 URL
+### A2. Bootstrap（推荐：一步完成）
+
+```bash
+cachehub repo bootstrap https://github.com/owner/repo
+```
+
+这一条命令自动完成：inspect → clone → detect → import → index。返回 `workspaceId` 供后续使用。
+
+如需指定目标目录或工作区名称：
+```bash
+cachehub repo bootstrap https://github.com/owner/repo --dest=/path/to/repo --name=my-project
+```
+
+⚠️ **审批**：bootstrap 会克隆远程代码到本地。需用户确认目标目录可写。检测到 init plan 时不得自动执行安装/构建命令。
+
+### A2b. 手动分步（如需更细控制）
+
+#### 检查仓库 URL
 
 ```bash
 cachehub repo inspect --url=https://github.com/owner/repo
 ```
 
-解析 URL，确认 Source、Host、Owner、Repository。
-
-### A3. 克隆仓库
+#### 克隆仓库
 
 ```bash
 cachehub repo clone --url=https://github.com/owner/repo --dest=./repos/repo
 ```
 
-⚠️ **审批**：克隆会下载远程代码到本地。需用户确认目标目录可写。
-
-### A4. 检测项目类型
+#### 检测项目类型
 
 ```bash
 cachehub detect ./repos/repo --plan --json
@@ -48,7 +61,7 @@ cachehub detect ./repos/repo --plan --json
 
 ⚠️ **审批**：检测本身是只读的，但生成的 `init plan` 中可能包含需要网络/脚本的命令。不得自动执行 init plan 中的命令，除非用户明确批准。
 
-### A5. 导入工作区
+### A5. 导入工作区（如使用 bootstrap 则已自动完成）
 
 ```bash
 cachehub workspace import ./repos/repo
@@ -56,7 +69,7 @@ cachehub workspace import ./repos/repo
 
 获取 `workspace_id`。
 
-### A6. 构建索引
+### A6. 构建索引（如使用 bootstrap 则已自动完成）
 
 ```bash
 cachehub index build --id=<workspace-id>
