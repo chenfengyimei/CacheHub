@@ -116,7 +116,7 @@ src/
   CacheHub.Cli/          — CLI commands (23 command groups incl. workflow/doctor, 12-language parser coverage)
   CacheHub.Desktop/      — ASP.NET Core Web UI + Local API (18 routes incl. contextual-completion, Bearer auth)
 tests/
-  CacheHub.Tests/        — 875 tests (unit + integration + security + gate regression + V3 closure + parser fixture)
+  CacheHub.Tests/        — 876 tests (unit + integration + security + gate regression + V3 closure + parser fixture)
 integration/             — Universal Skill, 3 Agent examples, protocol docs, tutorials
 Docs/                    — INSTALL.md, USAGE.md, ARCHITECTURE.md, ADRs, specs
 ```

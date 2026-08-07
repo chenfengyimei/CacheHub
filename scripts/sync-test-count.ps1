@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Syncs test count in documentation files with actual test results.
     V5-W12: Eliminates manual test count updates that cause doc drift.
