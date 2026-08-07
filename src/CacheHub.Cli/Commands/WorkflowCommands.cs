@@ -176,7 +176,44 @@ public static class WorkflowCommands
 
         if (callGateway && !string.IsNullOrEmpty(model))
         {
-            Console.Error.WriteLine("Warning: Gateway call not yet implemented in CLI. Use the Desktop API for full workflow.");
+            var gatewayUrl = GetOpt(args, "--gateway-url") ?? "http://127.0.0.1:5218";
+            var gatewayToken = GetOpt(args, "--gateway-token")
+                ?? Environment.GetEnvironmentVariable("CACHEHUB_GATEWAY_TOKEN")
+                ?? "";
+
+            try
+            {
+                var (responseContent, usageTokens) = await CallGatewayAsync(
+                    gatewayUrl, gatewayToken, model, systemPrompt, userContent);
+
+                var gatewayOutput = new
+                {
+                    manifest = new
+                    {
+                        id = manifest.Id.Value,
+                        workspaceId = manifest.WorkspaceId.Value,
+                        task = manifest.Task.OriginalText,
+                        selectedFiles = manifest.SelectedFiles.Count,
+                        actualTokens = manifest.Budget.ActualEstimate,
+                        targetTokens = manifest.Budget.ContextTarget,
+                    },
+                    systemPrompt,
+                    userContent = userContent.Length > 500 ? userContent[..500] + "..." : userContent,
+                    gatewayCalled = true,
+                    modelResponse = responseContent,
+                    totalLifecycleTokens = manifest.Budget.ActualEstimate + usageTokens,
+                };
+
+                Console.WriteLine(JsonSerializer.Serialize(gatewayOutput, _jsonOpts));
+                Console.Error.WriteLine($"  Context: {manifest.SelectedFiles.Count} files, {manifest.Budget.ActualEstimate} tokens");
+                Console.Error.WriteLine($"  Gateway: called {gatewayUrl}, response {responseContent.Length} chars");
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"  Gateway call failed: {ex.Message}");
+                Console.Error.WriteLine("  Returning context without model response.");
+            }
         }
 
         var output = new
@@ -207,6 +244,53 @@ public static class WorkflowCommands
     {
         var fullPath = Path.Combine(rootPath, relativePath.Replace('/', Path.DirectorySeparatorChar));
         return File.Exists(fullPath) ? File.ReadAllText(fullPath) : "";
+    }
+
+    /// <summary>
+    /// Calls the Gateway's /v1/chat/completions endpoint with the assembled prompt.
+    /// Returns (response content, total usage tokens).
+    /// </summary>
+    private static async Task<(string content, int usageTokens)> CallGatewayAsync(
+        string gatewayUrl, string gatewayToken, string model,
+        string systemPrompt, string userContent)
+    {
+        using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
+
+        var requestBody = JsonSerializer.Serialize(new
+        {
+            model,
+            messages = new[]
+            {
+                new { role = "system", content = systemPrompt },
+                new { role = "user", content = userContent },
+            },
+        });
+
+        using var msg = new HttpRequestMessage(HttpMethod.Post, $"{gatewayUrl.TrimEnd('/')}/v1/chat/completions");
+        msg.Content = new StringContent(requestBody, System.Text.Encoding.UTF8, "application/json");
+        if (!string.IsNullOrEmpty(gatewayToken))
+            msg.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", gatewayToken);
+
+        var resp = await http.SendAsync(msg);
+        var body = await resp.Content.ReadAsStringAsync();
+
+        if (!resp.IsSuccessStatusCode)
+            throw new HttpRequestException($"Gateway returned {resp.StatusCode}: {body}");
+
+        using var doc = JsonDocument.Parse(body);
+        var content = doc.RootElement
+            .GetProperty("choices")[0]
+            .GetProperty("message")
+            .GetProperty("content")
+            .GetString() ?? "";
+
+        var usageTokens = 0;
+        if (doc.RootElement.TryGetProperty("usage", out var usage))
+        {
+            usageTokens = usage.TryGetProperty("total_tokens", out var t) ? t.GetInt32() : 0;
+        }
+
+        return (content, usageTokens);
     }
 
     private static string ResolveFileHash(SqliteConnectionFactory factory, IndexSnapshotId snapshotId, string path, string rootPath)

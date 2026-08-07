@@ -999,6 +999,64 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
     }, enforcer);
     var (systemPrompt, userContent) = promptAssembly.Assemble(manifest, payloadContent);
 
+    // Call Gateway if requested
+    string? modelResponse = null;
+    var gatewayCalled = false;
+    var extraTokens = 0;
+
+    if (req.CallGateway && !string.IsNullOrEmpty(req.ModelId))
+    {
+        var gatewayUrl = req.GatewayUrl ?? "http://127.0.0.1:5218";
+        var gatewayToken = req.GatewayToken
+            ?? Environment.GetEnvironmentVariable("CACHEHUB_GATEWAY_TOKEN")
+            ?? "";
+
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
+            var requestBody = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                model = req.ModelId,
+                messages = new[]
+                {
+                    new { role = "system", content = systemPrompt },
+                    new { role = "user", content = userContent },
+                },
+            });
+
+            using var msg = new HttpRequestMessage(HttpMethod.Post, $"{gatewayUrl.TrimEnd('/')}/v1/chat/completions");
+            msg.Content = new StringContent(requestBody, System.Text.Encoding.UTF8, "application/json");
+            if (!string.IsNullOrEmpty(gatewayToken))
+                msg.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", gatewayToken);
+
+            var resp = await http.SendAsync(msg);
+            var body = await resp.Content.ReadAsStringAsync();
+
+            if (resp.IsSuccessStatusCode)
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(body);
+                modelResponse = doc.RootElement
+                    .GetProperty("choices")[0]
+                    .GetProperty("message")
+                    .GetProperty("content")
+                    .GetString();
+                gatewayCalled = true;
+
+                if (doc.RootElement.TryGetProperty("usage", out var usage) &&
+                    usage.TryGetProperty("total_tokens", out var t))
+                    extraTokens = t.GetInt32();
+            }
+            else
+            {
+                modelResponse = $"Gateway error ({resp.StatusCode}): {body}";
+            }
+        }
+        catch (Exception ex)
+        {
+            modelResponse = $"Gateway call failed: {ex.Message}";
+        }
+    }
+
     return Results.Ok(new
     {
         manifest = new
@@ -1012,8 +1070,9 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
         },
         systemPrompt,
         userContent,
-        gatewayCalled = false,
-        totalLifecycleTokens = manifest.Budget.ActualEstimate,
+        gatewayCalled,
+        modelResponse,
+        totalLifecycleTokens = manifest.Budget.ActualEstimate + extraTokens,
     });
 });
 
@@ -1023,7 +1082,7 @@ record ImportRequest(string Path, string? Name);
 record ContextBuildApiRequest(string WorkspaceId, string Task);
 record ExpandApiRequest(string? Symbol, string? File, string? Reason);
 record FeedbackApiRequest(string? ClientId, bool TaskCompleted, bool MissingContextReported, IReadOnlyList<string>? FilesActuallyRead);
-record ContextualCompletionApiRequest(string WorkspaceId, string Task, string? ModelId, string? CurrentFile, bool CallGateway);
+record ContextualCompletionApiRequest(string WorkspaceId, string Task, string? ModelId, string? CurrentFile, bool CallGateway, string? GatewayUrl = null, string? GatewayToken = null);
 
 // Make Program class accessible for integration testing
 public partial class Program { }
