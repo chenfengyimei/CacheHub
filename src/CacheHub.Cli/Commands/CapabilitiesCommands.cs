@@ -36,11 +36,11 @@ public static class CapabilitiesCommands
             },
             Limitations =
             [
-                "Semantic Search: experimental module, not wired into Context Engine",
+                "Semantic Search: lexical similarity (FNV-1a hash embedding), wired as low-confidence reference only",
                 "LSP: scaffold only, regex-based parsing fallback",
-                "Tokenizer: rough estimate (chars/4), no real model tokenizers registered",
-                "Gateway: SSE + status passthrough, single-provider only (ProviderRouter not wired into main chain)",
-                "Cache: ContextPackageCache wired (in-memory), Gateway raw cache still in-process Dictionary",
+                "Tokenizer: CodeTokenizer default (code-aware word splitting), no BPE model tokenizers",
+                "Gateway: multi-provider fallback supported, Responses API streaming supported, Gateway cache still in-process",
+                "Cache: ContextPackageCache wired (in-memory) with complete CacheKey, Gateway raw cache still in-process Dictionary",
                 "Benchmark: CLI benchmark is DEMO ONLY (simulated data, not real Agent evaluation)",
             ],
         };

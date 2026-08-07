@@ -29,6 +29,10 @@ Closing the gap between "module exists" and "module is on the production main ch
 - **Gateway multi-provider fallback**: GatewayConfig.FallbackProviders + GetAllProviders(). ForwardToProviderWithStatusAsync, HandleModelsAsync, HandleStreamingAsync, HandleResponsesAsync all support fallback on 429/5xx. /v1/models now includes Authorization header.
 - **Semantic stable hash**: FNV-1a replaces string.GetHashCode() in LocalHashEmbeddingProvider. Vectors now stable across process restarts.
 - **FTS failure tracking**: Refresh no longer silently swallows FTS errors. Failures tracked, reported to user, and logged to stderr.
+- **Tokenizer full-chain fix**: Default tokenizer upgraded from CharEstimateTokenizer (chars/4) to CodeTokenizer. CreateWithDefaults() factory pre-registers GPT/Claude/Gemini/DeepSeek/Qwen models. ChunkingStrategy all private methods now use passed tokenizer instead of hardcoded EstimateTokens. SelectionEngine fallback paths (Metadata/Chunks/Outline) no longer drop tokenizer.
+- **SemanticRecallSource wired**: New IRecallSource that queries semantic store for historical references similar to current task. Extracts mentioned file paths from reference content. Low-confidence reference signal (similarity*0.6). RecallPipeline.CreateDefaultSources now includes SemanticRecallSource.
+- **Responses API streaming**: HandleResponsesAsync detects `stream: true` and uses ResponseHeadersRead mode for SSE passthrough. Non-streaming still uses full read.
+- **Chat SSE Usage parsing**: New StreamAndParseUsageAsync method parses SSE `data:` lines for `usage` object during streaming. Prompt/completion tokens now tracked for streaming requests. Previously CopyToAsync didn't parse anything.
 - **Documentation consistency**: AI_DEV_STATE.json has moduleStatus with accurate levels. Capabilities Limitations updated to match reality.
 
 ### Documentation & Quality Final Round (2026-08-07)
