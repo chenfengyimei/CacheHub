@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.0-prealpha] — 2026-08-07
 
+### V3: True Closure & Production Wiring (2026-08-07)
+
+Closing the gap between "module exists" and "module is on the production main chain."
+
+#### P0 Critical Fixes
+- **file_relations mapping fix**: confidence/line/source columns were shifted — confidence held parser name, line held confidence double. Migration0010 adds `source` column and migrates mangled data.
+- **Security exit enforcement unified**: CLI markdown export and FileExporter now pass SecurityPolicyEnforcer. All 3 export paths (Local API / CLI / File) enforce security policy.
+- **README unsubstantiated claim removed**: "80%+ Token reduction" replaced with aspirational language.
+
+#### P1 High-Priority Fixes
+- **FTS BM25 rank + hit line**: Fts5Index.SearchAsync now returns `rank` (BM25 score) and actual hit line number. FtsSearchResult and FtsMatch carry new fields through the pipeline.
+- **RankingEngine consumes ScoreHint**: TextMatch now takes the higher of path-based and FTS-based scores. SymbolMatch takes the higher of in-memory and hint-based scores.
+- **FTS Anchor precision**: ExtractSnippetAnchors uses actual FTS hit line to generate ±20-line window anchors (was hardcoded 1/1).
+- **Ignore rules unified**: ConsistencyReconciler accepts IgnoreRuleEngine. Refresh re-checks added/modified files against ignore rules. Newly-ignored modified files are removed from index.
+- **Migration0009+0010 registered**: All 7 production migration runners now include Migration0009PersistentCache and Migration0010RelationSourceColumn.
+- **CacheKey completed**: Added currentFile, gitDiff, modelId, tokenizerId to CacheKey.FullKey via ContextHash component.
+- **ContextPackageCache wired**: CLI creates cache and passes to ContextEngine. Desktop DI registers cache singleton. Repeated context build calls now hit cache.
+- **RelationRecallSource implemented**: New IRecallSource that queries file_relations for matched files, expands to target symbol definitions via SymbolSearch. RecallSource enum gains `Relation` value.
+- **Documentation consistency**: AI_DEV_STATE.json now has moduleStatus with accurate levels (Integrated/Component Implemented/Scaffold/Experimental). Capabilities Limitations updated to match reality.
+
 ### Documentation & Quality Final Round (2026-08-07)
 
 Final quality sweep: CI multi-OS, format compliance, doc alignment, ADR, and repomap fix.
