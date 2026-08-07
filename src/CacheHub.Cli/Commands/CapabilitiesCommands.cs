@@ -36,11 +36,12 @@ public static class CapabilitiesCommands
             },
             Limitations =
             [
-                "No Semantic Search",
-                "No LSP",
-                "Tokenizer is rough estimate (chars/4)",
-                "Gateway: SSE + status passthrough supported, Provider router/budget experimental",
-                "Cache: persistent via SqliteCacheStore, in-memory contexts not cached",
+                "Semantic Search: experimental module, not wired into Context Engine",
+                "LSP: scaffold only, regex-based parsing fallback",
+                "Tokenizer: rough estimate (chars/4), no real model tokenizers registered",
+                "Gateway: SSE + status passthrough, single-provider only (ProviderRouter not wired into main chain)",
+                "Cache: ContextPackageCache wired (in-memory), Gateway raw cache still in-process Dictionary",
+                "Benchmark: CLI benchmark is DEMO ONLY (simulated data, not real Agent evaluation)",
             ],
         };
 
