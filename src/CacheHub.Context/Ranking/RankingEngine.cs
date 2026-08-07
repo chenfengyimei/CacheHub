@@ -127,6 +127,7 @@ public sealed class RankingEngine
                 Score = score,
                 Reasons = reasons,
                 Features = normalized[i],
+                Anchors = candidates[i].Anchors,
             });
         }
 
@@ -295,6 +296,8 @@ public sealed record RankedCandidate
     public required double Score { get; init; }
     public required IReadOnlyList<string> Reasons { get; init; }
     public required FeatureScores Features { get; init; }
+    /// <summary>Line anchors from recall sources (symbol definitions, FTS hits, etc.).</summary>
+    public IReadOnlyList<Recall.LineAnchor> Anchors { get; init; } = [];
 }
 
 /// <summary>

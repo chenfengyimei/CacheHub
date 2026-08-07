@@ -70,7 +70,7 @@ public sealed class SelectionEngine
             var tokens = ChunkingStrategy.EstimateTokens(content);
             var mode = DetermineMode(candidate, tokens, budget);
 
-            var (actualTokens, ranges) = ApplyMode(candidate.Path, content, mode, effectiveBudget - totalTokens);
+            var (actualTokens, ranges) = ApplyMode(candidate.Path, content, mode, effectiveBudget - totalTokens, candidate.Anchors);
 
             // CTX-P1-004: Reject ghost files — 0-token files with empty content
             if (actualTokens == 0 && mode != SelectionMode.Metadata)
@@ -98,7 +98,7 @@ public sealed class SelectionEngine
                 if (mode != SelectionMode.Metadata)
                 {
                     mode = SelectionMode.Chunks;
-                    (actualTokens, ranges) = ApplyMode(candidate.Path, content, mode, effectiveBudget - totalTokens);
+                    (actualTokens, ranges) = ApplyMode(candidate.Path, content, mode, effectiveBudget - totalTokens, candidate.Anchors);
 
                     if (actualTokens == 0 || totalTokens + actualTokens > effectiveBudget)
                     {
@@ -176,9 +176,10 @@ public sealed class SelectionEngine
     }
 
     private (int tokens, IReadOnlyList<LineRange>? ranges) ApplyMode(
-        string path, string content, SelectionMode mode, int remainingBudget)
+        string path, string content, SelectionMode mode, int remainingBudget,
+        IReadOnlyList<Recall.LineAnchor>? anchors = null)
     {
-        var chunks = _chunker.Chunk(path, content, mode, remainingBudget);
+        var chunks = _chunker.Chunk(path, content, mode, remainingBudget, anchors);
 
         if (chunks.Count == 0) return (0, null);
 

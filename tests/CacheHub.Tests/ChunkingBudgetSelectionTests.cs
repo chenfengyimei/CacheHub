@@ -1,5 +1,6 @@
 using CacheHub.Context.Budget;
 using CacheHub.Context.Chunking;
+using CacheHub.Context.Recall;
 using CacheHub.Context.Selection;
 
 namespace CacheHub.Tests;
@@ -177,8 +178,8 @@ public class ChunkingBudgetSelectionTests
         // Anchor at line 100 and line 300
         var anchors = new List<LineAnchor>
         {
-            new(100, "fts:keyword"),
-            new(300, "symbol:AuthService"),
+            new() { StartLine = 100, EndLine = 100, AnchorType = AnchorType.FtsHit, MatchedText = "keyword" },
+            new() { StartLine = 300, EndLine = 300, AnchorType = AnchorType.SymbolDefinition, MatchedText = "AuthService" },
         };
 
         var chunks = chunker.Chunk("test.ts", content, Core.Context.SelectionMode.Chunks, 10000, anchors);
@@ -205,15 +206,14 @@ public class ChunkingBudgetSelectionTests
         // Two close anchors that should merge
         var anchors = new List<LineAnchor>
         {
-            new(50, "fts:a"),
-            new(60, "fts:b"),
+            new() { StartLine = 50, EndLine = 50, AnchorType = AnchorType.FtsHit, MatchedText = "a" },
+            new() { StartLine = 60, EndLine = 60, AnchorType = AnchorType.FtsHit, MatchedText = "b" },
         };
 
         var chunks = chunker.Chunk("test.ts", content, Core.Context.SelectionMode.Chunks, 10000, anchors);
 
         Assert.Single(chunks); // Should merge into one
-        Assert.Contains("a", chunks[0].AnchorSource);
-        Assert.Contains("b", chunks[0].AnchorSource);
+        Assert.Contains("FtsHit", chunks[0].AnchorSource);
     }
 
     [Fact]
@@ -224,7 +224,13 @@ public class ChunkingBudgetSelectionTests
         var content = string.Join('\n', lines);
 
         // Many anchors with small budget
-        var anchors = Enumerable.Range(1, 10).Select(i => new LineAnchor(i * 100, $"fts:{i}")).ToList();
+        var anchors = Enumerable.Range(1, 10).Select(i => new LineAnchor
+        {
+            StartLine = i * 100,
+            EndLine = i * 100,
+            AnchorType = AnchorType.FtsHit,
+            MatchedText = $"fts:{i}",
+        }).ToList();
 
         var chunks = chunker.Chunk("test.ts", content, Core.Context.SelectionMode.Chunks, 500, anchors);
 

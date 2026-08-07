@@ -1,5 +1,6 @@
 using CacheHub.Core.Context;
 using CacheHub.Context.Ranking;
+using CacheHub.Context.Recall;
 
 namespace CacheHub.Context.Chunking;
 
@@ -74,12 +75,12 @@ public sealed class ChunkingStrategy
         var ranges = new List<(int start, int end, string source)>();
         foreach (var anchor in anchors)
         {
-            var start = Math.Max(0, anchor.Line - AnchorContextLines);
-            var end = Math.Min(lines.Length - 1, anchor.Line + AnchorContextLines);
+            var start = Math.Max(0, anchor.StartLine - 1 - AnchorContextLines);
+            var end = Math.Min(lines.Length - 1, anchor.EndLine - 1 + AnchorContextLines);
             // Cap to max lines
             if (end - start + 1 > AnchorMaxLines)
                 end = start + AnchorMaxLines - 1;
-            ranges.Add((start, end, anchor.Source));
+            ranges.Add((start, end, anchor.AnchorType.ToString()));
         }
 
         // Sort and merge overlapping ranges
@@ -265,8 +266,3 @@ public sealed class ChunkingStrategy
     public static int EstimateTokens(string text) => text.Length / 4;
 }
 
-/// <summary>
-/// A line anchor: a specific line number that should be included in chunking,
-/// along with its source (e.g., "fts", "symbol", "gitdiff", "errorstack").
-/// </summary>
-public sealed record LineAnchor(int Line, string Source);
