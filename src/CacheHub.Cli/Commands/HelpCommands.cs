@@ -39,7 +39,7 @@ public static class HelpCommands
             COMMANDS:
                 capabilities          Show available capabilities
                 workspace             Manage workspaces (import/list/status/remove)
-                index                 Build and verify file index (build/status/verify)
+                index                 Build and verify file index (build/refresh/status/verify)
                 context               Build and manage context packages
                 detect                Detect project type and generate init plan
                 gateway               Start/stop the optional model gateway
@@ -48,7 +48,14 @@ public static class HelpCommands
                 repo                  Git repository operations (inspect/clone/status/diff/pull)
                 version               Show version information
                 integration           Verify installation (verify)
+                workflow              Context→Gateway unified workflow (completion)
+                benchmark             Run benchmark tasks (list/run/report)
+                doctor                Diagnose environment and installation
                 help                  Show this help or command-specific help
+
+            PARSER COVERAGE (12 languages):
+                C# / TypeScript / JavaScript / Python / Go / Rust
+                Java / C / C++ / PHP / Ruby / Kotlin / Swift + Markdown
 
             GLOBAL OPTIONS:
                 --output=json         Output in JSON format (most commands)
@@ -59,6 +66,7 @@ public static class HelpCommands
                 cachehub index build --id=<workspace-id>
                 cachehub context build --workspace=<id> --task="Fix login bug" --output=json
                 cachehub integration verify
+                cachehub doctor
 
             DOCUMENTATION:
                 https://github.com/chenfengyimei/CacheHub
