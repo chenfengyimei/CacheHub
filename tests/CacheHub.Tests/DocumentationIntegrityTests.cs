@@ -119,4 +119,21 @@ public class DocumentationIntegrityTests
         // The tech-stack table row: "| SDK | 10.0.302 (global.json 锁定) |"
         Assert.Contains($"| SDK | {sdkVersion}", readme);
     }
+
+    // Review #28: README "N 个迁移" must match the actual Migration*.cs file count,
+    // so sync-test-count.ps1's migration auto-sync is locked (no manual doc drift).
+    [Fact]
+    public void Readme_MigrationCount_MatchesActualFiles()
+    {
+        var root = GetRepoRoot();
+
+        var migrationsDir = Path.Combine(root, "src", "CacheHub.Storage", "Database", "Migrations");
+        Assert.True(Directory.Exists(migrationsDir), "Migrations directory should exist");
+
+        var actualCount = Directory.GetFiles(migrationsDir, "Migration*.cs").Length;
+        Assert.True(actualCount > 0, "Should have at least one migration file");
+
+        var readme = File.ReadAllText(Path.Combine(root, "README.md"));
+        Assert.Contains($"{actualCount} 个迁移", readme);
+    }
 }

@@ -54,6 +54,13 @@ if (Test-Path $globalJsonPath) {
     if ($gj -match '"version":\s*"(\d+)\.') { $DotNetMajor = $Matches[1] }
 }
 
+# V6 (#28): count DB migration files so README never drifts on migration count
+$migrationsDir = Join-Path $RepoRoot "src\CacheHub.Storage\Database\Migrations"
+$MigrationCount = 0
+if (Test-Path $migrationsDir) {
+    $MigrationCount = (Get-ChildItem $migrationsDir -Filter "Migration*.cs" -File).Count
+}
+
 # Helper: read/write with UTF-8 (no BOM)
 function Update-FileUtf8 {
     param([string]$Path, [scriptblock]$Updater)
@@ -93,6 +100,10 @@ if (Test-Path $readmePath) {
         }
         if ($SdkVersion) {
             $content = $content -replace 'SDK \| \d+\.\d+\.\d+', "SDK | $SdkVersion"
+        }
+        # V6 (#28): sync migration count in project-structure line and ARCHITECTURE-style mentions
+        if ($MigrationCount -gt 0) {
+            $content = $content -replace '(\d+) 个迁移', "$MigrationCount 个迁移"
         }
         return $content
     }

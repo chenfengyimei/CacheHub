@@ -6,7 +6,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/download/dotnet/10.0)
-[![Tests](https://img.shields.io/badge/Tests-890%20passed-brightgreen.svg)](#测试覆盖率)
+[![Tests](https://img.shields.io/badge/Tests-891%20passed-brightgreen.svg)](#测试覆盖率)
 [![CI](https://img.shields.io/badge/CI-3%20platforms%20%E2%9C%93-success.svg)](.github/workflows/ci.yml)
 [![Status: Pre-Alpha](https://img.shields.io/badge/Status-Pre--Alpha-orange.svg)](#功能成熟度矩阵)
 
@@ -162,7 +162,7 @@ src/auth/refresh.ts  Score: 0.92  Mode: chunks  Tokens: 450
 | Web UI | ASP.NET Core 最小 API + 静态文件 |
 | Gateway | HttpListener + OpenAI 兼容协议 + SSE |
 | 发布 | 单文件自包含 (PublishSingleFile + SelfContained) |
-| 测试 | xUnit — 890 测试通过 |
+| 测试 | xUnit — 891 测试通过 |
 | 代码质量 | TreatWarningsAsErrors + Nullable + AnalysisLevel latest-recommended |
 | CI/CD | GitHub Actions — Ubuntu + Windows + macOS 三平台 |
 | 行尾符 | .gitattributes 强制 LF（全平台一致） |
@@ -182,7 +182,7 @@ CacheHub/
 │
 ├── src/                            # 源代码（8 个项目）
 │   ├── CacheHub.Core/              # 领域核心：模型、错误、标识符、安全、Tokenizer
-│   ├── CacheHub.Storage/           # 存储层：SQLite、9 个迁移、3 个仓储、FTS5、CacheStore
+│   ├── CacheHub.Storage/           # 存储层：SQLite、10 个迁移、3 个仓储、FTS5、CacheStore
 │   ├── CacheHub.Indexing/          # 索引层：扫描、忽略规则、4 语言解析器 v2.0、RepoMap、Reconciler
 │   ├── CacheHub.Context/           # 上下文层：12 源召回、排序、锚点分块、预算验证、引擎、缓存
 │   ├── CacheHub.Gateway/           # 可选网关：Server、Provider 路由、SSE 流式（独立项目）
@@ -190,7 +190,7 @@ CacheHub/
 │   └── CacheHub.Desktop/           # Web UI：最小 API + 17 个路由 + Bearer 认证 + 6 个页面
 │
 ├── tests/
-│   └── CacheHub.Tests/             # 890 测试（单元 + 集成 + 安全 + Gate 回归 + Benchmark）
+│   └── CacheHub.Tests/             # 891 测试（单元 + 集成 + 安全 + Gate 回归 + Benchmark）
 │
 ├── integration/                    # Agent 集成套件
 │   ├── skills/universal/           # Universal Skill（通用技能）
@@ -353,7 +353,7 @@ cachehub context export --id=<ctx-id> --format=file
 
 | 类别 | 数量 | 说明 |
 |------|------|------|
-| 单元 + 集成测试 | 890 通过 | 覆盖全部模块 |
+| 单元 + 集成测试 | 891 通过 | 覆盖全部模块 |
 | 跳过 | 2 | 需真实 Git 环境 |
 | Gate 回归测试 | 60+ | R4-R15 阶段门验证 |
 | 真实 SQLite 集成测试 | 10+ | index→context→payload 完整闭环 |
@@ -384,7 +384,7 @@ CI 在 **Ubuntu + Windows + macOS** 三平台上运行 `build + test + format`�
 
 ## 项目状态
 
-CacheHub 当前处于 **Pre-Alpha** 阶段。核心链路已通过 890 个测试验证，但不建议用于生产环境或处理敏感代码。
+CacheHub 当前处于 **Pre-Alpha** 阶段。核心链路已通过 891 个测试验证，但不建议用于生产环境或处理敏感代码。
 
 **已完成**：
 - V1.0 路线图 R0-R9（安全止血 → 索引可信 → 上下文正确 → 通用协议 → 真实 Benchmark → Gateway → 缓存 → Semantic → LSP → 生态）
