@@ -89,8 +89,11 @@ public sealed class SafePathResolver
     {
         try
         {
-            var attrs = File.GetAttributes(path);
-            return (attrs & FileAttributes.ReparsePoint) != 0;
+            // On Windows, File.GetAttributes returns ReparsePoint for symlinks.
+            // On Unix, File.GetAttributes returns the TARGET's attributes, not the link's,
+            // so ReparsePoint is never set. Use FileInfo.LinkTarget for cross-platform detection.
+            var info = new FileInfo(path);
+            return info.LinkTarget is not null;
         }
         catch
         {
