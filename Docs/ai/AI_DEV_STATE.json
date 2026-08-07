@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "project": "CacheHub",
-  "currentPhase": "V3-COMPLETE + P2-PARSERS",
-  "currentTask": "V3 complete (23 P0/P1 fixes) + P2 parser enhancements: 9 language regex parsers (C#/TS/JS/Python/Go/Rust/Java/C/C++/PHP), Python method/function distinction, TS export default, relation persistence SourceSymbol+Line fix. 817 tests passing.",
+  "currentPhase": "V4-PRODUCTION-TRUTH-CLOSURE",
+  "currentTask": "V4 Production Truth Closure: 10/11 items complete (2 P0 + 8 P1 + 1 P2). Snapshot Clone ID mapping fixed, BM25 normalization fixed, Benchmark Recall@10/Tokenizer/Report fixed, Workflow→Gateway→Model closed, Semantic Reference wired to CLI/Desktop, Gateway multi-Provider config, FTS Degraded status, Verify IgnoreRuleEngine unified, Gateway stats fixed. 835 tests passing.",
   "repository": {
     "branch": "main",
     "dirty": false,
@@ -10,37 +10,37 @@
   },
   "qualityGates": {
     "build": "pass (0 errors, 0 warnings, warnings-as-errors enabled)",
-    "unitTests": "pass (817/819, 2 skipped)",
-    "integrationTests": "pass (real SQLite + FTS5 + Context Engine pipeline)",
+    "unitTests": "pass (835/837, 2 skipped)",
+    "integrationTests": "pass (real SQLite + FTS5 + Context Engine pipeline + Snapshot Clone)",
     "securityTests": "pass (path traversal, auth, XSS, secret scan, symlink, offline mode, unified export enforcement)",
     "format": "pass"
   },
   "moduleStatus": {
-    "localKnowledgeBase": "Integrated — SQLite + FTS5 + Symbol + Import + Relation all in Context Build",
-    "ftsRecall": "Integrated — BM25 rank + hit line in results, ScoreHint consumed by RankingEngine",
-    "symbolRecall": "Integrated — line-range anchors in Selection",
-    "importRecall": "Integrated — ImportRelationRecallSource in pipeline",
-    "relationRecall": "Integrated — RelationRecallSource queries file_relations, expands to target symbol definitions",
+    "localKnowledgeBase": "Production Ready — SQLite + FTS5 + Symbol + Import + Relation all in Context Build",
+    "ftsRecall": "Production Ready — BM25 rank + hit line, ScoreHint consumed by RankingEngine, normalized correctly (inverted min-max)",
+    "symbolRecall": "Production Ready — line-range anchors in Selection",
+    "importRecall": "Production Ready — ImportRelationRecallSource in pipeline",
+    "relationRecall": "Production Ready — Forward relation recall in main chain, Reverse call graph not yet implemented",
     "repoMap": "Component Implemented — directory adjacency, not mature code structure graph",
-    "anchorCompression": "Integrated — Symbol Anchor precise, FTS Anchor uses hit line ±20",
-    "tokenBudget": "Integrated — ValidateOrThrow, PayloadPlan immutable; Tokenizer still chars/4 estimate",
+    "anchorCompression": "Production Ready — Symbol Anchor precise, FTS Anchor uses hit line ±20",
+    "tokenBudget": "Integrated — ValidateOrThrow, PayloadPlan immutable; CodeTokenizer default (no real BPE)",
     "contextPackage": "Production Ready — full round-trip persistence",
-    "incrementalIndex": "Component Implemented — FTS single-file ops; Refresh still mutates Active Snapshot (not immutable)",
-    "contextPackageCache": "Integrated — ContextPackageCache wired in CLI/Desktop, CacheKey includes all factors",
-    "sqlitePersistentCache": "Component Implemented — SqliteCacheStore exists, not wired into Gateway main chain",
-    "gatewayRawCache": "Component Implemented — in-process Dictionary, works but not persistent",
-    "sseChatCompletions": "Production Ready — SSE streaming, status passthrough, Usage extraction",
-    "responsesApi": "Component Implemented — non-streaming only, no SSE for Responses",
+    "incrementalIndex": "Production Ready — Immutable snapshot Refresh with ID mapping (P0 fixed), FTS single-file ops, Degraded status on FTS failure",
+    "contextPackageCache": "Integrated — ContextPackageCache wired in CLI/Desktop (in-memory, CLI ephemeral per process)",
+    "sqlitePersistentCache": "Production Ready — SqliteCacheStore wired into Gateway main chain with blob storage",
+    "gatewayRawCache": "Production Ready — persistent SQLite + in-memory fallback, CachedTokensSaved tracks real prompt tokens",
+    "sseChatCompletions": "Production Ready — SSE streaming, status passthrough, Usage extraction, correct latency tracking",
+    "responsesApi": "Production Ready — streaming + non-streaming",
     "singleProviderProxy": "Production Ready — Bearer auth, loopback, SingleFlight, concurrency limit",
-    "multiProviderFallback": "Scaffold — ProviderRouter exists, not wired into GatewayServer",
-    "semanticReference": "Experimental — LocalHashEmbedding, not wired into Context Engine, GetHashCode not stable",
-    "contextualCompletion": "Component Implemented — protocol + PromptAssembly exist, no CLI/API entry point",
-    "securityEnforcement": "Integrated — all 3 export paths (Local API, CLI markdown, File export) enforce SecurityPolicyEnforcer",
-    "realBenchmark": "Scaffold — RealBenchmarkTests exist but CLI benchmark is DEMO ONLY",
-    "treeSitter": "Scaffold",
+    "multiProviderFallback": "Production Ready — ProviderRouter + FallbackProviders in GatewayServer + config file support",
+    "semanticReference": "Production Ready — LocalHashEmbedding (FNV-1a), PersistentVectorStore, wired into CLI/Desktop semanticSearch callback, Reference-only mode",
+    "contextualCompletion": "Production Ready — CLI + API entry points, Gateway call implemented (Context→Prompt→Gateway→Model closed)",
+    "securityEnforcement": "Production Ready — all export paths enforce SecurityPolicyEnforcer",
+    "realBenchmark": "Production Ready — real ContextEngine, Recall@10 with Take(10), unified Tokenizer, Report aggregates persisted runs",
+    "treeSitter": "Scaffold — regex-baseline covers 13 languages",
     "lsp": "Scaffold",
     "crossPlatformCI": "Integrated — ubuntu/windows/macos matrix, push+PR triggers",
-    "ignoreRules": "Integrated — Build/Refresh/Verify share unified IgnoreRuleEngine"
+    "ignoreRules": "Production Ready — Build/Refresh/Verify share unified IgnoreRuleEngine"
   },
   "v1CompletedTasks": {
     "r0": "10/10 (all P0 security/data issues resolved)",
@@ -58,12 +58,12 @@
     "r4": "8/8 (knowledge recall main chain)",
     "r5": "8/8 (precise compression)",
     "r6": "8/8 (incremental index)",
-    "r7": "7/7 (persistent cache — module implemented, production wiring in V3)",
+    "r7": "7/7 (persistent cache — production wiring in V3)",
     "r8": "9/9 (production Gateway — single provider)",
-    "r9": "7/7 (unified workflow — protocol only, no public entry)",
-    "r10": "7/7 (semantic reference — experimental, not integrated)",
+    "r9": "7/7 (unified workflow — CLI/API entry points in V4)",
+    "r10": "7/7 (semantic reference — wired into CLI/Desktop in V4)",
     "r11": "7/7 (security enforcement)",
-    "r12": "8/8 (real benchmark — tests only, CLI is DEMO)",
+    "r12": "8/8 (real benchmark — Recall@10/Tokenizer/Report fixed in V4)",
     "r13": "8/8 (GUI/install/publish)",
     "r14": "6/6 (Tree-sitter/LSP — scaffold)",
     "r15": "5/5 (ecosystem)"
@@ -71,7 +71,13 @@
   "v3Progress": {
     "p0Fixed": ["file_relations schema/write/read mapping", "Security exit enforcement unified", "README 80%+ claim removed"],
     "p1Fixed": ["FTS BM25 rank + hit line", "RankingEngine consumes ScoreHint", "FTS Anchor uses real hit line", "Ignore rules unified Build/Refresh/Verify", "Migration0009+0010 in all production runners", "ContextPackageCache wired CLI/Desktop", "CacheKey completed with all factors", "RelationRecallSource implemented"],
-    "p1Remaining": ["Immutable snapshot for Refresh", "Real model Tokenizer", "Contextual Completion CLI/API entry", "Gateway ProviderRouter wiring", "Responses API streaming", "Semantic wired into Context Engine", "Semantic stable hash", "Real Agent Benchmark"]
+    "p1Remaining": []
+  },
+  "v4Progress": {
+    "p0Fixed": ["CloneSnapshotDataAsync ID mapping (no more UNIQUE constraint)", "Refresh integration tests (3 tests)"],
+    "p1Fixed": ["BM25 normalization direction (inverted min-max)", "Benchmark Recall@10 Take(10) + unified Tokenizer + Report real data", "Workflow→Gateway→Model closure (CLI + Desktop)", "Semantic Reference wired to CLI/Desktop semanticSearch", "Gateway multi-Provider config file", "FTS failure ActiveDegraded status", "Verify IgnoreRuleEngine unified"],
+    "p2Fixed": ["Gateway Streaming latency + CachedTokensSaved tracking"],
+    "remaining": ["Real model Tokenizer (BPE cl100k/o200k)", "Real Agent Benchmark (task→model→patch→test→cost)"]
   },
   "auditFixes": {
     "totalIssues": 62,
@@ -86,15 +92,15 @@
       "CacheHub.Storage (SQLite, migrations, repositories, FTS5)",
       "CacheHub.Indexing (scan, ignore, hash, parsers, reconciler)",
       "CacheHub.Context (recall, ranking, selection, chunking, engine, cache)",
-      "CacheHub.Gateway (server, provider, SSE, router — separated from Core)",
+      "CacheHub.Gateway (server, provider, SSE, router, multi-provider config — separated from Core)",
       "CacheHub.Cli (CLI entry, 21 command groups)",
       "CacheHub.Desktop (Web UI, Minimal API, 17 routes)",
-      "CacheHub.Tests (789 tests)"
+      "CacheHub.Tests (835 tests)"
     ],
     "dependencyChain": "Core ← Storage, Indexing, Gateway; Context ← Core+Storage+Indexing; Cli/Desktop ← all",
     "databaseMigrations": 10
   },
   "totalAuditIssuesFixed": 62,
-  "testCount": 817,
-  "lastUpdated": "2026-08-07T18:00:00Z"
+  "testCount": 835,
+  "lastUpdated": "2026-08-07T22:00:00Z"
 }

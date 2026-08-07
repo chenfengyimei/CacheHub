@@ -6,7 +6,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![.NET 9](https://img.shields.io/badge/.NET-9.0-blue.svg)](https://dotnet.microsoft.com/download/dotnet/9.0)
-[![Tests](https://img.shields.io/badge/Tests-772%20passed-brightgreen.svg)](#测试覆盖率)
+[![Tests](https://img.shields.io/badge/Tests-835%20passed-brightgreen.svg)](#测试覆盖率)
 [![CI](https://img.shields.io/badge/CI-3%20platforms%20%E2%9C%93-success.svg)](.github/workflows/ci.yml)
 [![Status: Pre-Alpha](https://img.shields.io/badge/Status-Pre--Alpha-orange.svg)](#功能成熟度矩阵)
 
@@ -162,7 +162,7 @@ src/auth/refresh.ts  Score: 0.92  Mode: chunks  Tokens: 450
 | Web UI | ASP.NET Core 最小 API + 静态文件 |
 | Gateway | HttpListener + OpenAI 兼容协议 + SSE |
 | 发布 | 单文件自包含 (PublishSingleFile + SelfContained) |
-| 测试 | xUnit — 772 测试通过 |
+| 测试 | xUnit — 835 测试通过 |
 | 代码质量 | TreatWarningsAsErrors + Nullable + AnalysisLevel latest-recommended |
 | CI/CD | GitHub Actions — Ubuntu + Windows + macOS 三平台 |
 | 行尾符 | .gitattributes 强制 LF（全平台一致） |
@@ -190,7 +190,7 @@ CacheHub/
 │   └── CacheHub.Desktop/           # Web UI：最小 API + 17 个路由 + Bearer 认证 + 6 个页面
 │
 ├── tests/
-│   └── CacheHub.Tests/             # 772 测试（单元 + 集成 + 安全 + Gate 回归 + Benchmark）
+│   └── CacheHub.Tests/             # 835 测试（单元 + 集成 + 安全 + Gate 回归 + Benchmark）
 │
 ├── integration/                    # Agent 集成套件
 │   ├── skills/universal/           # Universal Skill（通用技能）
@@ -353,7 +353,7 @@ cachehub context export --id=<ctx-id> --format=file
 
 | 类别 | 数量 | 说明 |
 |------|------|------|
-| 单元 + 集成测试 | 772 通过 | 覆盖全部模块 |
+| 单元 + 集成测试 | 835 通过 | 覆盖全部模块 |
 | 跳过 | 2 | 需真实 Git 环境 |
 | Gate 回归测试 | 60+ | R4-R15 阶段门验证 |
 | 真实 SQLite 集成测试 | 10+ | index→context→payload 完整闭环 |
@@ -384,7 +384,7 @@ CI 在 **Ubuntu + Windows + macOS** 三平台上运行 `build + test + format`�
 
 ## 项目状态
 
-CacheHub 当前处于 **Pre-Alpha** 阶段。核心链路已通过 772 个测试验证，但不建议用于生产环境或处理敏感代码。
+CacheHub 当前处于 **Pre-Alpha** 阶段。核心链路已通过 835 个测试验证，但不建议用于生产环境或处理敏感代码。
 
 **已完成**：
 - V1.0 路线图 R0-R9（安全止血 → 索引可信 → 上下文正确 → 通用协议 → 真实 Benchmark → Gateway → 缓存 → Semantic → LSP → 生态）
