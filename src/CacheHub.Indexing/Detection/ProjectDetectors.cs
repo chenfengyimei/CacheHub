@@ -309,3 +309,310 @@ public sealed class DockerDetector : IProjectDetector
         };
     }
 }
+
+// === V5-W13: Additional detectors for broader project coverage ===
+
+/// <summary>
+/// Detects C/C++ projects using CMake.
+/// </summary>
+public sealed class CMakeDetector : IProjectDetector
+{
+    public string Id => "cmake";
+    public IReadOnlySet<string> TriggerFiles => new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "CMakeLists.txt", "CMakePresets.json"
+    };
+
+    public DetectedComponent? Detect(string rootPath, IReadOnlyDictionary<string, string> triggerFileContents)
+    {
+        var evidence = new List<string>();
+        if (triggerFileContents.ContainsKey("CMakeLists.txt")) evidence.Add("CMakeLists.txt");
+        if (triggerFileContents.ContainsKey("CMakePresets.json")) evidence.Add("CMakePresets.json");
+        if (evidence.Count == 0) return null;
+
+        var language = "cpp";
+        if (!Directory.EnumerateFiles(rootPath, "*.cpp", SearchOption.TopDirectoryOnly).Any() &&
+            !Directory.EnumerateFiles(rootPath, "*.cc", SearchOption.TopDirectoryOnly).Any() &&
+            Directory.EnumerateFiles(rootPath, "*.c", SearchOption.TopDirectoryOnly).Any())
+            language = "c";
+
+        return new DetectedComponent
+        {
+            Id = "cmake-" + Path.GetFileName(rootPath),
+            Path = rootPath,
+            Language = language,
+            BuildSystem = "CMake",
+            PackageManager = "none",
+            Evidence = evidence,
+        };
+    }
+}
+
+/// <summary>
+/// Detects Android projects (Gradle with Android plugin or .gradle with android namespace).
+/// </summary>
+public sealed class AndroidDetector : IProjectDetector
+{
+    public string Id => "android";
+    public IReadOnlySet<string> TriggerFiles => new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "build.gradle", "build.gradle.kts"
+    };
+
+    public DetectedComponent? Detect(string rootPath, IReadOnlyDictionary<string, string> triggerFileContents)
+    {
+        // Only trigger if this looks like an Android project (has android {} block or AndroidManifest.xml)
+        var hasAndroidManifest = File.Exists(Path.Combine(rootPath, "src", "main", "AndroidManifest.xml")) ||
+                                  Directory.GetFiles(rootPath, "AndroidManifest.xml", SearchOption.AllDirectories).Length > 0;
+
+        string? gradleContent = null;
+        if (triggerFileContents.TryGetValue("build.gradle", out var c1)) gradleContent = c1;
+        else if (triggerFileContents.TryGetValue("build.gradle.kts", out var c2)) gradleContent = c2;
+
+        if (gradleContent is null) return null;
+
+        var isAndroid = hasAndroidManifest ||
+                        gradleContent.Contains("com.android.application", StringComparison.OrdinalIgnoreCase) ||
+                        gradleContent.Contains("com.android.library", StringComparison.OrdinalIgnoreCase);
+        if (!isAndroid) return null;
+
+        var language = gradleContent.Contains("kotlin", StringComparison.OrdinalIgnoreCase) ||
+                       Directory.Exists(Path.Combine(rootPath, "src", "main", "kotlin"))
+            ? "kotlin"
+            : "java";
+
+        return new DetectedComponent
+        {
+            Id = "android-" + Path.GetFileName(rootPath),
+            Path = rootPath,
+            Language = language,
+            Framework = "Android",
+            BuildSystem = "Gradle (Android)",
+            PackageManager = "Gradle",
+            Evidence = ["Android Gradle project detected"],
+        };
+    }
+}
+
+/// <summary>
+/// Detects Swift / Xcode projects.
+/// </summary>
+public sealed class SwiftDetector : IProjectDetector
+{
+    public string Id => "swift";
+    public IReadOnlySet<string> TriggerFiles => new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "Package.swift", "Package.resolved"
+    };
+
+    public DetectedComponent? Detect(string rootPath, IReadOnlyDictionary<string, string> triggerFileContents)
+    {
+        if (!triggerFileContents.ContainsKey("Package.swift") && !triggerFileContents.ContainsKey("Package.resolved"))
+            return null;
+
+        var evidence = new List<string>();
+        if (triggerFileContents.ContainsKey("Package.swift")) evidence.Add("Package.swift");
+        if (triggerFileContents.ContainsKey("Package.resolved")) evidence.Add("Package.resolved");
+
+        return new DetectedComponent
+        {
+            Id = "swift-" + Path.GetFileName(rootPath),
+            Path = rootPath,
+            Language = "swift",
+            BuildSystem = "Swift Package Manager",
+            PackageManager = "SPM",
+            Evidence = evidence,
+        };
+    }
+}
+
+/// <summary>
+/// Detects PHP projects (composer.json).
+/// </summary>
+public sealed class PhpDetector : IProjectDetector
+{
+    public string Id => "php";
+    public IReadOnlySet<string> TriggerFiles => new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "composer.json", "artisan"
+    };
+
+    public DetectedComponent? Detect(string rootPath, IReadOnlyDictionary<string, string> triggerFileContents)
+    {
+        var evidence = new List<string>();
+        string? framework = null;
+
+        if (triggerFileContents.ContainsKey("composer.json"))
+        {
+            evidence.Add("composer.json");
+            var content = triggerFileContents["composer.json"];
+            if (content.Contains("laravel", StringComparison.OrdinalIgnoreCase)) framework = "Laravel";
+            else if (content.Contains("symfony", StringComparison.OrdinalIgnoreCase)) framework = "Symfony";
+        }
+        if (triggerFileContents.ContainsKey("artisan")) { evidence.Add("artisan"); framework ??= "Laravel"; }
+
+        if (evidence.Count == 0) return null;
+
+        return new DetectedComponent
+        {
+            Id = "php-" + Path.GetFileName(rootPath),
+            Path = rootPath,
+            Language = "php",
+            Framework = framework,
+            BuildSystem = "Composer",
+            PackageManager = "Composer",
+            Evidence = evidence,
+        };
+    }
+}
+
+/// <summary>
+/// Detects Ruby projects (Gemfile, Rakefile, *.gemspec).
+/// </summary>
+public sealed class RubyDetector : IProjectDetector
+{
+    public string Id => "ruby";
+    public IReadOnlySet<string> TriggerFiles => new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "Gemfile", "Rakefile", "*.gemspec"
+    };
+
+    public DetectedComponent? Detect(string rootPath, IReadOnlyDictionary<string, string> triggerFileContents)
+    {
+        var evidence = new List<string>();
+        if (triggerFileContents.ContainsKey("Gemfile")) evidence.Add("Gemfile");
+        if (triggerFileContents.ContainsKey("Rakefile")) evidence.Add("Rakefile");
+        if (triggerFileContents.Keys.Any(k => k.EndsWith(".gemspec", StringComparison.OrdinalIgnoreCase)))
+            evidence.Add("*.gemspec");
+
+        if (evidence.Count == 0) return null;
+
+        return new DetectedComponent
+        {
+            Id = "ruby-" + Path.GetFileName(rootPath),
+            Path = rootPath,
+            Language = "ruby",
+            BuildSystem = "Bundler",
+            PackageManager = "Bundler",
+            Evidence = evidence,
+        };
+    }
+}
+
+/// <summary>
+/// Detects Terraform infrastructure projects.
+/// </summary>
+public sealed class TerraformDetector : IProjectDetector
+{
+    public string Id => "terraform";
+    public IReadOnlySet<string> TriggerFiles => new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "*.tf", "*.tfvars", "terraform.tfstate"
+    };
+
+    public DetectedComponent? Detect(string rootPath, IReadOnlyDictionary<string, string> triggerFileContents)
+    {
+        var evidence = new List<string>();
+        if (triggerFileContents.Keys.Any(k => k.EndsWith(".tf", StringComparison.OrdinalIgnoreCase)))
+            evidence.Add("*.tf files found");
+        if (triggerFileContents.ContainsKey("terraform.tfstate")) evidence.Add("terraform.tfstate");
+
+        if (evidence.Count == 0) return null;
+
+        return new DetectedComponent
+        {
+            Id = "terraform-" + Path.GetFileName(rootPath),
+            Path = rootPath,
+            Language = "hcl",
+            BuildSystem = "Terraform",
+            PackageManager = "none",
+            Confidence = 0.7,
+            Evidence = evidence,
+        };
+    }
+}
+
+/// <summary>
+/// Detects Unreal Engine projects.
+/// </summary>
+public sealed class UnrealDetector : IProjectDetector
+{
+    public string Id => "unreal";
+    public IReadOnlySet<string> TriggerFiles => new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "*.uproject", "*.uplugin"
+    };
+
+    public DetectedComponent? Detect(string rootPath, IReadOnlyDictionary<string, string> triggerFileContents)
+    {
+        var uprojectKey = triggerFileContents.Keys.FirstOrDefault(k => k.EndsWith(".uproject", StringComparison.OrdinalIgnoreCase));
+        var upluginKey = triggerFileContents.Keys.FirstOrDefault(k => k.EndsWith(".uplugin", StringComparison.OrdinalIgnoreCase));
+
+        if (uprojectKey is null && upluginKey is null) return null;
+
+        var evidence = new List<string>();
+        if (uprojectKey is not null) evidence.Add($"{uprojectKey} found");
+        if (upluginKey is not null) evidence.Add($"{upluginKey} found");
+
+        return new DetectedComponent
+        {
+            Id = "unreal-" + Path.GetFileName(rootPath),
+            Path = rootPath,
+            Language = "cpp",
+            Framework = "Unreal Engine",
+            BuildSystem = "Unreal Build Tool",
+            PackageManager = "none",
+            Evidence = evidence,
+        };
+    }
+}
+
+/// <summary>
+/// Generic fallback detector: identifies a directory with source code but no recognized build system.
+/// </summary>
+public sealed class GenericDetector : IProjectDetector
+{
+    public string Id => "generic";
+    public IReadOnlySet<string> TriggerFiles => new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "*.cs", "*.ts", "*.js", "*.py", "*.go", "*.rs", "*.java", "*.cpp", "*.c", "*.rb", "*.php", "*.swift", "*.kt"
+    };
+
+    public DetectedComponent? Detect(string rootPath, IReadOnlyDictionary<string, string> triggerFileContents)
+    {
+        // Only triggers if no other detector matched — should be last in the list.
+        // Check if any of the actual files match our source code patterns.
+        var sourceExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        { ".cs", ".ts", ".tsx", ".js", ".jsx", ".py", ".go", ".rs", ".java", ".cpp", ".cc", ".c", ".rb", ".php", ".swift", ".kt" };
+
+        var matchingFiles = triggerFileContents.Keys
+            .Where(k => sourceExtensions.Contains(Path.GetExtension(k)))
+            .ToList();
+
+        if (matchingFiles.Count == 0) return null;
+
+        var evidence = new List<string> { $"Source files found ({matchingFiles.Count}), no recognized build system" };
+        var language = "unknown";
+
+        // Determine language from file extensions
+        if (matchingFiles.Any(k => k.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))) language = "csharp";
+        else if (matchingFiles.Any(k => k.EndsWith(".ts", StringComparison.OrdinalIgnoreCase) || k.EndsWith(".tsx", StringComparison.OrdinalIgnoreCase))) language = "typescript";
+        else if (matchingFiles.Any(k => k.EndsWith(".js", StringComparison.OrdinalIgnoreCase) || k.EndsWith(".jsx", StringComparison.OrdinalIgnoreCase))) language = "javascript";
+        else if (matchingFiles.Any(k => k.EndsWith(".py", StringComparison.OrdinalIgnoreCase))) language = "python";
+        else if (matchingFiles.Any(k => k.EndsWith(".go", StringComparison.OrdinalIgnoreCase))) language = "go";
+        else if (matchingFiles.Any(k => k.EndsWith(".rs", StringComparison.OrdinalIgnoreCase))) language = "rust";
+        else if (matchingFiles.Any(k => k.EndsWith(".java", StringComparison.OrdinalIgnoreCase))) language = "java";
+        else if (matchingFiles.Any(k => k.EndsWith(".cpp", StringComparison.OrdinalIgnoreCase) || k.EndsWith(".cc", StringComparison.OrdinalIgnoreCase) || k.EndsWith(".c", StringComparison.OrdinalIgnoreCase))) language = "cpp";
+
+        return new DetectedComponent
+        {
+            Id = "generic-" + Path.GetFileName(rootPath),
+            Path = rootPath,
+            Language = language,
+            BuildSystem = "none",
+            PackageManager = "none",
+            Confidence = 0.3,
+            Evidence = evidence,
+        };
+    }
+}

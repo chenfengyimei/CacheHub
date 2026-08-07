@@ -19,10 +19,19 @@ public sealed class ProjectDetectionEngine
             new DotNetDetector(),
             new GoDetector(),
             new RustDetector(),
+            new AndroidDetector(), // before JavaDetector — Android projects also use build.gradle
             new JavaDetector(),
             new UnityDetector(),
             new FlutterDetector(),
             new DockerDetector(),
+            // V5-W13: expanded detection coverage
+            new CMakeDetector(),
+            new SwiftDetector(),
+            new PhpDetector(),
+            new RubyDetector(),
+            new TerraformDetector(),
+            new UnrealDetector(),
+            new GenericDetector(), // must be last — catches unstructured source dirs
         ];
     }
 
@@ -38,10 +47,8 @@ public sealed class ProjectDetectionEngine
         var components = new List<DetectedComponent>();
         var languageStats = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-        // Scan top-level and one level deep for component roots
-        var searchDirs = new List<string> { rootPath };
-        searchDirs.AddRange(Directory.GetDirectories(rootPath, "*", SearchOption.TopDirectoryOnly)
-            .Where(d => !ShouldSkipDir(d)));
+        // V5-W13: Scan root + up to 3 levels deep for monorepo component roots
+        var searchDirs = CollectSearchDirectories(rootPath, maxDepth: 3);
 
         foreach (var dir in searchDirs.Distinct())
         {
@@ -131,6 +138,13 @@ public sealed class ProjectDetectionEngine
                 "Gradle" => ("./gradlew build", "Build Gradle project", true, true, true,
                     ["May execute Gradle scripts", "Writes to build/"]),
                 "pub" => ("flutter pub get", "Install Flutter dependencies", true, true, false, []),
+                "Composer" => ("composer install", "Install PHP dependencies", true, true, false,
+                    ["Writes to vendor/"]),
+                "Bundler" => ("bundle install", "Install Ruby gems", true, true, false,
+                    ["Writes to bundle path"]),
+                "SPM" => ("swift build", "Build Swift package", true, true, false,
+                    ["Writes to .build/"]),
+                "none" => (null, "No package manager detected", false, false, false, Array.Empty<string>()),
                 _ => ((string?)null, (string?)null, false, false, false, Array.Empty<string>()),
             };
 
@@ -157,6 +171,32 @@ public sealed class ProjectDetectionEngine
             DetectedComponents = result.Components.Select(c => $"{c.Language} ({c.Framework ?? c.BuildSystem ?? "unknown"}) at {c.Path}").ToList(),
             MissingTools = result.MissingTools,
         };
+    }
+
+    /// <summary>
+    /// V5-W13: Collects directories to search, supporting deep Monorepo structure (up to maxDepth levels).
+    /// Skips common non-source directories (node_modules, .git, bin, obj, etc.).
+    /// </summary>
+    private static List<string> CollectSearchDirectories(string rootPath, int maxDepth)
+    {
+        var result = new List<string> { rootPath };
+        var queue = new Queue<(string dir, int depth)>();
+        queue.Enqueue((rootPath, 0));
+
+        while (queue.Count > 0)
+        {
+            var (dir, depth) = queue.Dequeue();
+            if (depth >= maxDepth) continue;
+
+            foreach (var sub in Directory.GetDirectories(dir, "*", SearchOption.TopDirectoryOnly))
+            {
+                if (ShouldSkipDir(sub)) continue;
+                result.Add(sub);
+                queue.Enqueue((sub, depth + 1));
+            }
+        }
+
+        return result.Distinct().ToList();
     }
 
     private static Dictionary<string, string> CollectTriggerFiles(string dir)
