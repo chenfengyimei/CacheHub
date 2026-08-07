@@ -1,0 +1,22 @@
+# Force LF line endings on all platforms (matches .editorconfig end_of_line = lf)
+# This prevents dotnet format failures on Windows CI where Git defaults to CRLF
+* text=auto eol=lf
+
+# Binary files (no line ending conversion)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.bmp binary
+*.pdf binary
+*.docx binary
+*.xlsx binary
+*.zip binary
+*.gz binary
+*.dll binary
+*.exe binary
+*.so binary
+*.dylib binary
+*.db binary
+*.sqlite binary
