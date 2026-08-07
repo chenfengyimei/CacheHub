@@ -55,8 +55,9 @@ public sealed record AgentRunResult
     public required int RunNumber { get; init; }
     public required bool TaskCompleted { get; init; }
     public required int Rounds { get; init; }
-    public required int PromptTokens { get; init; }
-    public required int CompletionTokens { get; init; }
+    public required int PromptTokens { get; init; }          // V6: Provider actual usage
+    public required int CompletionTokens { get; init; }      // V6: Provider actual usage
+    public required int LocalEstimatedContextTokens { get; init; }  // V6: local tokenizer estimate of assembled prompt (for comparison)
     public required double TotalCost { get; init; }
     public required int TestsPassed { get; init; }
     public required int TestsTotal { get; init; }
@@ -76,6 +77,7 @@ public sealed record AgentBenchmarkResult
     public double SuccessRate => Runs.Count == 0 ? 0 : (double)Runs.Count(r => r.TaskCompleted) / Runs.Count;
     public long TotalPromptTokens => Runs.Sum(r => (long)r.PromptTokens); // V6: Provider actual usage
     public long TotalCompletionTokens => Runs.Sum(r => (long)r.CompletionTokens); // V6: Provider actual usage
+    public long TotalLocalEstimatedContextTokens => Runs.Sum(r => (long)r.LocalEstimatedContextTokens); // V6: local estimate for comparison
     public long TotalTokens => TotalPromptTokens + TotalCompletionTokens;
     public double TotalCost => Runs.Sum(r => r.TotalCost);
     public double AvgRounds => Runs.Count == 0 ? 0 : Runs.Average(r => (double)r.Rounds);
@@ -115,6 +117,7 @@ public sealed class AgentBenchmarkRunner
         var rounds = 0;
         var totalPrompt = 0;
         var totalCompletion = 0;
+        var totalLocalEstimated = 0;
         var totalCost = 0.0;
         var testsPassed = 0;
         var testsTotal = 0;
@@ -126,6 +129,9 @@ public sealed class AgentBenchmarkRunner
             rounds++;
             var context = contextBuilder(task.TaskDescription);
             var prompt = ComposePrompt(task.TaskDescription, context.FileSnippets);
+
+            // V6: Local estimate of assembled context (for comparison against Provider actual)
+            totalLocalEstimated += _tokenizer.CountTokens(prompt);
 
             AgentModelResponse response;
             try
@@ -162,6 +168,7 @@ public sealed class AgentBenchmarkRunner
             Rounds = rounds,
             PromptTokens = totalPrompt,
             CompletionTokens = totalCompletion,
+            LocalEstimatedContextTokens = totalLocalEstimated,
             TotalCost = totalCost,
             TestsPassed = testsPassed,
             TestsTotal = testsTotal,

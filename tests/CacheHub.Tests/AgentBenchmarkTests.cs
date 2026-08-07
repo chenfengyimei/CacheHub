@@ -104,6 +104,32 @@ public class AgentBenchmarkTests
         Assert.Equal(1.0, result.AvgTestPassRatio);
     }
 
+    // V6: Provider actual usage and local estimate are tracked separately (review #16)
+    [Fact]
+    public async Task Runner_ProviderActualAndLocalEstimate_AreSeparate()
+    {
+        var model = new MockAgentModel(roundsToSucceed: 1);
+        var runner = new AgentBenchmarkRunner(model, new CodeTokenizer(), maxRounds: 3);
+
+        var result = await runner.RunTaskAsync(
+            TestTask,
+            BenchmarkConfig(),
+            desc => new AgentContextPackage
+            {
+                TaskDescription = desc,
+                SelectedFilePaths = ["src/Config.cs", "src/Errors.cs"],
+                FileSnippets = ["// src/Config.cs\nclass Config {}", "// src/Errors.cs\nclass Errors {}"],
+                EstimatedTokens = 50,
+            },
+            patch => Task.FromResult(new AgentTestResult { Success = true, Passed = 1, Total = 1 }));
+
+        // Provider actual comes from the model response (mock returns 100).
+        // Local estimate comes from the tokenizer counting the assembled prompt.
+        Assert.Equal(100, result.PromptTokens);          // provider actual
+        Assert.True(result.LocalEstimatedContextTokens > 0);  // local estimate of assembled prompt
+        Assert.NotEqual(result.PromptTokens, result.LocalEstimatedContextTokens);
+    }
+
     private static BenchmarkConfig BenchmarkConfig() => new()
     {
         ModelId = "test-model",
