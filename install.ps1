@@ -49,16 +49,18 @@ if (!$SkipTests) {
     Write-Host "[3/4] Skipping tests (-SkipTests flag set)." -ForegroundColor Yellow
 }
 
-# Publish single-file
+# Publish single-file (framework-dependent single file; requires .NET runtime)
 Write-Host "[4/4] Publishing single-file executable..." -ForegroundColor Yellow
 $publishDir = "$PSScriptRoot\publish"
-dotnet publish src/CacheHub.Cli/CacheHub.Cli.csproj -c Release -o $publishDir --nologo 2>&1 | Out-Null
+dotnet publish src/CacheHub.Cli/CacheHub.Cli.csproj -c Release -o $publishDir --nologo `
+    -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=false 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Error: Publish failed." -ForegroundColor Red
     exit 1
 }
 
 $exePath = Join-Path $publishDir "cachehub.exe"
+if (-not (Test-Path $exePath)) { $exePath = Join-Path $publishDir "cachehub" }
 if (Test-Path $exePath) {
     Write-Host "  Published: $exePath" -ForegroundColor Green
     Write-Host ""

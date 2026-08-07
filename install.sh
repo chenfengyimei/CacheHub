@@ -51,10 +51,16 @@ else
     echo "[3/4] Skipping tests (--skip-tests flag set)."
 fi
 
-# Publish
+# Publish single-file (framework-dependent single file; requires .NET runtime)
 echo "[4/4] Publishing single-file executable..."
 PUBLISH_DIR="$(dirname "$0")/publish"
-dotnet publish src/CacheHub.Cli/CacheHub.Cli.csproj -c Release -o "$PUBLISH_DIR" --nologo 2>/dev/null
+dotnet publish src/CacheHub.Cli/CacheHub.Cli.csproj -c Release -o "$PUBLISH_DIR" --nologo \
+    -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=false 2>/dev/null
+
+if [ ! -f "$PUBLISH_DIR/cachehub" ]; then
+    echo "Error: cachehub binary not found in publish directory."
+    exit 1
+fi
 
 echo "  Published to: $PUBLISH_DIR"
 echo ""
