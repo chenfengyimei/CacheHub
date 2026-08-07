@@ -30,8 +30,8 @@ public sealed class PathNormalizer
         var normalizedRoot = Normalize(rootPath).TrimEnd('/');
         var normalizedChild = Normalize(childPath);
 
-        return normalizedChild.StartsWith(normalizedRoot + "/", StringComparison.OrdinalIgnoreCase)
-               || string.Equals(normalizedChild, normalizedRoot, StringComparison.OrdinalIgnoreCase);
+        return normalizedChild.StartsWith(normalizedRoot + "/", PathComparer.PhysicalPathComparison)
+               || string.Equals(normalizedChild, normalizedRoot, PathComparer.PhysicalPathComparison);
     }
 
     /// <summary>
