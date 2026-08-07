@@ -646,4 +646,81 @@ public class ParserFixtureTests
         Assert.Equal("1.0", parser.Version);
         Assert.Equal("cpp-regex-baseline", parser.Id);
     }
+
+    // === PHP Parser Tests ===
+
+    [Fact]
+    public void Php_ShouldExtractClassAndMethods()
+    {
+        var code = """
+            <?php
+            class UserService {
+                public function handleRequest() {
+                    return;
+                }
+                private function computeScore($data) {
+                    return 0;
+                }
+            }
+            """;
+        var result = new PhpRegexParser().Parse(code, "UserService.php");
+
+        Assert.Contains(result.Symbols, s => s.Name == "UserService" && s.Kind == SymbolKind.Class);
+        Assert.Contains(result.Symbols, s => s.Name == "handleRequest" && s.Kind == SymbolKind.Method);
+        Assert.Contains(result.Symbols, s => s.Name == "computeScore" && s.Kind == SymbolKind.Method);
+    }
+
+    [Fact]
+    public void Php_ShouldExtractUseStatements()
+    {
+        var code = """
+            <?php
+            use App\Services\AuthService;
+            use App\Models\User as UserModel;
+            """;
+        var result = new PhpRegexParser().Parse(code, "test.php");
+
+        Assert.Contains(result.Imports, i => i.Module == "App\\Services\\AuthService");
+        Assert.Contains(result.Imports, i => i.Module == "App\\Models\\User" && i.ImportedName == "UserModel");
+    }
+
+    [Fact]
+    public void Php_ShouldExtractInterfaceAndTrait()
+    {
+        var code = """
+            <?php
+            interface Repository {
+                public function save();
+            }
+            trait Loggable {
+                public function log() {}
+            }
+            """;
+        var result = new PhpRegexParser().Parse(code, "Types.php");
+
+        Assert.Contains(result.Symbols, s => s.Name == "Repository" && s.Kind == SymbolKind.Interface);
+        Assert.Contains(result.Symbols, s => s.Name == "Loggable" && s.Kind == SymbolKind.Struct);
+    }
+
+    [Fact]
+    public void Php_ShouldExtractExtendsAndImplements()
+    {
+        var code = """
+            <?php
+            class UserController extends BaseController implements JsonSerializable, Countable {
+            }
+            """;
+        var result = new PhpRegexParser().Parse(code, "UserController.php");
+
+        Assert.Contains(result.Relations, r => r.Relation == "inherits" && r.TargetName == "BaseController");
+        Assert.Contains(result.Relations, r => r.Relation == "implements" && r.TargetName == "JsonSerializable");
+    }
+
+    [Fact]
+    public void Php_ParserVersion_ShouldBe1()
+    {
+        var parser = new PhpRegexParser();
+        Assert.Equal("1.0", parser.Version);
+        Assert.Equal("php-regex-baseline", parser.Id);
+    }
 }

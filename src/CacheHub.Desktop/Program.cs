@@ -812,6 +812,7 @@ static ICodeParser SelectParser(string filePath)
         ".rs" => new RustRegexParser(),
         ".java" => new JavaRegexParser(),
         ".c" or ".h" or ".cpp" or ".hpp" or ".cc" or ".cxx" => new CppRegexParser(),
+        ".php" => new PhpRegexParser(),
         ".md" or ".markdown" => new MarkdownParser(),
         _ => new TextParser(),
     };
