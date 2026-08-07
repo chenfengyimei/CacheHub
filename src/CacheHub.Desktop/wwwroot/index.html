@@ -235,14 +235,23 @@ async function api(path, opts) {
     const token = getAuthToken();
     const headers = { ...(opts?.headers || {}) };
     if (token) headers['Authorization'] = 'Bearer ' + token;
-    const res = await fetch(path, { ...opts, headers });
+    let res = await fetch(path, { ...opts, headers, credentials: 'same-origin' });
+
+    // V6: If the session cookie expired (401), re-init the cookie and retry once.
+    // Avoids silent failures after 24h idle; keeps "open box, no manual token" promise.
+    if (res.status === 401) {
+        try {
+            await fetch('/api/v1/auth/init', { method: 'POST', credentials: 'same-origin' });
+            res = await fetch(path, { ...opts, headers, credentials: 'same-origin' });
+        } catch (e) { /* retry failed — surface original 401 */ }
+    }
     return res.json();
 }
 
 // V6: Auto-init session cookie on page load (no manual token copy needed)
 async function autoInitAuth() {
     try {
-        await fetch('/api/v1/auth/init', { method: 'POST' });
+        await fetch('/api/v1/auth/init', { method: 'POST', credentials: 'same-origin' });
     } catch (e) { /* fail silently — user can still set token manually */ }
 }
 autoInitAuth();
