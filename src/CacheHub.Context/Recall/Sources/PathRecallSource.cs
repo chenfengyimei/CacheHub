@@ -296,14 +296,24 @@ public sealed class ImportRelationRecallSource : IRecallSource
 
         if (!IsEnabled || context.ImportSearch is null) return hits;
 
-        // Only expand symbols that were already matched by earlier sources
-        var matchedSymbols = context.AlreadyMatchedPaths
-            .Select(p => context.IndexedFiles.FirstOrDefault(f =>
-                f.NormalizedPath.Equals(p, StringComparison.OrdinalIgnoreCase)))
-            .Where(f => f is not null)
-            .SelectMany(f => f!.Symbols)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        // R4-W005: Expand from both matched file symbols AND task-extracted symbols
+        var matchedSymbols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // 1. Symbols from already matched files
+        foreach (var path in context.AlreadyMatchedPaths)
+        {
+            var file = context.IndexedFiles.FirstOrDefault(f =>
+                f.NormalizedPath.Equals(path, StringComparison.OrdinalIgnoreCase));
+            if (file is not null)
+            {
+                foreach (var sym in file.Symbols)
+                    matchedSymbols.Add(sym);
+            }
+        }
+
+        // 2. Symbols directly extracted from the task text
+        foreach (var sym in context.Task.ExtractedSymbols)
+            matchedSymbols.Add(sym);
 
         foreach (var symbol in matchedSymbols)
         {
@@ -321,6 +331,17 @@ public sealed class ImportRelationRecallSource : IRecallSource
                     ScoreHints =
                     [
                         new ScoreHint { Value = 1.0, Feature = "ImportRelation", Confidence = 0.7 },
+                    ],
+                    Anchors =
+                    [
+                        new LineAnchor
+                        {
+                            StartLine = 1,
+                            EndLine = 1,
+                            AnchorType = AnchorType.ImportRelation,
+                            MatchedText = symbol,
+                            Confidence = 0.7,
+                        },
                     ],
                 });
             }
