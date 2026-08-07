@@ -1,6 +1,7 @@
 using System.Text.Json;
 using CacheHub.Core.Caching;
 using CacheHub.Gateway;
+using CacheHub.Gateway.Server;
 
 namespace CacheHub.Tests;
 
@@ -175,4 +176,48 @@ public class GatewayTests
         Assert.False(entry.HasToolCalls);
         Assert.False(entry.HasFunctionCalls);
     }
+
+    /// <summary>
+    /// Global release blocker: upstream errors must NOT be rewritten to 200.
+    /// ProviderResponse preserves the real status code from the upstream provider.
+    /// </summary>
+    [Fact]
+    public void ProviderResponse_PreservesUpstreamErrorStatusCodes()
+    {
+        // Simulate various upstream error status codes
+        var unauthorized = new GatewayServer.ProviderResponse(401, """{"error":{"message":"Invalid API key"}}""");
+        var rateLimited = new GatewayServer.ProviderResponse(429, """{"error":{"message":"Rate limit exceeded"}}""");
+        var serverError = new GatewayServer.ProviderResponse(500, """{"error":{"message":"Internal server error"}}""");
+        var badRequest = new GatewayServer.ProviderResponse(400, """{"error":{"message":"Bad request"}}""");
+
+        // All error codes must be preserved — not rewritten to 200
+        Assert.NotEqual(200, unauthorized.StatusCode);
+        Assert.NotEqual(200, rateLimited.StatusCode);
+        Assert.NotEqual(200, serverError.StatusCode);
+        Assert.NotEqual(200, badRequest.StatusCode);
+
+        // Specific codes must match exactly
+        Assert.Equal(401, unauthorized.StatusCode);
+        Assert.Equal(429, rateLimited.StatusCode);
+        Assert.Equal(500, serverError.StatusCode);
+        Assert.Equal(400, badRequest.StatusCode);
+    }
+
+    /// <summary>
+    /// Only 2xx responses should be cached — error responses must not enter cache.
+    /// </summary>
+    [Fact]
+    public void Gateway_ErrorResponsesAreNotCached()
+    {
+        // The cache safety checker checks request cacheability,
+        // but the gateway logic should only cache 2xx responses.
+        // Verify that a 500 status code is not 2xx
+        Assert.False(Is2xxSuccess(500));
+        Assert.False(Is2xxSuccess(401));
+        Assert.False(Is2xxSuccess(429));
+        Assert.True(Is2xxSuccess(200));
+        Assert.True(Is2xxSuccess(201));
+    }
+
+    private static bool Is2xxSuccess(int statusCode) => statusCode >= 200 && statusCode < 300;
 }

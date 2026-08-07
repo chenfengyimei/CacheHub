@@ -519,7 +519,7 @@ public sealed class GatewayServer : IDisposable
         _httpClient.Dispose();
     }
 
-    private sealed record ProviderResponse(
+    public sealed record ProviderResponse(
         int StatusCode,
         string Body,
         System.Net.Http.Headers.HttpResponseHeaders? Headers = null);
