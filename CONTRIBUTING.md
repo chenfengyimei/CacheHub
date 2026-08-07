@@ -25,7 +25,7 @@ src/
   CacheHub.Indexing/     扫描、忽略规则�?2 语言正则解析器、RepoMap、Reconciler
   CacheHub.Context/      9 源召回�? 维排序、锚点分块、预算验证、引擎、缓�?  CacheHub.Gateway/      Gateway Server、多 Provider Fallback、SSE 流式、Responses API 流式、持久化缓存（独立项目）
   CacheHub.Cli/          CLI 入口�?3 个命令组，含 workflow/doctor/benchmark�?  CacheHub.Desktop/      Web UI + Local API�?8 路由 + Bearer 认证 + contextual-completion�?tests/
-  CacheHub.Tests/        847 测试
+  CacheHub.Tests/        856 测试
 ```
 
 **依赖�?*：Core �?Storage, Indexing, Gateway；Context �?Core + Storage + Indexing；CLI/Desktop �?全部。不要引入循环依赖�?

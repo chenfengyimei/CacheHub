@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "project": "CacheHub",
   "currentPhase": "V5-PRODUCTION-PROOF",
-  "currentTask": "V5 Production Proof & Product Closure: P0 items (ActiveDegraded status, SecurityPolicyResolver, Agent Benchmark real ContextEngine, Cache Invalidate) + P1 items (CacheKey versioning, Gateway CacheKey+CachePolicy, Persistent SavedTokens, FileSymbolsProvider, Semantic lifecycle, totalLifecycleTokens) all complete. 847 tests passing.",
+  "currentTask": "V5 Production Proof & Product Closure: P0 items (ActiveDegraded status, SecurityPolicyResolver, Agent Benchmark real ContextEngine, Cache Invalidate) + P1 items (CacheKey versioning, Gateway CacheKey+CachePolicy, Persistent SavedTokens, FileSymbolsProvider, Semantic lifecycle, totalLifecycleTokens) all complete. 856 tests passing.",
   "repository": {
     "branch": "main",
     "dirty": false,
@@ -10,7 +10,7 @@
   },
   "qualityGates": {
     "build": "pass (0 errors, 0 warnings, warnings-as-errors enabled)",
-    "unitTests": "pass (847/849, 2 skipped)",
+    "unitTests": "pass (856/849, 2 skipped)",
     "integrationTests": "pass (real SQLite + FTS5 + Context Engine pipeline + Snapshot Clone + Agent Benchmark + Cache Invalidate)",
     "securityTests": "pass (path traversal, auth, XSS, secret scan, symlink, offline mode, unified SecurityPolicyResolver, offline hard-block before gateway)",
     "format": "pass"
@@ -72,11 +72,11 @@
       "CacheHub.Gateway (server, provider, SSE, router, multi-provider config — separated from Core)",
       "CacheHub.Cli (CLI entry, 21 command groups)",
       "CacheHub.Desktop (Web UI, Minimal API, 17 routes)",
-      "CacheHub.Tests (847 tests)"
+      "CacheHub.Tests (856 tests)"
     ],
     "dependencyChain": "Core ← Storage, Indexing, Gateway; Context ← Core+Storage+Indexing; Cli/Desktop ← all",
     "databaseMigrations": 10
   },
-  "testCount": 847,
+  "testCount": 856,
   "lastUpdated": "2026-08-08T00:50:00Z"
 }
