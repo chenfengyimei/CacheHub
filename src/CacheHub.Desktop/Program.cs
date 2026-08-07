@@ -691,7 +691,10 @@ app.MapPost("/api/v1/context/{id}/feedback", async (string id, FeedbackApiReques
                     manifest.Task.OriginalText,
                     manifest.WorkspaceId.Value,
                     manifest.Task.OriginalText,
-                    manifest.IndexSnapshotId.Value);
+                    manifest.IndexSnapshotId.Value,
+                    selectedFiles: manifest.SelectedFiles.Select(f => f.Path).ToList(),
+                    filesActuallyRead: req.FilesActuallyRead,
+                    taskCompleted: true);
             }
         }
         catch { /* best effort — don't fail the feedback if semantic recording fails */ }
@@ -1327,17 +1330,22 @@ internal static class DesktopSemanticHelper
                 Similarity = r.Similarity,
                 ReferenceType = r.Reference.Type.ToString(),
                 TaskDescription = r.Reference.TaskDescription,
+                HistoricalFiles = [..r.Reference.SelectedFiles, ..r.Reference.FilesActuallyRead],
             }).ToList();
         };
     }
 
     public static void RecordReference(string content, string? workspaceId,
-        string? taskDescription, string? snapshotId)
+        string? taskDescription, string? snapshotId,
+        IReadOnlyList<string>? selectedFiles = null,
+        IReadOnlyList<string>? filesActuallyRead = null,
+        bool? taskCompleted = null)
     {
         var store = GetStore();
         var recall = new SemanticReferenceRecall(store, _embedding);
         recall.RecordAsync(content, SemanticReferenceType.Task,
-            workspaceId, taskDescription, taskCompleted: null,
-            snapshotId, workspaceContentHash: null).GetAwaiter().GetResult();
+            workspaceId, taskDescription, taskCompleted,
+            snapshotId, workspaceContentHash: null,
+            selectedFiles, filesActuallyRead).GetAwaiter().GetResult();
     }
 }

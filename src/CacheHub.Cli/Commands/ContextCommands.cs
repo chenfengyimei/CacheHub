@@ -60,22 +60,28 @@ internal static class SemanticReferenceHelper
                 Similarity = r.Similarity,
                 ReferenceType = r.Reference.Type.ToString(),
                 TaskDescription = r.Reference.TaskDescription,
+                HistoricalFiles = [..r.Reference.SelectedFiles, ..r.Reference.FilesActuallyRead],
             }).ToList();
         };
     }
 
     /// <summary>
     /// Records a task reference for future semantic recall.
+    /// V6: Now stores selectedFiles and filesActuallyRead for direct file recall.
     /// </summary>
     public static void RecordReference(
         string appDataRoot, string content, string? workspaceId,
-        string? taskDescription, string? snapshotId)
+        string? taskDescription, string? snapshotId,
+        IReadOnlyList<string>? selectedFiles = null,
+        IReadOnlyList<string>? filesActuallyRead = null,
+        bool? taskCompleted = null)
     {
         var store = GetStore(appDataRoot);
         var recall = new SemanticReferenceRecall(store, _embedding);
         recall.RecordAsync(content, SemanticReferenceType.Task,
-            workspaceId, taskDescription, taskCompleted: null,
-            snapshotId, workspaceContentHash: null).GetAwaiter().GetResult();
+            workspaceId, taskDescription, taskCompleted,
+            snapshotId, workspaceContentHash: null,
+            selectedFiles, filesActuallyRead).GetAwaiter().GetResult();
     }
 }
 
@@ -606,7 +612,10 @@ public static class ContextCommands
                     manifest.Task.OriginalText,
                     manifest.WorkspaceId.Value,
                     manifest.Task.OriginalText,
-                    manifest.IndexSnapshotId.Value);
+                    manifest.IndexSnapshotId.Value,
+                    selectedFiles: manifest.SelectedFiles.Select(f => f.Path).ToList(),
+                    filesActuallyRead: feedback.FilesActuallyRead,
+                    taskCompleted: true);
                 Console.Error.WriteLine("  Semantic reference recorded for future recall.");
             }
             catch (Exception ex)

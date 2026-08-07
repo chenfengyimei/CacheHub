@@ -59,6 +59,12 @@ public sealed record SemanticReference
 
     /// <summary>Whether this reference is stale (snapshot superseded or content hash changed).</summary>
     public bool IsStale { get; init; }
+
+    /// <summary>V6: Files selected by ContextEngine for this task. Enables direct file recall from history.</summary>
+    public IReadOnlyList<string> SelectedFiles { get; init; } = [];
+
+    /// <summary>V6: Files the agent actually read during task execution. From feedback.</summary>
+    public IReadOnlyList<string> FilesActuallyRead { get; init; } = [];
 }
 
 /// <summary>

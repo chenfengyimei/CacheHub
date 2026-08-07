@@ -184,4 +184,7 @@ public sealed record SemanticHit
     public required double Similarity { get; init; }
     public required string ReferenceType { get; init; }
     public string? TaskDescription { get; init; }
+
+    /// <summary>V6: Historical file paths from the reference. Used directly for recall instead of ExtractFilePaths.</summary>
+    public IReadOnlyList<string> HistoricalFiles { get; init; } = [];
 }

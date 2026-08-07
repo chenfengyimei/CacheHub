@@ -275,6 +275,8 @@ public sealed class PersistentVectorStore : IDisposable
                 e.SnapshotId,
                 e.WorkspaceContentHash,
                 e.IsStale,
+                e.SelectedFiles,
+                e.FilesActuallyRead,
             }));
             File.WriteAllText(_persistPath, json);
         }
@@ -310,6 +312,12 @@ public sealed class PersistentVectorStore : IDisposable
                     SnapshotId = item.TryGetProperty("SnapshotId", out var si) ? si.GetString() : null,
                     WorkspaceContentHash = item.TryGetProperty("WorkspaceContentHash", out var wch) ? wch.GetString() : null,
                     IsStale = item.TryGetProperty("IsStale", out var isv) && isv.GetBoolean(),
+                    SelectedFiles = item.TryGetProperty("SelectedFiles", out var sf) && sf.ValueKind == System.Text.Json.JsonValueKind.Array
+                        ? sf.EnumerateArray().Select(v => v.GetString() ?? "").Where(s => !string.IsNullOrEmpty(s)).ToList()
+                        : [],
+                    FilesActuallyRead = item.TryGetProperty("FilesActuallyRead", out var far) && far.ValueKind == System.Text.Json.JsonValueKind.Array
+                        ? far.EnumerateArray().Select(v => v.GetString() ?? "").Where(s => !string.IsNullOrEmpty(s)).ToList()
+                        : [],
                 });
             }
         }
@@ -356,6 +364,7 @@ public sealed class SemanticReferenceRecall
 
     /// <summary>
     /// Records a historical reference for future recall.
+    /// V6: Now accepts selectedFiles and filesActuallyRead for direct file recall.
     /// </summary>
     public async Task RecordAsync(
         string content,
@@ -364,7 +373,9 @@ public sealed class SemanticReferenceRecall
         string? taskDescription = null,
         bool? taskCompleted = null,
         string? snapshotId = null,
-        string? workspaceContentHash = null)
+        string? workspaceContentHash = null,
+        IReadOnlyList<string>? selectedFiles = null,
+        IReadOnlyList<string>? filesActuallyRead = null)
     {
         var embedding = await _embedding.EmbedAsync(content);
         _store.Add(new SemanticReference
@@ -380,6 +391,8 @@ public sealed class SemanticReferenceRecall
             TaskCompleted = taskCompleted,
             SnapshotId = snapshotId,
             WorkspaceContentHash = workspaceContentHash,
+            SelectedFiles = selectedFiles ?? [],
+            FilesActuallyRead = filesActuallyRead ?? [],
         });
     }
 }

@@ -772,7 +772,13 @@ public sealed class SemanticRecallSource : IRecallSource
 
         foreach (var result in semanticResults)
         {
-            var mentionedPaths = ExtractFilePaths(result.Content, context.IndexedFiles);
+            // V6: Use HistoricalFiles directly from the reference (selectedFiles + filesActuallyRead)
+            // instead of relying on ExtractFilePaths from task text.
+            var mentionedPaths = result.HistoricalFiles.Count > 0
+                ? result.HistoricalFiles
+                    .Where(p => context.IndexedFiles.Any(f => string.Equals(f.NormalizedPath, p, StringComparison.OrdinalIgnoreCase)))
+                    .ToList()
+                : ExtractFilePaths(result.Content, context.IndexedFiles);
 
             foreach (var path in mentionedPaths)
             {
