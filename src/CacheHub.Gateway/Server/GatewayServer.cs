@@ -341,10 +341,14 @@ public sealed class GatewayServer : IDisposable
                 resp.ContentType = response.Content.Headers.ContentType?.ToString() ?? "text/event-stream";
                 ForwardAllowedHeaders(response.Headers, resp);
 
-                // Stream the response body directly to the client
+                // Stream the response body to client while parsing SSE events for Usage
                 using var stream = await response.Content.ReadAsStreamAsync(ct);
-                await stream.CopyToAsync(resp.OutputStream, 8192, ct);
+                var (promptTokens, completionTokens) = await StreamAndParseUsageAsync(stream, resp.OutputStream, ct);
                 resp.OutputStream.Flush();
+
+                // Log streaming request with parsed usage
+                var sw2 = System.Diagnostics.Stopwatch.StartNew();
+                LogRequest("chat/completions", model, sw2.Elapsed, statusCode, false, promptTokens, completionTokens);
                 return;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -376,6 +380,72 @@ public sealed class GatewayServer : IDisposable
                 resp.Headers[allowed] = string.Join(", ", values);
             }
         }
+    }
+
+    /// <summary>
+    /// Streams SSE data from provider to client while parsing usage from final chunk.
+    /// SSE format: lines starting with "data: " containing JSON.
+    /// The final chunk often includes a "usage" object with prompt/completion tokens.
+    /// </summary>
+    private static async Task<(int promptTokens, int completionTokens)> StreamAndParseUsageAsync(
+        Stream inputStream, Stream outputStream, CancellationToken ct)
+    {
+        var promptTokens = 0;
+        var completionTokens = 0;
+        var buffer = new byte[8192];
+        var lineBuffer = new System.Text.StringBuilder();
+
+        int bytesRead;
+        while ((bytesRead = await inputStream.ReadAsync(buffer, ct)) > 0)
+        {
+            // Forward to client immediately
+            await outputStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct);
+
+            // Parse for usage: accumulate text and check for data lines
+            var text = System.Text.Encoding.UTF8.GetString(buffer, 0, bytesRead);
+            lineBuffer.Append(text);
+
+            // Process complete lines
+            while (true)
+            {
+                var newlineIdx = lineBuffer.ToString().IndexOf('\n');
+                if (newlineIdx < 0) break;
+
+                var line = lineBuffer.ToString(0, newlineIdx).TrimEnd('\r');
+                lineBuffer.Remove(0, newlineIdx + 1);
+
+                // Check for data lines containing usage
+                if (line.StartsWith("data: ", StringComparison.Ordinal))
+                {
+                    var data = line["data: ".Length..];
+                    if (data != "[DONE]")
+                    {
+                        TryParseUsageFromSseChunk(data, ref promptTokens, ref completionTokens);
+                    }
+                }
+            }
+        }
+
+        return (promptTokens, completionTokens);
+    }
+
+    /// <summary>
+    /// Attempts to extract usage tokens from an SSE data chunk.
+    /// </summary>
+    private static void TryParseUsageFromSseChunk(string data, ref int promptTokens, ref int completionTokens)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(data);
+            if (doc.RootElement.TryGetProperty("usage", out var usage))
+            {
+                if (usage.TryGetProperty("prompt_tokens", out var p) && p.ValueKind == JsonValueKind.Number)
+                    promptTokens = p.GetInt32();
+                if (usage.TryGetProperty("completion_tokens", out var c) && c.ValueKind == JsonValueKind.Number)
+                    completionTokens = c.GetInt32();
+            }
+        }
+        catch { }
     }
 
     /// <summary>
@@ -460,11 +530,14 @@ public sealed class GatewayServer : IDisposable
         Interlocked.Increment(ref _totalRequests);
 
         string model = "unknown";
+        var isStream = false;
         try
         {
             using var doc = JsonDocument.Parse(requestBody);
             if (doc.RootElement.TryGetProperty("model", out var m) && m.ValueKind == JsonValueKind.String)
                 model = m.GetString() ?? "unknown";
+            if (doc.RootElement.TryGetProperty("stream", out var s) && s.ValueKind == JsonValueKind.True)
+                isStream = true;
         }
         catch { }
 
@@ -482,31 +555,53 @@ public sealed class GatewayServer : IDisposable
             {
                 try
                 {
+                    // Use streaming mode if requested
+                    var completionOption = isStream ? HttpCompletionOption.ResponseHeadersRead : HttpCompletionOption.ResponseContentRead;
                     using var msg = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/v1/responses");
                     msg.Content = new StringContent(requestBody, System.Text.Encoding.UTF8, "application/json");
                     msg.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
 
-                    var response = await _httpClient.SendAsync(msg, ct);
-                    var responseBody = await response.Content.ReadAsStringAsync(ct);
+                    var response = await _httpClient.SendAsync(msg, completionOption, ct);
                     var statusCode = (int)response.StatusCode;
 
                     // On 429 or 5xx, try next provider
                     if (statusCode == 429 || statusCode >= 500)
                     {
                         lastError = new HttpRequestException($"Provider {baseUrl} returned {statusCode}");
+                        response.Dispose();
                         continue;
                     }
 
-                    sw.Stop();
-                    LogRequest("responses", model, sw.Elapsed, statusCode, false, 0, 0);
+                    if (isStream)
+                    {
+                        // Stream SSE response to client with Usage parsing
+                        resp.StatusCode = statusCode;
+                        resp.ContentType = response.Content.Headers.ContentType?.ToString() ?? "text/event-stream";
+                        ForwardAllowedHeaders(response.Headers, resp);
 
-                    resp.StatusCode = statusCode;
-                    resp.ContentType = "application/json";
-                    ForwardAllowedHeaders(response.Headers, resp);
-                    var respBytes = System.Text.Encoding.UTF8.GetBytes(responseBody);
-                    resp.ContentLength64 = respBytes.Length;
-                    await resp.OutputStream.WriteAsync(respBytes, ct);
-                    return;
+                        using var stream = await response.Content.ReadAsStreamAsync(ct);
+                        var (promptTokens, completionTokens) = await StreamAndParseUsageAsync(stream, resp.OutputStream, ct);
+                        resp.OutputStream.Flush();
+
+                        sw.Stop();
+                        LogRequest("responses", model, sw.Elapsed, statusCode, false, promptTokens, completionTokens);
+                        return;
+                    }
+                    else
+                    {
+                        var responseBody = await response.Content.ReadAsStringAsync(ct);
+
+                        sw.Stop();
+                        LogRequest("responses", model, sw.Elapsed, statusCode, false, 0, 0);
+
+                        resp.StatusCode = statusCode;
+                        resp.ContentType = "application/json";
+                        ForwardAllowedHeaders(response.Headers, resp);
+                        var respBytes = System.Text.Encoding.UTF8.GetBytes(responseBody);
+                        resp.ContentLength64 = respBytes.Length;
+                        await resp.OutputStream.WriteAsync(respBytes, ct);
+                        return;
+                    }
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
