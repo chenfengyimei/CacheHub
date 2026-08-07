@@ -174,6 +174,8 @@ public class SnapshotActivationRegressionTests
             new Migration0006SchemaV2(),
             new Migration0007ContextPackageFields(),
         new Migration0008ContextPackageFk(),
+        new Migration0009PersistentCache(),
+        new Migration0010RelationSourceColumn(),
         ]);
         runner.Migrate();
         return factory;

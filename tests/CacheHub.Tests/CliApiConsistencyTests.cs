@@ -37,6 +37,8 @@ public class CliApiConsistencyTests
             new Migration0001Initial(), new Migration0002Fts5(), new Migration0003ContextPackages(),
             new Migration0004Feedback(), new Migration0005ContextPackageDetails(),
             new Migration0006SchemaV2(), new Migration0007ContextPackageFields(), new Migration0008ContextPackageFk(),
+        new Migration0009PersistentCache(),
+        new Migration0010RelationSourceColumn(),
         ]);
         runner.Migrate();
 
@@ -138,7 +140,7 @@ public class CliApiConsistencyTests
             var indexedFiles = GetIndexedFiles(factory, workspaceId);
             var engine = new ContextEngine();
 
-            // No explicit file path in the task — must use FTS/symbol
+            // No explicit file path in the task 鈥?must use FTS/symbol
             var manifest = BuildContext(engine, querySvc, snapshotId, indexedFiles, workspacePath, "Fix the login authentication bug");
 
             Assert.NotEmpty(manifest.SelectedFiles);
@@ -181,7 +183,7 @@ public class CliApiConsistencyTests
             var indexedFiles = GetIndexedFiles(factory, workspaceId);
             var engine = new ContextEngine();
 
-            // Build WITHOUT ftsSearch callback — should fall back to path matching
+            // Build WITHOUT ftsSearch callback 鈥?should fall back to path matching
             var manifest = engine.Build(
                 new ContextBuildRequest
                 {

@@ -13,8 +13,8 @@ using Xunit;
 namespace CacheHub.Tests;
 
 /// <summary>
-/// Real SQLite integration test: verifies the full index→context→payload pipeline
-/// using actual database, FTS5, and file system — no in-memory mocks.
+/// Real SQLite integration test: verifies the full index鈫抍ontext鈫抪ayload pipeline
+/// using actual database, FTS5, and file system 鈥?no in-memory mocks.
 /// TEST-P1-001 fix.
 /// </summary>
 [Collection("SQLite")]
@@ -67,6 +67,8 @@ public class RealPipelineIntegrationTests
                 new Migration0006SchemaV2(),
                 new Migration0007ContextPackageFields(),
         new Migration0008ContextPackageFk(),
+            new Migration0009PersistentCache(),
+            new Migration0010RelationSourceColumn(),
             ]);
             runner.Migrate();
 
@@ -76,7 +78,7 @@ public class RealPipelineIntegrationTests
             var workspace = Workspace.Create("TestProject", tempRoot);
             await wsRepo.InsertAsync(workspace with { Id = wsId });
 
-            // 4. Build index (simplified — write files + FTS directly)
+            // 4. Build index (simplified 鈥?write files + FTS directly)
             var snapshotId = IndexSnapshotId.New();
             await using (var conn = factory.CreateOpenConnection())
             {
@@ -246,7 +248,7 @@ public class RealPipelineIntegrationTests
             foreach (var item in payload.Items)
             {
                 Assert.True(!string.IsNullOrEmpty(item.Content),
-                    $"Payload item '{item.Path}' has empty content — potential ghost file");
+                    $"Payload item '{item.Path}' has empty content 鈥?potential ghost file");
             }
         }
         finally

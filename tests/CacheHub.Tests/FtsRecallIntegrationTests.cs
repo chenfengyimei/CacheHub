@@ -9,7 +9,7 @@ using CacheHub.Storage.Search;
 namespace CacheHub.Tests;
 
 /// <summary>
-/// Tests for R4-W003: FTS5 正文召回接入 Context Build.
+/// Tests for R4-W003: FTS5 姝ｆ枃鍙洖鎺ュ叆 Context Build.
 /// Verifies that ContextEngine.Build uses FTS queries (not just path matching)
 /// when ftsSearch callback is provided via IIndexQueryService.
 /// </summary>
@@ -42,6 +42,8 @@ public class FtsRecallIntegrationTests
             new Migration0006SchemaV2(),
             new Migration0007ContextPackageFields(),
             new Migration0008ContextPackageFk(),
+        new Migration0009PersistentCache(),
+        new Migration0010RelationSourceColumn(),
         ]);
         runner.Migrate();
 
@@ -176,7 +178,7 @@ public class FtsRecallIntegrationTests
             var indexedFiles = GetIndexedFiles(factory, workspaceId);
             var engine = new ContextEngine();
 
-            // No ftsSearch callback — should fall back to path-based keyword matching
+            // No ftsSearch callback 鈥?should fall back to path-based keyword matching
             var manifest = engine.Build(
                 new ContextBuildRequest
                 {
@@ -192,7 +194,7 @@ public class FtsRecallIntegrationTests
                 },
                 path => "sha256:test");
 
-            // Without FTS, "authentication" won't match any path — but "auth" might partially match
+            // Without FTS, "authentication" won't match any path 鈥?but "auth" might partially match
             // The key is that the build still succeeds and produces a manifest
             Assert.NotNull(manifest);
         }

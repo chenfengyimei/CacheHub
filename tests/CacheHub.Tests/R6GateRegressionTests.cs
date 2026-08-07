@@ -23,6 +23,8 @@ public class R6GateRegressionTests
             new Migration0005ContextPackageDetails(),
             new Migration0006SchemaV2(), new Migration0007ContextPackageFields(),
             new Migration0008ContextPackageFk(),
+        new Migration0009PersistentCache(),
+        new Migration0010RelationSourceColumn(),
         ]);
         runner.Migrate();
 
@@ -41,7 +43,7 @@ public class R6GateRegressionTests
         return (factory, snapshotId);
     }
 
-    // R6 Gate: 修改任意单文件后，未变化文件仍可被 FTS 搜索
+    // R6 Gate: 淇敼浠绘剰鍗曟枃浠跺悗锛屾湭鍙樺寲鏂囦欢浠嶅彲琚?FTS 鎼滅储
     [Fact]
     public async Task Gate_SingleFileModify_OthersStillSearchable()
     {
@@ -60,7 +62,7 @@ public class R6GateRegressionTests
         Assert.Contains(results, r => r.Path == "b.ts");
     }
 
-    // R6 Gate: Building Snapshot 失败时旧 Active Snapshot 保持完整可用
+    // R6 Gate: Building Snapshot 澶辫触鏃舵棫 Active Snapshot 淇濇寔瀹屾暣鍙敤
     [Fact]
     public async Task Gate_BuildingSnapshotFails_ActiveSnapshotIntact()
     {
@@ -82,7 +84,7 @@ public class R6GateRegressionTests
         Assert.NotEmpty(results);
     }
 
-    // R6 Gate: 工作区内容变化后，不允许复用旧 Context Package
+    // R6 Gate: 宸ヤ綔鍖哄唴瀹瑰彉鍖栧悗锛屼笉鍏佽澶嶇敤鏃?Context Package
     [Fact]
     public async Task Gate_ContentChange_InvalidatesOldContext()
     {

@@ -117,6 +117,8 @@ public class Migration0006SchemaV2Tests
                 new Migration0006SchemaV2(),
                 new Migration0007ContextPackageFields(),
         new Migration0008ContextPackageFk(),
+            new Migration0009PersistentCache(),
+            new Migration0010RelationSourceColumn(),
             ]);
             var secondRun = runner.Migrate();
             Assert.Equal(0, secondRun);
@@ -137,6 +139,8 @@ public class Migration0006SchemaV2Tests
             new Migration0006SchemaV2(),
             new Migration0007ContextPackageFields(),
         new Migration0008ContextPackageFk(),
+        new Migration0009PersistentCache(),
+        new Migration0010RelationSourceColumn(),
         ]);
         runner.Migrate();
         return factory;
