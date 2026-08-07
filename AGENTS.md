@@ -109,14 +109,14 @@ dotnet format CacheHub.sln --verify-no-changes
 ```
 src/
   CacheHub.Core/         — Domain models, errors, identifiers, context, security, tokens, Semantic/LSP contracts
-  CacheHub.Storage/      — SQLite, 9 migrations, 3 repositories, FTS5 search, persistent cache store
-  CacheHub.Indexing/     — Directory scanning, ignore rules, file detection, 4-language parsers v2.0, RepoMap, reconciler
-  CacheHub.Context/      — Task parser, 9-source recall, 7-dim ranking, anchor chunking, budget validation, engine, cache
-  CacheHub.Gateway/      — Gateway server, Provider router, SSE streaming (separated from Core)
-  CacheHub.Cli/          — CLI commands (21 command groups, 55 subcommands)
-  CacheHub.Desktop/      — ASP.NET Core Web UI + Local API (17 routes, Bearer auth, 6 pages)
+  CacheHub.Storage/      — SQLite, 10 migrations, 3 repositories, FTS5 search, persistent cache store
+  CacheHub.Indexing/     — Directory scanning, ignore rules, file detection, 12-language regex parsers, RepoMap, reconciler
+  CacheHub.Context/      — Task parser, 12-source recall, ranking (ScoreHint+BM25), anchor chunking, budget validation, engine, cache
+  CacheHub.Gateway/      — Gateway server, multi-provider fallback, SSE streaming, Responses API streaming, persistent cache (separated from Core)
+  CacheHub.Cli/          — CLI commands (23 command groups incl. workflow/doctor, 12-language parser coverage)
+  CacheHub.Desktop/      — ASP.NET Core Web UI + Local API (18 routes incl. contextual-completion, Bearer auth)
 tests/
-  CacheHub.Tests/        — 771 tests (unit + integration + security + gate regression)
+  CacheHub.Tests/        — 832 tests (unit + integration + security + gate regression + V3 closure + parser fixture)
 integration/             — Universal Skill, 3 Agent examples, protocol docs, tutorials
 Docs/                    — INSTALL.md, USAGE.md, ARCHITECTURE.md, ADRs, specs
 ```

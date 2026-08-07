@@ -25,14 +25,14 @@ git checkout -b feat/your-feature
 ```
 src/
   CacheHub.Core/         领域模型、错误、标识符、安全、Tokenizer（无运行时依赖）
-  CacheHub.Storage/      SQLite、9 个迁移、3 个仓储、FTS5、CacheStore
-  CacheHub.Indexing/     扫描、忽略规则、4 语言解析器 v2.0、RepoMap、Reconciler
+  CacheHub.Storage/      SQLite、10 个迁移、3 个仓储、FTS5、CacheStore
+  CacheHub.Indexing/     扫描、忽略规则、12 语言正则解析器、RepoMap、Reconciler
   CacheHub.Context/      9 源召回、7 维排序、锚点分块、预算验证、引擎、缓存
-  CacheHub.Gateway/      Gateway Server、Provider 路由、SSE 流式（独立项目）
-  CacheHub.Cli/          CLI 入口（21 个命令组）
-  CacheHub.Desktop/      Web UI + Local API（17 路由 + Bearer 认证）
+  CacheHub.Gateway/      Gateway Server、多 Provider Fallback、SSE 流式、Responses API 流式、持久化缓存（独立项目）
+  CacheHub.Cli/          CLI 入口（23 个命令组，含 workflow/doctor/benchmark）
+  CacheHub.Desktop/      Web UI + Local API（18 路由 + Bearer 认证 + contextual-completion）
 tests/
-  CacheHub.Tests/        772 测试
+  CacheHub.Tests/        832 测试
 ```
 
 **依赖链**：Core ← Storage, Indexing, Gateway；Context ← Core + Storage + Indexing；CLI/Desktop ← 全部。不要引入循环依赖。
