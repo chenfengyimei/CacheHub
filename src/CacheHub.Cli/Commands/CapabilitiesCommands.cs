@@ -28,7 +28,11 @@ public static class CapabilitiesCommands
                 Capability.FileExport,
                 Capability.Cache,
                 Capability.Gateway,
-                Capability.Semantic),
+                Capability.Semantic,
+                // V5-W14: advertise repo + detect capabilities for Agent Workspace Skill V2
+                Capability.RepositoryClone,
+                Capability.RepositoryPull,
+                Capability.ProjectDetection),
             SchemaVersions = new Dictionary<string, int>
             {
                 ["contextPackage"] = 1,
@@ -64,6 +68,9 @@ public static class CapabilitiesCommands
             Console.WriteLine($"  Cache:           {cd.Capabilities.Cache}");
             Console.WriteLine($"  Gateway:         {cd.Capabilities.Gateway}");
             Console.WriteLine($"  Semantic:        {cd.Capabilities.Semantic}");
+            Console.WriteLine($"  RepositoryClone: {cd.Capabilities.RepositoryClone}");
+            Console.WriteLine($"  RepositoryPull:  {cd.Capabilities.RepositoryPull}");
+            Console.WriteLine($"  ProjectDetection: {cd.Capabilities.ProjectDetection}");
             Console.WriteLine($"  LSP:              {cd.Capabilities.Lsp}");
             Console.WriteLine();
             Console.WriteLine("Parser Coverage (12 languages):");
