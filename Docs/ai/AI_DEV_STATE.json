@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "project": "CacheHub",
   "currentPhase": "V3-TRUE-CLOSURE-COMPLETE",
-  "currentTask": "V3 complete + remaining items fixed: all P0 (3/3), all P1 (16/16), plus 3 remaining items: SqliteCacheStore wired into Gateway (persistent cache), Benchmark CLI uses real ContextEngine (no more DEMO), Semantic bound to Snapshot/ContentHash (stale prevention). 789 tests passing (17 V3 closure tests added).",
+  "currentTask": "V3 fully complete: all P0 (3/3), all P1 (16/16), plus 4 remaining items: Immutable snapshot for Refresh (Building→Active atomic switch), SqliteCacheStore wired into Gateway (persistent cache), Benchmark CLI uses real ContextEngine (no more DEMO), Semantic bound to Snapshot/ContentHash (stale prevention). 789 tests passing.",
   "repository": {
     "branch": "main",
     "dirty": false,
