@@ -232,6 +232,22 @@ public class RealPipelineIntegrationTests
 
             Assert.NotEmpty(payload.Items);
             Assert.True(payload.TotalEstimatedTokens > 0);
+
+            // 13. Verify: payload within budget (critical for core value proposition)
+            Assert.True(payload.TotalEstimatedTokens <= manifest.Budget.ContextHardLimit,
+                $"Payload tokens ({payload.TotalEstimatedTokens}) exceeded hard limit ({manifest.Budget.ContextHardLimit})");
+
+            // 14. Verify: manifest selected files match payload items (no phantom files)
+            var manifestPaths = manifest.SelectedFiles.Select(f => f.Path).ToHashSet();
+            var payloadPaths = payload.Items.Select(i => i.Path).ToHashSet();
+            Assert.Subset(manifestPaths, payloadPaths);
+
+            // 15. Verify: all payload items have non-empty content
+            foreach (var item in payload.Items)
+            {
+                Assert.True(!string.IsNullOrEmpty(item.Content),
+                    $"Payload item '{item.Path}' has empty content — potential ghost file");
+            }
         }
         finally
         {
