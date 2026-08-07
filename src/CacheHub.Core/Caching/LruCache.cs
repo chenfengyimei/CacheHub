@@ -13,6 +13,7 @@ public enum CacheType
     RepoMap,
     Context,
     ToolResult,
+    GatewayResponse,
 }
 
 /// <summary>

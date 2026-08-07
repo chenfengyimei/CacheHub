@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using CacheHub.Core.Caching;
 
 namespace CacheHub.Gateway;
 
@@ -14,6 +15,9 @@ public sealed record GatewayConfig
     public string Host { get; init; } = "127.0.0.1";
     public bool EnableCache { get; init; } = true;
     public bool EnableSingleFlight { get; init; } = true;
+
+    /// <summary>Optional persistent cache store. If null, uses in-memory Dictionary.</summary>
+    public ICacheStore? CacheStore { get; init; }
     public int MaxRequestSizeBytes { get; init; } = 10 * 1024 * 1024;
 
     /// <summary>Maximum concurrent in-flight provider requests (0 = unlimited).</summary>

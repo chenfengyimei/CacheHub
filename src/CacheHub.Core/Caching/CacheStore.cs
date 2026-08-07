@@ -14,6 +14,9 @@ public interface ICacheStore
     /// <summary>Puts a value into the cache with metadata.</summary>
     void Put(CacheEntry entry, byte[]? blob = null);
 
+    /// <summary>Retrieves the blob content for a cached entry.</summary>
+    byte[]? GetBlob(string key);
+
     /// <summary>Invalidates entries by dependency hash.</summary>
     void InvalidateByDependency(string dependencyHash);
 

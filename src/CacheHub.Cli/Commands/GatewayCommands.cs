@@ -1,5 +1,9 @@
+using CacheHub.Core.Caching;
 using CacheHub.Gateway;
 using CacheHub.Gateway.Server;
+using CacheHub.Storage;
+using CacheHub.Storage.Database;
+using CacheHub.Storage.Database.Migrations;
 
 namespace CacheHub.Cli.Commands;
 
@@ -51,11 +55,42 @@ public static class GatewayCommands
             return 1;
         }
 
+        // Create persistent cache store if a workspace DB path exists
+        ICacheStore? cacheStore = null;
+        var appData = new AppDataDirectory();
+        var gatewayDbPath = Path.Combine(appData.Root, "gateway", "cache.db");
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(gatewayDbPath)!);
+            var cacheFactory = new SqliteConnectionFactory(gatewayDbPath);
+            var cacheRunner = new MigrationRunner(cacheFactory, gatewayDbPath,
+            [
+                new Migration0001Initial(),
+                new Migration0002Fts5(),
+                new Migration0003ContextPackages(),
+                new Migration0004Feedback(),
+                new Migration0005ContextPackageDetails(),
+                new Migration0006SchemaV2(),
+                new Migration0007ContextPackageFields(),
+                new Migration0008ContextPackageFk(),
+                new Migration0009PersistentCache(),
+                new Migration0010RelationSourceColumn(),
+            ]);
+            cacheRunner.Migrate();
+            cacheStore = new Storage.Caching.SqliteCacheStore(cacheFactory, Path.Combine(appData.Root, "gateway", "blobs"));
+            Console.Error.WriteLine($"  Persistent cache: {gatewayDbPath}");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"  Warning: Persistent cache unavailable ({ex.Message}), using in-memory cache");
+        }
+
         var config = new GatewayConfig
         {
             ProviderBaseUrl = baseUrl,
             ProviderApiKey = apiKey ?? "",
             Port = portNum,
+            CacheStore = cacheStore,
         };
 
         Console.Error.WriteLine($"Starting CacheHub Gateway on http://127.0.0.1:{config.Port}");

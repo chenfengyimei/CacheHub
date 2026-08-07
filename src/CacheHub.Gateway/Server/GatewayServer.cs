@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Text.Json;
+using CacheHub.Core.Caching;
 using CacheHub.Core.Errors;
 using CacheHub.Gateway;
 
@@ -213,29 +214,56 @@ public sealed class GatewayServer : IDisposable
         // Check cache (only for non-streaming, cacheable requests)
         if (!isStream && _config.EnableCache && CacheSafetyChecker.IsCacheable(requestBody, model))
         {
-            RawCacheEntry? cachedEntry;
-            lock (_lock)
+            // Use persistent ICacheStore if available, otherwise fall back to in-memory
+            if (_config.CacheStore is not null)
             {
-                _cache.TryGetValue(requestHash, out cachedEntry);
-                if (cachedEntry is not null &&
-                    DateTimeOffset.UtcNow.Subtract(cachedEntry.CreatedAt) > CacheTtl)
+                var cached = _config.CacheStore.TryGet(requestHash, CacheType.GatewayResponse);
+                if (cached is not null)
                 {
-                    _cache.Remove(requestHash);
-                    cachedEntry = null;
+                    var bodyBytes = _config.CacheStore.GetBlob(requestHash);
+                    var cachedBody = bodyBytes is not null
+                        ? System.Text.Encoding.UTF8.GetString(bodyBytes)
+                        : "";
+                    if (!string.IsNullOrEmpty(cachedBody))
+                    {
+                        Interlocked.Increment(ref _cacheHits);
+                        sw.Stop();
+                        LogRequest("cached", model, sw.Elapsed, 200, true, 0, 0);
+                        var cachedBytes = System.Text.Encoding.UTF8.GetBytes(cachedBody);
+                        resp.StatusCode = 200;
+                        resp.ContentType = "application/json";
+                        resp.ContentLength64 = cachedBytes.Length;
+                        await resp.OutputStream.WriteAsync(cachedBytes, ct);
+                        return;
+                    }
                 }
             }
-
-            if (cachedEntry is not null)
+            else
             {
-                Interlocked.Increment(ref _cacheHits);
-                sw.Stop();
-                LogRequest("cached", model, sw.Elapsed, 200, true, 0, 0);
-                var cachedBytes = System.Text.Encoding.UTF8.GetBytes(cachedEntry.ResponseBody);
-                resp.StatusCode = 200;
-                resp.ContentType = "application/json";
-                resp.ContentLength64 = cachedBytes.Length;
-                await resp.OutputStream.WriteAsync(cachedBytes, ct);
-                return;
+                RawCacheEntry? cachedEntry;
+                lock (_lock)
+                {
+                    _cache.TryGetValue(requestHash, out cachedEntry);
+                    if (cachedEntry is not null &&
+                        DateTimeOffset.UtcNow.Subtract(cachedEntry.CreatedAt) > CacheTtl)
+                    {
+                        _cache.Remove(requestHash);
+                        cachedEntry = null;
+                    }
+                }
+
+                if (cachedEntry is not null)
+                {
+                    Interlocked.Increment(ref _cacheHits);
+                    sw.Stop();
+                    LogRequest("cached", model, sw.Elapsed, 200, true, 0, 0);
+                    var cachedBytes = System.Text.Encoding.UTF8.GetBytes(cachedEntry.ResponseBody);
+                    resp.StatusCode = 200;
+                    resp.ContentType = "application/json";
+                    resp.ContentLength64 = cachedBytes.Length;
+                    await resp.OutputStream.WriteAsync(cachedBytes, ct);
+                    return;
+                }
             }
         }
 
@@ -280,17 +308,35 @@ public sealed class GatewayServer : IDisposable
                 CacheSafetyChecker.IsCacheable(requestBody, model) &&
                 !CacheSafetyChecker.HasToolCalls(providerResponse.Body))
             {
-                lock (_lock)
+                if (_config.CacheStore is not null)
                 {
-                    _cache[requestHash] = new RawCacheEntry
+                    // Use persistent cache store
+                    var bodyBytes = System.Text.Encoding.UTF8.GetBytes(providerResponse.Body);
+                    _config.CacheStore.Put(new CacheEntry
                     {
-                        RequestHash = requestHash,
-                        ResponseBody = providerResponse.Body,
+                        Key = requestHash,
+                        Type = CacheType.GatewayResponse,
+                        Version = "gateway-v1",
                         CreatedAt = DateTimeOffset.UtcNow,
-                        Model = model,
-                        HasToolCalls = false,
-                    };
-                    EvictStaleCacheLocked();
+                        SizeBytes = bodyBytes.Length,
+                        TtlSeconds = (int)CacheTtl.TotalSeconds,
+                    }, bodyBytes);
+                }
+                else
+                {
+                    // Fall back to in-memory cache
+                    lock (_lock)
+                    {
+                        _cache[requestHash] = new RawCacheEntry
+                        {
+                            RequestHash = requestHash,
+                            ResponseBody = providerResponse.Body,
+                            CreatedAt = DateTimeOffset.UtcNow,
+                            Model = model,
+                            HasToolCalls = false,
+                        };
+                        EvictStaleCacheLocked();
+                    }
                 }
             }
 
