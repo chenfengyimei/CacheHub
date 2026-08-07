@@ -57,7 +57,8 @@
         <span id="version">v0.2.0-prealpha</span>
     </header>
     <nav>
-        <button class="active" onclick="showPage('workspaces')">Workspaces</button>
+        <button class="active" onclick="showPage('dashboard')">Dashboard</button>
+        <button onclick="showPage('workspaces')">Workspaces</button>
         <button onclick="showPage('context')">Context</button>
         <button onclick="showPage('history')">History</button>
         <button onclick="showPage('search')">Search</button>
@@ -66,15 +67,31 @@
         <button onclick="showPage('settings')">Settings</button>
     </nav>
     <main>
+        <!-- Dashboard Page -->
+        <div id="page-dashboard" class="page">
+            <div class="card">
+                <h2>Overview</h2>
+                <div id="dashboard-stats" style="display:flex;gap:2rem;flex-wrap:wrap"></div>
+            </div>
+            <div class="card">
+                <h2>Quick Start</h2>
+                <div style="display:flex;gap:1rem;flex-wrap:wrap">
+                    <button class="btn" onclick="showPage('workspaces')">Import Project</button>
+                    <button class="btn btn-secondary" onclick="showPage('context')">Build Context</button>
+                    <button class="btn btn-secondary" onclick="showPage('integration')">Check Capabilities</button>
+                </div>
+            </div>
+        </div>
         <!-- Workspaces Page -->
-        <div id="page-workspaces" class="page">
+        <div id="page-workspaces" class="page" style="display:none">
             <div class="card">
                 <h2>Import Workspace</h2>
                 <div class="row" style="margin-bottom: 0.5rem">
-                    <input type="text" id="import-path" placeholder="C:\projects\my-project" style="flex:1">
+                    <input type="text" id="import-path" placeholder="Local path or GitHub/Gitee URL" style="flex:1" onkeydown="if(event.key==='Enter')importWorkspace()">
                     <input type="text" id="import-name" placeholder="Name (optional)" style="width:200px">
                     <button class="btn" onclick="importWorkspace()">Import</button>
                 </div>
+                <p style="color:var(--text-dim);font-size:0.8rem;margin-top:0.5rem">Paste a GitHub/Gitee URL (e.g. https://github.com/owner/repo) or a local folder path.</p>
             </div>
             <div class="card">
                 <h2>Workspaces</h2>
@@ -91,7 +108,9 @@
             <div class="card">
                 <h2>Build Context</h2>
                 <div class="row" style="margin-bottom: 0.5rem">
-                    <input type="text" id="ctx-workspace" placeholder="Workspace ID" style="width:300px">
+                    <select id="ctx-workspace" style="width:300px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:0.5rem;border-radius:4px">
+                        <option value="">Select workspace...</option>
+                    </select>
                 </div>
                 <div class="row" style="margin-bottom: 0.5rem">
                     <input type="text" id="ctx-task" placeholder="Task description..." style="flex:1">
@@ -140,7 +159,9 @@
             <div class="card">
                 <h2>Context History</h2>
                 <div class="row" style="margin-bottom: 0.5rem">
-                    <input type="text" id="history-ws" placeholder="Workspace ID" style="width:300px">
+                    <select id="history-ws" style="width:300px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:0.5rem;border-radius:4px">
+                        <option value="">Select workspace...</option>
+                    </select>
                     <button class="btn" onclick="loadHistory()">Load</button>
                 </div>
                 <table>
@@ -166,7 +187,9 @@
                 <h2>Search Files</h2>
                 <div class="row" style="margin-bottom: 0.5rem">
                     <input type="text" id="search-query" placeholder="Search query..." style="flex:1" onkeydown="if(event.key==='Enter')searchFiles()">
-                    <input type="text" id="search-ws" placeholder="Workspace ID (optional)" style="width:200px">
+                    <select id="search-ws" style="width:200px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:0.5rem;border-radius:4px">
+                        <option value="">All workspaces</option>
+                    </select>
                     <button class="btn" onclick="searchFiles()">Search</button>
                 </div>
                 <div id="search-results"></div>
@@ -221,6 +244,8 @@ function showPage(id) {
     document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
     event.target.classList.add('active');
     if (id === 'settings') loadTokenStatus();
+    if (id === 'dashboard') loadDashboard();
+    if (id === 'workspaces') loadWorkspaces();
 }
 
 function saveToken() {
@@ -260,12 +285,65 @@ function esc(str) {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+// V5-W15: Populate workspace dropdown selectors from the workspace list
+function populateWorkspaceSelectors(workspaces) {
+    const selectors = ['ctx-workspace', 'history-ws', 'search-ws'];
+    selectors.forEach(id => {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        const current = sel.value;
+        sel.innerHTML = '';
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = id === 'search-ws' ? 'All workspaces' : 'Select workspace...';
+        sel.appendChild(opt);
+        workspaces.forEach(w => {
+            const o = document.createElement('option');
+            o.value = w.id;
+            o.textContent = w.name + ' (' + w.id.slice(0, 8) + '…)';
+            sel.appendChild(o);
+        });
+        sel.value = current;
+    });
+}
+
+// V5-W15: Load dashboard stats
+async function loadDashboard() {
+    try {
+        const stats = await api('/api/v1/stats');
+        const container = document.getElementById('dashboard-stats');
+        if (!container) return;
+        const items = [
+            { label: 'Total Requests', value: stats.totalRequests || 0 },
+            { label: 'Cache Hits', value: stats.cacheHits || 0 },
+            { label: 'Cache Hit Rate', value: ((stats.cacheHitRate || 0) * 100).toFixed(1) + '%' },
+            { label: 'Prompt Tokens', value: (stats.totalPromptTokens || 0).toLocaleString() },
+            { label: 'Completion Tokens', value: (stats.totalCompletionTokens || 0).toLocaleString() },
+            { label: 'Tokens Saved (Cache)', value: (stats.cachedTokensSaved || 0).toLocaleString() },
+            { label: 'Avg Latency (ms)', value: Math.round(stats.avgLatencyMs || 0) },
+        ];
+        container.innerHTML = items.map(i =>
+            '<div style="text-align:center"><div style="font-size:1.5rem;font-weight:bold;color:var(--accent)">' +
+            esc(i.value) + '</div><div style="font-size:0.8rem;color:var(--text-dim)">' + esc(i.label) + '</div></div>'
+        ).join('');
+    } catch (e) {
+        // Stats endpoint may not be available — show empty state
+        document.getElementById('dashboard-stats').innerHTML =
+            '<div style="color:var(--text-dim)">Start the Gateway to see usage statistics.</div>';
+    }
+}
+
 async function loadWorkspaces() {
     const list = await api('/api/v1/workspaces');
     const tbody = document.getElementById('ws-table-body');
     tbody.innerHTML = '';
-    if (!list.length) { document.getElementById('ws-empty').style.display = ''; return; }
+    if (!list.length) {
+        document.getElementById('ws-empty').style.display = '';
+        populateWorkspaceSelectors([]);
+        return;
+    }
     document.getElementById('ws-empty').style.display = 'none';
+    populateWorkspaceSelectors(list);
     list.forEach(w => {
         const tr = document.createElement('tr');
         const tdId = document.createElement('td'); tdId.textContent = w.id.slice(0,12) + '…'; tdId.title = w.id;
@@ -596,6 +674,7 @@ async function searchFiles() {
 }
 
 loadWorkspaces();
+loadDashboard();
 loadIntegration();
 </script>
 </body>
