@@ -810,6 +810,7 @@ static ICodeParser SelectParser(string filePath)
         ".py" => new PythonRegexParser(),
         ".go" => new GoRegexParser(),
         ".rs" => new RustRegexParser(),
+        ".java" => new JavaRegexParser(),
         ".md" or ".markdown" => new MarkdownParser(),
         _ => new TextParser(),
     };

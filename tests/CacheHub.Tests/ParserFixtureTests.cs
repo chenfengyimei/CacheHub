@@ -483,4 +483,78 @@ public class ParserFixtureTests
         Assert.Equal("1.0", parser.Version);
         Assert.Equal("rust-regex-baseline", parser.Id);
     }
+
+    // === Java Parser Tests ===
+
+    [Fact]
+    public void Java_ShouldExtractClassAndMethods()
+    {
+        var code = """
+            public class UserService {
+                public void handleRequest() {
+                    return;
+                }
+                private int computeScore(String data) {
+                    return 0;
+                }
+            }
+            """;
+        var result = new JavaRegexParser().Parse(code, "UserService.java");
+
+        Assert.Contains(result.Symbols, s => s.Name == "UserService" && s.Kind == SymbolKind.Class);
+        Assert.Contains(result.Symbols, s => s.Name == "handleRequest" && s.Kind == SymbolKind.Method);
+        Assert.Contains(result.Symbols, s => s.Name == "computeScore" && s.Kind == SymbolKind.Method);
+    }
+
+    [Fact]
+    public void Java_ShouldExtractImports()
+    {
+        var code = """
+            import java.util.List;
+            import java.io.File;
+            """;
+        var result = new JavaRegexParser().Parse(code, "Test.java");
+
+        Assert.Contains(result.Imports, i => i.Module == "java.util.List");
+        Assert.Contains(result.Imports, i => i.Module == "java.io.File");
+        Assert.Contains(result.Relations, r => r.Relation == "imports" && r.TargetName == "java.util.List");
+    }
+
+    [Fact]
+    public void Java_ShouldExtractInterfaceAndEnum()
+    {
+        var code = """
+            public interface Repository {
+                void save();
+            }
+            public enum Status {
+                ACTIVE, INACTIVE
+            }
+            """;
+        var result = new JavaRegexParser().Parse(code, "Types.java");
+
+        Assert.Contains(result.Symbols, s => s.Name == "Repository" && s.Kind == SymbolKind.Interface);
+        Assert.Contains(result.Symbols, s => s.Name == "Status" && s.Kind == SymbolKind.Enum);
+    }
+
+    [Fact]
+    public void Java_ShouldExtractExtendsAndImplements()
+    {
+        var code = """
+            public class UserController extends BaseController implements Serializable {
+            }
+            """;
+        var result = new JavaRegexParser().Parse(code, "UserController.java");
+
+        Assert.Contains(result.Relations, r => r.Relation == "inherits" && r.TargetName == "BaseController");
+        Assert.Contains(result.Relations, r => r.Relation == "implements" && r.TargetName == "Serializable");
+    }
+
+    [Fact]
+    public void Java_ParserVersion_ShouldBe1()
+    {
+        var parser = new JavaRegexParser();
+        Assert.Equal("1.0", parser.Version);
+        Assert.Equal("java-regex-baseline", parser.Id);
+    }
 }
