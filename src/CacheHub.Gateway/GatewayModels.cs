@@ -167,6 +167,10 @@ public sealed record RawCacheEntry
     public required string Model { get; init; }
     public bool HasToolCalls { get; init; }
     public bool HasFunctionCalls { get; init; }
+    /// <summary>Prompt tokens from the original response's usage, used for cache-saved tracking.</summary>
+    public int PromptTokens { get; init; }
+    /// <summary>Completion tokens from the original response's usage.</summary>
+    public int CompletionTokens { get; init; }
 }
 
 /// <summary>

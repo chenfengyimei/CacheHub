@@ -256,7 +256,8 @@ public sealed class GatewayServer : IDisposable
                 {
                     Interlocked.Increment(ref _cacheHits);
                     sw.Stop();
-                    LogRequest("cached", model, sw.Elapsed, 200, true, 0, 0);
+                    // Track saved tokens from the original response
+                    LogRequest("cached", model, sw.Elapsed, 200, true, cachedEntry.PromptTokens, cachedEntry.CompletionTokens);
                     var cachedBytes = System.Text.Encoding.UTF8.GetBytes(cachedEntry.ResponseBody);
                     resp.StatusCode = 200;
                     resp.ContentType = "application/json";
@@ -334,6 +335,8 @@ public sealed class GatewayServer : IDisposable
                             CreatedAt = DateTimeOffset.UtcNow,
                             Model = model,
                             HasToolCalls = false,
+                            PromptTokens = promptTokens,
+                            CompletionTokens = completionTokens,
                         };
                         EvictStaleCacheLocked();
                     }
@@ -388,13 +391,14 @@ public sealed class GatewayServer : IDisposable
                 ForwardAllowedHeaders(response.Headers, resp);
 
                 // Stream the response body to client while parsing SSE events for Usage
+                var streamSw = System.Diagnostics.Stopwatch.StartNew();
                 using var stream = await response.Content.ReadAsStreamAsync(ct);
                 var (promptTokens, completionTokens) = await StreamAndParseUsageAsync(stream, resp.OutputStream, ct);
                 resp.OutputStream.Flush();
+                streamSw.Stop();
 
-                // Log streaming request with parsed usage
-                var sw2 = System.Diagnostics.Stopwatch.StartNew();
-                LogRequest("chat/completions", model, sw2.Elapsed, statusCode, false, promptTokens, completionTokens);
+                // Log streaming request with parsed usage and true latency
+                LogRequest("chat/completions", model, streamSw.Elapsed, statusCode, false, promptTokens, completionTokens, streaming: true);
                 return;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -671,7 +675,7 @@ public sealed class GatewayServer : IDisposable
         }
     }
 
-    private void LogRequest(string endpoint, string model, TimeSpan latency, int statusCode, bool cached, int promptTokens, int completionTokens)
+    private void LogRequest(string endpoint, string model, TimeSpan latency, int statusCode, bool cached, int promptTokens, int completionTokens, bool streaming = false)
     {
         lock (_lock)
         {
@@ -682,7 +686,7 @@ public sealed class GatewayServer : IDisposable
                 Endpoint = endpoint,
                 Usage = new ModelUsage { PromptTokens = promptTokens, CompletionTokens = completionTokens, TotalTokens = promptTokens + completionTokens },
                 Cached = cached,
-                Streaming = false,
+                Streaming = streaming,
                 StatusCode = statusCode,
                 LatencyMs = (long)latency.TotalMilliseconds,
             });
