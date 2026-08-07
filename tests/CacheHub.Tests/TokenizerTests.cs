@@ -70,7 +70,8 @@ public class TokenizerTests
 
         var tokenizer = registry.GetForModel("unknown-model");
 
-        Assert.Equal("char-estimate", tokenizer.Id);
+        // Default is now CodeTokenizer (more accurate than chars/4 for code)
+        Assert.Equal("code-tokenizer", tokenizer.Id);
     }
 
     [Fact]

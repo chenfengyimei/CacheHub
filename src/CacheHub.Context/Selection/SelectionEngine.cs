@@ -82,7 +82,7 @@ public sealed class SelectionEngine
             {
                 // Try falling back to Metadata mode (path + size only)
                 mode = SelectionMode.Metadata;
-                (actualTokens, ranges) = ApplyMode(candidate.Path, content, mode, effectiveBudget - totalTokens);
+                (actualTokens, ranges) = ApplyMode(candidate.Path, content, mode, effectiveBudget - totalTokens, null, tokenizer);
             }
 
             // If still 0 tokens, exclude as ghost file
@@ -103,12 +103,12 @@ public sealed class SelectionEngine
                 if (mode != SelectionMode.Metadata)
                 {
                     mode = SelectionMode.Chunks;
-                    (actualTokens, ranges) = ApplyMode(candidate.Path, content, mode, effectiveBudget - totalTokens, candidate.Anchors);
+                    (actualTokens, ranges) = ApplyMode(candidate.Path, content, mode, effectiveBudget - totalTokens, candidate.Anchors, tokenizer);
 
                     if (actualTokens == 0 || totalTokens + actualTokens > effectiveBudget)
                     {
                         mode = SelectionMode.Outline;
-                        (actualTokens, ranges) = ApplyMode(candidate.Path, content, mode, effectiveBudget - totalTokens);
+                        (actualTokens, ranges) = ApplyMode(candidate.Path, content, mode, effectiveBudget - totalTokens, null, tokenizer);
                     }
                 }
 

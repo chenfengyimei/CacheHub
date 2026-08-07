@@ -110,8 +110,8 @@ public static class DefaultTokenBudgetPolicy
             ContextTarget = contextTarget,
             ContextHardLimit = contextHardLimit,
             SafetyMargin = safetyMargin,
-            Tokenizer = "rough-estimate",
-            TokenizerVersion = "v2",
+            Tokenizer = "code-tokenizer",
+            TokenizerVersion = "v1",
         };
     }
 }

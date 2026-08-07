@@ -89,7 +89,7 @@ public sealed partial class CodeTokenizer : ITokenizer
 
 /// <summary>
 /// Tokenizer registry: maps model IDs to tokenizers.
-/// Falls back to char-estimate when no match is found.
+/// Falls back to CodeTokenizer when no match is found (better than chars/4 for code).
 /// </summary>
 public sealed class TokenizerRegistry
 {
@@ -98,7 +98,38 @@ public sealed class TokenizerRegistry
 
     public TokenizerRegistry(ITokenizer? defaultTokenizer = null)
     {
-        _default = defaultTokenizer ?? new CharEstimateTokenizer();
+        // Default to CodeTokenizer — more accurate than chars/4 for source code
+        _default = defaultTokenizer ?? new CodeTokenizer();
+    }
+
+    /// <summary>
+    /// Creates a registry with common model patterns pre-registered.
+    /// Uses CodeTokenizer for code-oriented models and WordBoundaryTokenizer for text models.
+    /// </summary>
+    public static TokenizerRegistry CreateWithDefaults()
+    {
+        var registry = new TokenizerRegistry();
+
+        // OpenAI models — GPT-4/3.5 use cl100k_base BPE, ~3.5 chars/token for English code
+        registry.Register("gpt-4", new CodeTokenizer());
+        registry.Register("gpt-3.5", new CodeTokenizer());
+        registry.Register("gpt-4o", new CodeTokenizer());
+        registry.Register("o1", new CodeTokenizer());
+        registry.Register("o3", new CodeTokenizer());
+
+        // Anthropic Claude — ~3.5 chars/token for code
+        registry.Register("claude", new CodeTokenizer());
+
+        // Google Gemini — ~4 chars/token
+        registry.Register("gemini", new CodeTokenizer());
+
+        // DeepSeek — similar to GPT
+        registry.Register("deepseek", new CodeTokenizer());
+
+        // Qwen — Chinese-heavy, ~2.5 chars/token
+        registry.Register("qwen", new CodeTokenizer());
+
+        return registry;
     }
 
     /// <summary>

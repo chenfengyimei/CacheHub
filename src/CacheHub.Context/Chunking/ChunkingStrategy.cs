@@ -56,14 +56,14 @@ public sealed class ChunkingStrategy
 
         return mode switch
         {
-            SelectionMode.Full => ChunkFull(filePath, content, lines, totalTokens, maxTokens),
+            SelectionMode.Full => ChunkFull(filePath, content, lines, totalTokens, maxTokens, CountTokens),
             SelectionMode.Chunks when anchors is not null && anchors.Count > 0
-                => ChunkByAnchors(filePath, lines, anchors, maxTokens),
-            SelectionMode.Chunks => ChunkByLines(filePath, lines, maxTokens),
-            SelectionMode.Outline => ChunkOutline(filePath, lines),
-            SelectionMode.DeterministicSummary => ChunkSummary(filePath, lines),
-            SelectionMode.Metadata => ChunkMetadata(filePath, lines, totalTokens),
-            _ => ChunkByLines(filePath, lines, maxTokens),
+                => ChunkByAnchors(filePath, lines, anchors, maxTokens, CountTokens),
+            SelectionMode.Chunks => ChunkByLines(filePath, lines, maxTokens, CountTokens),
+            SelectionMode.Outline => ChunkOutline(filePath, lines, CountTokens),
+            SelectionMode.DeterministicSummary => ChunkSummary(filePath, lines, CountTokens),
+            SelectionMode.Metadata => ChunkMetadata(filePath, lines, totalTokens, CountTokens),
+            _ => ChunkByLines(filePath, lines, maxTokens, CountTokens),
         };
     }
 
@@ -73,7 +73,8 @@ public sealed class ChunkingStrategy
     /// Overlapping chunks are merged. Only anchored regions are included.
     /// </summary>
     private static List<FileChunk> ChunkByAnchors(
-        string path, string[] lines, IReadOnlyList<LineAnchor> anchors, int maxTokens)
+        string path, string[] lines, IReadOnlyList<LineAnchor> anchors, int maxTokens,
+        Func<string, int> countTokens)
     {
         // Create expanded ranges around each anchor
         var ranges = new List<(int start, int end, string source)>();
@@ -110,7 +111,7 @@ public sealed class ChunkingStrategy
         foreach (var (start, end, source) in merged)
         {
             var content = string.Join('\n', lines.Skip(start).Take(end - start + 1));
-            var tokens = EstimateTokens(content);
+            var tokens = countTokens(content);
 
             if (usedTokens + tokens > maxTokens)
             {
@@ -121,7 +122,7 @@ public sealed class ChunkingStrategy
                 if (linesToFit < 5) break;
                 var actualEnd = Math.Min(end, start + linesToFit);
                 content = string.Join('\n', lines.Skip(start).Take(actualEnd - start + 1));
-                tokens = EstimateTokens(content);
+                tokens = countTokens(content);
             }
 
             chunks.Add(new FileChunk
@@ -139,17 +140,17 @@ public sealed class ChunkingStrategy
         return chunks;
     }
 
-    private static List<FileChunk> ChunkFull(string path, string content, string[] lines, int totalTokens, int maxTokens)
+    private static List<FileChunk> ChunkFull(string path, string content, string[] lines, int totalTokens, int maxTokens, Func<string, int> countTokens)
     {
         if (totalTokens <= maxTokens)
         {
             return [new FileChunk { Path = path, StartLine = 1, EndLine = lines.Length, Content = content, EstimatedTokens = totalTokens }];
         }
         // If too large, fall back to chunking
-        return ChunkByLines(path, lines, maxTokens);
+        return ChunkByLines(path, lines, maxTokens, countTokens);
     }
 
-    private static List<FileChunk> ChunkByLines(string path, string[] lines, int maxTokens)
+    private static List<FileChunk> ChunkByLines(string path, string[] lines, int maxTokens, Func<string, int> countTokens)
     {
         var chunks = new List<FileChunk>();
         var chunkSize = DetermineChunkSize(lines.Length, maxTokens);
@@ -159,7 +160,7 @@ public sealed class ChunkingStrategy
         {
             var end = Math.Min(i + chunkSize, lines.Length);
             var content = string.Join('\n', lines.Skip(i).Take(end - i));
-            var tokens = EstimateTokens(content);
+            var tokens = countTokens(content);
 
             chunks.Add(new FileChunk
             {
@@ -175,7 +176,7 @@ public sealed class ChunkingStrategy
         return chunks;
     }
 
-    private static List<FileChunk> ChunkOutline(string path, string[] lines)
+    private static List<FileChunk> ChunkOutline(string path, string[] lines, Func<string, int> countTokens)
     {
         var outlineLines = new List<string>();
         var lineNums = new List<int>();
@@ -201,12 +202,12 @@ public sealed class ChunkingStrategy
                 StartLine = lineNums.FirstOrDefault(),
                 EndLine = lineNums.LastOrDefault(),
                 Content = content,
-                EstimatedTokens = EstimateTokens(content),
+                EstimatedTokens = countTokens(content),
             },
         ];
     }
 
-    private static List<FileChunk> ChunkSummary(string path, string[] lines)
+    private static List<FileChunk> ChunkSummary(string path, string[] lines, Func<string, int> countTokens)
     {
         var head = lines.Take(Math.Min(20, lines.Length)).ToList();
         var imports = lines.Where(l => l.Contains("import ", StringComparison.Ordinal) || l.Contains("using ", StringComparison.Ordinal)).Take(10).ToList();
@@ -221,12 +222,12 @@ public sealed class ChunkingStrategy
                 StartLine = 1,
                 EndLine = lines.Length,
                 Content = content,
-                EstimatedTokens = EstimateTokens(content),
+                EstimatedTokens = countTokens(content),
             },
         ];
     }
 
-    private static List<FileChunk> ChunkMetadata(string path, string[] lines, int totalTokens)
+    private static List<FileChunk> ChunkMetadata(string path, string[] lines, int totalTokens, Func<string, int> countTokens)
     {
         var content = $"Path: {path}\nLines: {lines.Length}\nEstTokens: {totalTokens}";
         return
@@ -237,7 +238,7 @@ public sealed class ChunkingStrategy
                 StartLine = 0,
                 EndLine = 0,
                 Content = content,
-                EstimatedTokens = EstimateTokens(content),
+                EstimatedTokens = countTokens(content),
             },
         ];
     }

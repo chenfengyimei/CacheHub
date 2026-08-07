@@ -47,7 +47,7 @@ public sealed class ContextEngine
 
     public ContextEngine(TokenizerRegistry? tokenizers = null, SecurityPolicy? securityPolicy = null, ContextPackageCache? cache = null)
     {
-        _tokenizers = tokenizers ?? new TokenizerRegistry();
+        _tokenizers = tokenizers ?? TokenizerRegistry.CreateWithDefaults();
         _securityEnforcer = securityPolicy is not null ? new SecurityPolicyEnforcer(securityPolicy) : null;
         _cache = cache;
     }

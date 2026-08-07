@@ -46,7 +46,7 @@ public class ContextEngineIntegrationTests
             path => "",
             path => "sha256:abc");
 
-        Assert.Equal("char-estimate", manifest.Budget.Tokenizer);
+        Assert.Equal("code-tokenizer", manifest.Budget.Tokenizer);
     }
 
     [Fact]

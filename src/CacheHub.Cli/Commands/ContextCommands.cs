@@ -90,7 +90,7 @@ public static class ContextCommands
         }
 
         // Build tokenizer registry
-        var tokenizers = new Core.Tokens.TokenizerRegistry();
+        var tokenizers = Core.Tokens.TokenizerRegistry.CreateWithDefaults();
         var cache = new ContextPackageCache();
 
         var engine = new ContextEngine(tokenizers, secPolicy, cache);
