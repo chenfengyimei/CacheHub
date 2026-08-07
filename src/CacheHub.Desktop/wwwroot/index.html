@@ -21,21 +21,34 @@
         main { padding: 2rem; max-width: 1200px; margin: 0 auto; }
         .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; }
         .card h2 { font-size: 1.1rem; margin-bottom: 1rem; }
+        .card h3 { font-size: 0.95rem; margin: 0.75rem 0 0.5rem; color: var(--text-dim); }
         table { width: 100%; border-collapse: collapse; }
         th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid var(--border); font-size: 0.85rem; }
         th { color: var(--text-dim); font-weight: 600; }
         input, button { font-family: inherit; font-size: 0.9rem; }
         input[type=text] { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 0.5rem; border-radius: 4px; width: 100%; }
+        textarea { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 0.5rem; border-radius: 4px; width: 100%; font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 0.85rem; resize: vertical; }
         .btn { background: var(--accent); color: #fff; border: none; padding: 0.5rem 1.5rem; border-radius: 4px; cursor: pointer; }
         .btn:hover { opacity: 0.9; }
         .btn-secondary { background: var(--primary); }
+        .btn-success { background: var(--success); }
         .status-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; }
         .status-Ready { background: var(--success); color: #fff; }
         .status-Imported { background: var(--warning); color: #fff; }
         .status-Indexing { background: var(--accent); color: #fff; }
+        .status-Building { background: var(--accent); color: #fff; }
+        .status-Active { background: var(--success); color: #fff; }
+        .status-Failed { background: #c0392b; color: #fff; }
         .empty { text-align: center; padding: 2rem; color: var(--text-dim); }
         .row { display: flex; gap: 0.5rem; align-items: center; }
-        #toast { position: fixed; bottom: 2rem; right: 2rem; background: var(--accent); color: #fff; padding: 0.75rem 1.5rem; border-radius: 4px; display: none; }
+        .alert { padding: 0.75rem 1rem; border-radius: 4px; margin-bottom: 0.5rem; font-size: 0.85rem; }
+        .alert-warning { background: rgba(249,178,8,0.15); border: 1px solid var(--warning); color: var(--warning); }
+        .alert-error { background: rgba(192,57,43,0.15); border: 1px solid #c0392b; color: #e74c3c; }
+        .alert-success { background: rgba(78,204,163,0.15); border: 1px solid var(--success); color: var(--success); }
+        .progress-bar { background: var(--bg); border-radius: 4px; height: 8px; overflow: hidden; margin-top: 0.5rem; }
+        .progress-fill { background: var(--accent); height: 100%; transition: width 0.5s; }
+        .code-preview { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0.75rem; max-height: 400px; overflow-y: auto; font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 0.8rem; white-space: pre-wrap; }
+        #toast { position: fixed; bottom: 2rem; right: 2rem; background: var(--accent); color: #fff; padding: 0.75rem 1.5rem; border-radius: 4px; display: none; z-index: 1000; }
     </style>
 </head>
 <body>
@@ -48,6 +61,7 @@
         <button onclick="showPage('context')">Context</button>
         <button onclick="showPage('history')">History</button>
         <button onclick="showPage('search')">Search</button>
+        <button onclick="showPage('jobs')">Jobs</button>
         <button onclick="showPage('integration')">Integration</button>
         <button onclick="showPage('settings')">Settings</button>
     </nav>
@@ -89,14 +103,34 @@
                 <div id="ctx-manifest"></div>
                 <div class="row" style="margin-top:1rem">
                     <button class="btn btn-secondary" onclick="explainContext()">Explain</button>
+                    <button class="btn btn-secondary" onclick="previewPayload()">Preview Payload</button>
                     <button class="btn btn-secondary" onclick="showExpandDialog()">Expand</button>
+                    <button class="btn btn-success" onclick="exportWorkspace()">Export</button>
+                    <button class="btn" onclick="showFeedbackDialog()">Feedback</button>
                 </div>
                 <div id="ctx-explain" style="margin-top:1rem;display:none"></div>
+                <div id="ctx-preview" style="margin-top:1rem;display:none"></div>
                 <div id="ctx-expand" style="margin-top:1rem;display:none">
                     <div class="row" style="margin-bottom:0.5rem">
                         <input type="text" id="expand-file" placeholder="File path (e.g. src/auth.ts)" style="flex:1">
                         <button class="btn" onclick="expandContext()">Expand</button>
                     </div>
+                </div>
+                <div id="ctx-feedback" style="margin-top:1rem;display:none">
+                    <h3>Submit Feedback</h3>
+                    <div style="margin-bottom:0.5rem">
+                        <label style="color:var(--text-dim);font-size:0.85rem">Files actually read (one per line):</label>
+                        <textarea id="feedback-files" rows="3" placeholder="src/auth.ts&#10;src/user.ts"></textarea>
+                    </div>
+                    <div class="row" style="margin-bottom:0.5rem">
+                        <label style="color:var(--text-dim);font-size:0.85rem">Task completed?</label>
+                        <input type="checkbox" id="feedback-completed" checked>
+                    </div>
+                    <div class="row" style="margin-bottom:0.5rem">
+                        <label style="color:var(--text-dim);font-size:0.85rem">Missing context?</label>
+                        <input type="checkbox" id="feedback-missing">
+                    </div>
+                    <button class="btn" onclick="submitFeedback()">Submit Feedback</button>
                 </div>
             </div>
         </div>
@@ -114,6 +148,15 @@
                     <tbody id="history-table-body"></tbody>
                 </table>
                 <div id="history-empty" class="empty" style="display:none">No context packages found.</div>
+            </div>
+        </div>
+
+        <!-- Jobs Page -->
+        <div id="page-jobs" class="page" style="display:none">
+            <div class="card">
+                <h2>Background Jobs</h2>
+                <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:1rem">Track index builds and other background tasks.</p>
+                <div id="jobs-list"></div>
             </div>
         </div>
 
@@ -270,11 +313,87 @@ async function buildIndex(id) {
     try {
         const result = await api('/api/v1/workspaces/' + id + '/index', { method: 'POST' });
         toast('Index build started: ' + esc(result.snapshotId));
-        // Poll for completion after a delay
-        setTimeout(() => { loadWorkspaces(); toast('Refresh workspace status'); }, 5000);
+        // Add to jobs tracker
+        addJob(id, result.snapshotId, 'Index Build');
+        // Poll for completion
+        pollIndexStatus(id, result.snapshotId);
     } catch (e) {
-        toast('Index build failed');
+        toast('Index build failed: ' + esc(e.message || 'unknown error'));
     }
+}
+
+async function pollIndexStatus(workspaceId, snapshotId) {
+    const maxAttempts = 60;
+    let attempts = 0;
+    const poll = async () => {
+        attempts++;
+        if (attempts > maxAttempts) {
+            updateJob(workspaceId, snapshotId, 'failed', 'Timed out');
+            toast('Index build timed out');
+            return;
+        }
+        try {
+            const ws = await api('/api/v1/workspaces/' + workspaceId + '/status');
+            if (ws.status === 'Ready') {
+                updateJob(workspaceId, snapshotId, 'completed', 'Index ready');
+                toast('Index build completed');
+                loadWorkspaces();
+                return;
+            }
+            if (ws.status === 'Failed' || ws.status === 'Error') {
+                updateJob(workspaceId, snapshotId, 'failed', 'Build failed');
+                toast('Index build failed');
+                return;
+            }
+            updateJob(workspaceId, snapshotId, 'running', 'Building... (attempt ' + attempts + ')');
+            setTimeout(poll, 2000);
+        } catch (e) {
+            setTimeout(poll, 2000);
+        }
+    };
+    setTimeout(poll, 2000);
+}
+
+// Job tracking
+const activeJobs = {};
+function addJob(workspaceId, jobId, type) {
+    activeJobs[workspaceId + ':' + jobId] = { workspaceId, jobId, type, status: 'running', message: 'Started' };
+    renderJobs();
+}
+function updateJob(workspaceId, jobId, status, message) {
+    const key = workspaceId + ':' + jobId;
+    if (activeJobs[key]) {
+        activeJobs[key].status = status;
+        activeJobs[key].message = message;
+        renderJobs();
+    }
+}
+function renderJobs() {
+    const el = document.getElementById('jobs-list');
+    const jobs = Object.values(activeJobs);
+    if (!jobs.length) { el.innerHTML = '<p class="empty">No active jobs.</p>'; return; }
+    el.innerHTML = '';
+    jobs.forEach(j => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.style.marginBottom = '0.5rem';
+        const typeEl = document.createElement('strong');
+        typeEl.textContent = j.type;
+        card.appendChild(typeEl);
+        const wsEl = document.createElement('p');
+        wsEl.style.cssText = 'color:var(--text-dim);font-size:0.85rem;margin:0.25rem 0';
+        wsEl.textContent = 'Workspace: ' + j.workspaceId.slice(0,12) + '… | Job: ' + j.jobId.slice(0,12) + '…';
+        card.appendChild(wsEl);
+        const statusBadge = document.createElement('span');
+        statusBadge.className = 'status-badge status-' + (j.status === 'running' ? 'Building' : j.status === 'completed' ? 'Ready' : 'Failed');
+        statusBadge.textContent = j.status;
+        card.appendChild(statusBadge);
+        const msgEl = document.createElement('p');
+        msgEl.style.cssText = 'color:var(--text-dim);font-size:0.8rem;margin-top:0.25rem';
+        msgEl.textContent = j.message;
+        card.appendChild(msgEl);
+        el.appendChild(card);
+    });
 }
 
 async function buildContext() {
@@ -282,23 +401,40 @@ async function buildContext() {
     const task = document.getElementById('ctx-task').value;
     if (!ws || !task) { toast('Workspace ID and task are required'); return; }
     toast('Building context...');
-    const manifest = await api('/api/v1/context/build', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ workspaceId: ws, task })
-    });
-    document.getElementById('ctx-result').style.display = '';
-    const el = document.getElementById('ctx-manifest');
-    el.dataset.ctxId = manifest.id;
-    el.innerHTML = `
-        <p><strong>ID:</strong> ${esc(manifest.id)}</p>
-        <p><strong>Budget:</strong> ${esc(manifest.budget.actualEstimate)} / ${esc(manifest.budget.contextTarget)} (hard: ${esc(manifest.budget.contextHardLimit)})</p>
-        <h3>Selected Files (${esc(manifest.selectedFiles.length)})</h3>
-        <table><thead><tr><th>Path</th><th>Mode</th><th>Score</th><th>Reasons</th></tr></thead><tbody>
-        ${manifest.selectedFiles.map(f => `<tr><td>${esc(f.path)}</td><td>${esc(f.mode)}</td><td>${esc(f.score.toFixed(2))}</td><td>${esc(f.reasons.join(', '))}</td></tr>`).join('')}
-        </tbody></table>
-        ${manifest.excludedCandidates.length ? `<h3>Excluded (${esc(manifest.excludedCandidates.length)})</h3><table><thead><tr><th>Path</th><th>Score</th><th>Reason</th></tr></thead><tbody>${manifest.excludedCandidates.map(e => `<tr><td>${esc(e.path)}</td><td>${esc(e.score.toFixed(2))}</td><td>${esc(e.reason)}</td></tr>`).join('')}</tbody></table>` : ''}
-    `;
-    toast('Context built');
+    try {
+        const manifest = await api('/api/v1/context/build', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ workspaceId: ws, task })
+        });
+        document.getElementById('ctx-result').style.display = '';
+        const el = document.getElementById('ctx-manifest');
+        el.dataset.ctxId = manifest.id;
+        let html = '';
+        // Security alerts
+        if (manifest.safety && !manifest.safety.secretsScanPassed) {
+            html += '<div class="alert alert-warning">⚠ Security: Secrets detected in selected files. Review before sending to AI.</div>';
+        }
+        if (manifest.safety && !manifest.safety.cloudSendAllowed) {
+            html += '<div class="alert alert-error">⛔ Cloud send blocked by security policy.</div>';
+        }
+        html += `
+            <p><strong>ID:</strong> ${esc(manifest.id)}</p>
+            <p><strong>Budget:</strong> ${esc(manifest.budget.actualEstimate)} / ${esc(manifest.budget.contextTarget)} (hard: ${esc(manifest.budget.contextHardLimit)})</p>
+            <h3>Selected Files (${esc(manifest.selectedFiles.length)})</h3>
+            <table><thead><tr><th>Path</th><th>Mode</th><th>Score</th><th>Reasons</th></tr></thead><tbody>
+            ${manifest.selectedFiles.map(f => `<tr><td>${esc(f.path)}</td><td>${esc(f.mode)}</td><td>${esc((f.score || 0).toFixed(2))}</td><td>${esc((f.reasons || []).join(', '))}</td></tr>`).join('')}
+            </tbody></table>
+            ${manifest.excludedCandidates && manifest.excludedCandidates.length ? `<h3>Excluded (${esc(manifest.excludedCandidates.length)})</h3><table><thead><tr><th>Path</th><th>Score</th><th>Reason</th></tr></thead><tbody>${manifest.excludedCandidates.map(e => `<tr><td>${esc(e.path)}</td><td>${esc((e.score || 0).toFixed(2))}</td><td>${esc(e.reason)}</td></tr>`).join('')}</tbody></table>` : ''}
+        `;
+        el.innerHTML = html;
+        // Hide sub-sections
+        document.getElementById('ctx-explain').style.display = 'none';
+        document.getElementById('ctx-preview').style.display = 'none';
+        document.getElementById('ctx-feedback').style.display = 'none';
+        toast('Context built');
+    } catch (e) {
+        toast('Context build failed: ' + esc(e.message || 'error'));
+    }
 }
 
 async function explainContext() {
@@ -329,7 +465,77 @@ async function expandContext() {
         method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ file })
     });
-    toast(`Expanded: ${result.additionalTokens} tokens added`);
+    toast('Expanded: ' + result.additionalTokens + ' tokens added');
+}
+
+async function previewPayload() {
+    const id = document.getElementById('ctx-manifest').dataset.ctxId;
+    if (!id) { toast('Build a context first'); return; }
+    toast('Loading payload...');
+    try {
+        const payload = await api('/api/v1/context/' + id + '/payload');
+        const el = document.getElementById('ctx-preview');
+        el.style.display = '';
+        let html = '<h3>Payload Preview (' + esc(payload.totalEstimatedTokens) + ' tokens, ' + esc(payload.items.length) + ' items)</h3>';
+        if (payload.items && payload.items.length > 0) {
+            payload.items.forEach((item, i) => {
+                html += '<div style="margin-bottom:0.75rem">';
+                html += '<div class="row" style="margin-bottom:0.25rem"><strong>' + esc(item.path) + '</strong>';
+                html += '<span class="status-badge status-Ready">' + esc(item.mode) + '</span></div>';
+                const content = item.content || '';
+                const preview = content.length > 500 ? content.substring(0, 500) + '\n... (' + content.length + ' chars total)' : content;
+                html += '<div class="code-preview">' + esc(preview) + '</div>';
+                html += '</div>';
+            });
+        } else {
+            html += '<p class="empty">No payload items.</p>';
+        }
+        el.innerHTML = html;
+        toast('Payload loaded');
+    } catch (e) {
+        toast('Failed to load payload: ' + esc(e.message || 'error'));
+    }
+}
+
+async function exportWorkspace() {
+    const id = document.getElementById('ctx-manifest').dataset.ctxId;
+    if (!id) { toast('Build a context first'); return; }
+    // Get workspace ID from the manifest
+    const wsInput = document.getElementById('ctx-workspace').value;
+    if (!wsInput) { toast('Workspace ID required'); return; }
+    toast('Exporting...');
+    try {
+        const result = await api('/api/v1/workspaces/' + wsInput + '/export', { method: 'POST' });
+        toast('Exported to: ' + esc(result.exportedTo));
+    } catch (e) {
+        toast('Export failed: ' + esc(e.message || 'error'));
+    }
+}
+
+function showFeedbackDialog() {
+    const id = document.getElementById('ctx-manifest').dataset.ctxId;
+    if (!id) { toast('Build a context first'); return; }
+    document.getElementById('ctx-feedback').style.display = '';
+}
+
+async function submitFeedback() {
+    const id = document.getElementById('ctx-manifest').dataset.ctxId;
+    if (!id) { toast('No context package'); return; }
+    const filesText = document.getElementById('feedback-files').value.trim();
+    const files = filesText ? filesText.split('\n').map(f => f.trim()).filter(Boolean) : [];
+    const completed = document.getElementById('feedback-completed').checked;
+    const missing = document.getElementById('feedback-missing').checked;
+    toast('Submitting feedback...');
+    try {
+        await api('/api/v1/context/' + id + '/feedback', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ clientId: 'desktop-gui', filesActuallyRead: files, taskCompleted: completed, missingContextReported: missing })
+        });
+        toast('Feedback submitted');
+        document.getElementById('ctx-feedback').style.display = 'none';
+    } catch (e) {
+        toast('Feedback failed: ' + esc(e.message || 'error'));
+    }
 }
 
 async function loadIntegration() {
