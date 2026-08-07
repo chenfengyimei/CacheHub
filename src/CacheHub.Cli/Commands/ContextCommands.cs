@@ -155,7 +155,7 @@ public static class ContextCommands
 
         // Build tokenizer registry
         var tokenizers = Core.Tokens.TokenizerRegistry.CreateWithDefaults();
-        var cache = new ContextPackageCache();
+        var cache = CreateContextCache(factory);
 
         var engine = new ContextEngine(tokenizers, secPolicy, cache);
 
@@ -743,4 +743,42 @@ public static class ContextCommands
 
     private static bool HasFlag(string[] args, string flag) =>
         args.Contains(flag, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Creates a ContextPackageCache with persistent SQLite backend when available.
+    /// Survives CLI process restart: context build on the same workspace+task
+    /// hits cache without re-running the full Recall→Ranking→Selection pipeline.
+    /// </summary>
+    internal static ContextPackageCache CreateContextCache(SqliteConnectionFactory workspaceFactory)
+    {
+        try
+        {
+            var appData = new AppDataDirectory();
+            var cacheDbPath = Path.Combine(appData.Root, "context-cache", "cache.db");
+            Directory.CreateDirectory(Path.GetDirectoryName(cacheDbPath)!);
+            var cacheFactory = new SqliteConnectionFactory(cacheDbPath);
+            var runner = new MigrationRunner(cacheFactory, cacheDbPath,
+            [
+                new Migration0001Initial(),
+                new Migration0002Fts5(),
+                new Migration0003ContextPackages(),
+                new Migration0004Feedback(),
+                new Migration0005ContextPackageDetails(),
+                new Migration0006SchemaV2(),
+                new Migration0007ContextPackageFields(),
+                new Migration0008ContextPackageFk(),
+                new Migration0009PersistentCache(),
+                new Migration0010RelationSourceColumn(),
+            ]);
+            runner.Migrate();
+            var store = new CacheHub.Storage.Caching.SqliteCacheStore(cacheFactory,
+                Path.Combine(appData.Root, "context-cache", "blobs"));
+            return new ContextPackageCache(store);
+        }
+        catch
+        {
+            // Fallback to in-memory if SQLite cache can't be initialized
+            return new ContextPackageCache();
+        }
+    }
 }

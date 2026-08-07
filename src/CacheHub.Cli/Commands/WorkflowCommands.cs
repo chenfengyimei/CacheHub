@@ -96,7 +96,7 @@ public static class WorkflowCommands
         }
 
         var tokenizers = TokenizerRegistry.CreateWithDefaults();
-        var cache = new ContextPackageCache();
+        var cache = ContextCommands.CreateContextCache(factory);
         var secPolicy = new SecurityPolicy { Version = "sec-v1" };
         var engine = new ContextEngine(tokenizers, secPolicy, cache);
 

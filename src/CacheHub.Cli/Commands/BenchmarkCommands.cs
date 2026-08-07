@@ -154,7 +154,7 @@ public static class BenchmarkCommands
 
         // Build real context using ContextEngine
         var tokenizers = TokenizerRegistry.CreateWithDefaults();
-        var engine = new ContextEngine(tokenizers);
+        var engine = new ContextEngine(tokenizers, cache: ContextCommands.CreateContextCache(factory));
 
         var buildRequest = new ContextBuildRequest
         {

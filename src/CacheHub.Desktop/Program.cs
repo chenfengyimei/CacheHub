@@ -60,7 +60,37 @@ builder.Services.AddSingleton<SqliteConnectionFactory>(sp =>
 builder.Services.AddSingleton<IWorkspaceRepository, SqliteWorkspaceRepository>();
 builder.Services.AddSingleton<IContextPackageRepository, SqliteContextPackageRepository>();
 builder.Services.AddSingleton<IFeedbackRepository, SqliteFeedbackRepository>();
-builder.Services.AddSingleton<ContextPackageCache>();
+builder.Services.AddSingleton<ContextPackageCache>(_ =>
+{
+    try
+    {
+        var appData = new AppDataDirectory();
+        var cacheDbPath = Path.Combine(appData.Root, "context-cache", "cache.db");
+        Directory.CreateDirectory(Path.GetDirectoryName(cacheDbPath)!);
+        var cacheFactory = new SqliteConnectionFactory(cacheDbPath);
+        var runner = new MigrationRunner(cacheFactory, cacheDbPath,
+        [
+            new Migration0001Initial(),
+            new Migration0002Fts5(),
+            new Migration0003ContextPackages(),
+            new Migration0004Feedback(),
+            new Migration0005ContextPackageDetails(),
+            new Migration0006SchemaV2(),
+            new Migration0007ContextPackageFields(),
+            new Migration0008ContextPackageFk(),
+            new Migration0009PersistentCache(),
+            new Migration0010RelationSourceColumn(),
+        ]);
+        runner.Migrate();
+        var store = new CacheHub.Storage.Caching.SqliteCacheStore(cacheFactory,
+            Path.Combine(appData.Root, "context-cache", "blobs"));
+        return new ContextPackageCache(store);
+    }
+    catch
+    {
+        return new ContextPackageCache();
+    }
+});
 builder.Services.AddSingleton<ContextEngine>();
 
 // Security: force loopback binding only
