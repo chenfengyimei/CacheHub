@@ -315,6 +315,7 @@ public static class BenchmarkCommands
             ?? "";
         var model = GetOpt(args, "--model") ?? "gpt-4o-mini";
         var maxRounds = int.TryParse(GetOpt(args, "--rounds"), out var r) ? r : 2;
+        var compare = HasFlag(args, "--compare");
 
         if (string.IsNullOrEmpty(wsId))
         {
@@ -364,9 +365,8 @@ public static class BenchmarkCommands
         var executor = new GatewayAgentModelExecutor(gatewayUrl, gatewayToken, model);
         var agentRunner = new Core.Benchmarks.Agent.AgentBenchmarkRunner(executor, tokenizer, maxRounds);
 
-        // Context builder: read the task's required/helpful files as context snippets.
-        // This mirrors what CacheHub context would provide (compressed, relevant files).
-        AgentContextPackage BuildContext(string taskDescription)
+        // CacheHub branch: read the task's required/helpful files as compressed context.
+        AgentContextPackage BuildCacheHubContext(string taskDescription)
         {
             var task = BenchmarkTaskSet.Tasks.FirstOrDefault(t => t.TaskDescription == taskDescription);
             var paths = task?.RequiredFiles.ToList() ?? [];
@@ -387,6 +387,42 @@ public static class BenchmarkCommands
                 FileSnippets = snippets,
                 EstimatedTokens = tokenizer.CountTokens(string.Join("\n", snippets)),
             };
+        }
+
+        // Baseline branch: give the model the ENTIRE repository content.
+        // Represents "AI agent without CacheHub" — reads the full codebase each time.
+        Core.Benchmarks.Agent.AgentContextPackage? baselineCache = null;
+        AgentContextPackage BuildBaselineContext(string taskDescription)
+        {
+            if (baselineCache is not null) return baselineCache;
+
+            var allPaths = Directory.EnumerateFiles(workspace.RootPath, "*", SearchOption.AllDirectories)
+                .Where(p => !p.Contains("\\.git\\", StringComparison.OrdinalIgnoreCase)
+                            && !p.Contains("/.git/", StringComparison.OrdinalIgnoreCase)
+                            && !p.Contains("\\bin\\", StringComparison.OrdinalIgnoreCase)
+                            && !p.Contains("\\obj\\", StringComparison.OrdinalIgnoreCase)
+                            && !p.Contains("/bin/", StringComparison.OrdinalIgnoreCase)
+                            && !p.Contains("/obj/", StringComparison.OrdinalIgnoreCase))
+                .Take(200) // cap to avoid absurd context
+                .ToList();
+
+            var snippets = new List<string>();
+            foreach (var fullPath in allPaths)
+            {
+                try
+                {
+                    snippets.Add($"// ---- {Path.GetFileName(fullPath)} ----\n{File.ReadAllText(fullPath)}");
+                }
+                catch { }
+            }
+            baselineCache = new Core.Benchmarks.Agent.AgentContextPackage
+            {
+                TaskDescription = taskDescription,
+                SelectedFilePaths = allPaths,
+                FileSnippets = snippets,
+                EstimatedTokens = tokenizer.CountTokens(string.Join("\n", snippets)),
+            };
+            return baselineCache;
         }
 
         // Test runner: given the model's patch, evaluate. For CLI, we treat
@@ -430,7 +466,7 @@ public static class BenchmarkCommands
         try
         {
             var result = agentRunner.RunAllAsync(tasks, config,
-                    desc => BuildContext(desc),
+                    desc => BuildCacheHubContext(desc),
                     patch => EvaluatePatch(patch))
                 .GetAwaiter().GetResult();
 
@@ -438,6 +474,7 @@ public static class BenchmarkCommands
             {
                 realModel = model,
                 gatewayUrl,
+                mode = compare ? "compare" : "cachehub-context",
                 tasksRun = result.Runs.Count,
                 successRate = Math.Round(result.SuccessRate, 4),
                 totalPromptTokens = result.TotalPromptTokens,
@@ -459,6 +496,25 @@ public static class BenchmarkCommands
                     testsTotal = run.TestsTotal,
                 }),
             }, _jsonOpts));
+
+            // If --compare, also run the baseline (full repo) branch for the same tasks
+            // and emit a side-by-side comparison to prove CacheHub's value.
+            if (compare)
+            {
+                var baselineResult = agentRunner.RunAllAsync(tasks, config,
+                        desc => BuildBaselineContext(desc),
+                        patch => EvaluatePatch(patch))
+                    .GetAwaiter().GetResult();
+
+                Console.Error.WriteLine("\n===== CacheHub vs Baseline (without CacheHub) =====");
+                Console.Error.WriteLine($"{"Metric",-26} {"CacheHub",-12} {"Baseline",-12}");
+                Console.Error.WriteLine($"{"Success rate",-26} {result.SuccessRate:P1,-12} {baselineResult.SuccessRate:P1,-12}");
+                Console.Error.WriteLine($"{"Total input tokens",-26} {result.TotalPromptTokens,-12} {baselineResult.TotalPromptTokens,-12}");
+                Console.Error.WriteLine($"{"Total tokens",-26} {result.TotalTokens,-12} {baselineResult.TotalTokens,-12}");
+                Console.Error.WriteLine($"{"Avg rounds",-26} {result.AvgRounds:F2,-12} {baselineResult.AvgRounds:F2,-12}");
+                Console.Error.WriteLine($"{"Total cost (USD)",-26} {result.TotalCost:F6,-12} {baselineResult.TotalCost:F6,-12}");
+            }
+
             return 0;
         }
         catch (Exception ex)
