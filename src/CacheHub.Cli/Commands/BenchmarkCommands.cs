@@ -344,7 +344,11 @@ public static class BenchmarkCommands
         var compare = HasFlag(args, "--compare");
         // V6: Real test — apply patch to git worktree and run build/test command
         var realTest = HasFlag(args, "--real-test");
-        var testCommand = GetOpt(args, "--test-command") ?? "dotnet test";
+        var testCommandStr = GetOpt(args, "--test-command") ?? "dotnet test";
+        // V6: Split into (command, args) so --test-command actually works (was previously ignored)
+        var testCommandParts = testCommandStr.Split(' ', 2, StringSplitOptions.TrimEntries);
+        var testCmd = testCommandParts.Length >= 1 ? testCommandParts[0] : "dotnet";
+        var testArgs = testCommandParts.Length >= 2 ? testCommandParts[1] : "test -c Release";
         // V6: Optional per-run pricing override "inputPer1M,outputPer1M" (review #17)
         var priceOverride = GetOpt(args, "--price");
 
@@ -603,7 +607,7 @@ public static class BenchmarkCommands
                             ErrorMessage = "Patch failed to apply cleanly (git apply)",
                         });
                     }
-                    return Task.FromResult(finalWorktree.RunTests("dotnet", "test -c Release"));
+                    return Task.FromResult(finalWorktree.RunTests(testCmd, testArgs));
                 }
                 catch (Exception ex)
                 {

@@ -109,4 +109,20 @@ public class GitWorktreePatchTesterTests
         }
         finally { Cleanup(source); }
     }
+
+    // V6: --test-command splitting (command + args) must reach RunTests correctly.
+    [Fact]
+    public void RunTests_ValidCommandWithArgs_ReturnsSuccess()
+    {
+        var source = CreateTempGitRepo();
+        try
+        {
+            using var tester = new GitWorktreePatchTester();
+            tester.CreateWorktree(source, "HEAD");
+            // command="git", args="status" — mirrors splitting "--test-command=git status"
+            var result = tester.RunTests("git", "status");
+            Assert.True(result.Success);
+        }
+        finally { Cleanup(source); }
+    }
 }
