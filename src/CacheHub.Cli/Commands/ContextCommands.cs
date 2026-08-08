@@ -3,7 +3,7 @@ using CacheHub.Context.Cache;
 using CacheHub.Context.Engine;
 using CacheHub.Context.Export;
 using CacheHub.Context.Payload;
-using CacheHub.Context.Recall;
+using CacheHub.Context.Recall;  // V7-W13: RecallWiringFactory + RecallCallbacks
 using CacheHub.Core.Context;
 using CacheHub.Core.Feedback;
 using CacheHub.Core.Identifiers;
@@ -178,6 +178,10 @@ public static class ContextCommands
             Console.Error.WriteLine($"  ℹ {staleResult.Message}");
         }
 
+        // V7-W13: Use RecallWiringFactory for standard callbacks (FTS/Symbol/Import/SymbolDetailed/Relation/ReverseRelation/FileSymbols)
+        var recallFactory = new RecallWiringFactory(factory);
+        var callbacks = recallFactory.Create(snapshotId);
+
         var manifest = engine.Build(
             new ContextBuildRequest
             {
@@ -186,7 +190,7 @@ public static class ContextCommands
                 Task = task,
                 GitDiffFiles = gitDiffFiles,
                 ModelId = effectiveModel,
-                SecurityPolicyVersion = secPolicy.Version,  // V7-W06: pass resolved policy version
+                SecurityPolicyVersion = secPolicy.Version,
                 RepositoryCommit = activeSnapshot.Value.RepositoryCommit,
                 Branch = activeSnapshot.Value.Branch,
                 IsDirty = activeSnapshot.Value.IsDirty,
@@ -195,78 +199,14 @@ public static class ContextCommands
             () => indexedFiles,
             path => ResolveFileContent(workspace.RootPath, path),
             path => ResolveFileHash(factory, snapshotId, path, workspace.RootPath),
-            ftsSearch: keyword =>
-            {
-                var querySvc = new SqliteIndexQueryService(factory);
-                var results = querySvc.SearchFtsAsync(snapshotId, keyword, 50).GetAwaiter().GetResult();
-                return results.Select(r => new FtsMatch(r.Path, r.Language, r.Snippet, r.RankScore, r.HitLine)).ToList();
-            },
-            symbolSearch: symbol =>
-            {
-                var querySvc = new SqliteIndexQueryService(factory);
-                var results = querySvc.SearchSymbolsAsync(snapshotId, symbol).GetAwaiter().GetResult();
-                return results.Select(r => r.NormalizedPath).ToList();
-            },
-            importSearch: symbol =>
-            {
-                var querySvc = new SqliteIndexQueryService(factory);
-                var results = querySvc.GetFilesByImportedSymbolAsync(snapshotId, symbol).GetAwaiter().GetResult();
-                return results.ToList();
-            },
-            symbolSearchDetailed: symbol =>
-            {
-                var querySvc = new SqliteIndexQueryService(factory);
-                var results = querySvc.SearchSymbolsAsync(snapshotId, symbol).GetAwaiter().GetResult();
-                return results.Select(r => new SymbolHit
-                {
-                    NormalizedPath = r.NormalizedPath,
-                    Name = r.Name,
-                    Kind = r.Kind,
-                    StartLine = r.StartLine,
-                    EndLine = r.EndLine,
-                    ExactMatch = r.ExactMatch,
-                }).ToList();
-            },
-            relationSearch: filePath =>
-            {
-                var querySvc = new SqliteIndexQueryService(factory);
-                var results = querySvc.GetFileRelationsAsync(snapshotId, filePath).GetAwaiter().GetResult();
-                return results.Select(r => new RelationHit
-                {
-                    TargetName = r.TargetName,
-                    RelationType = r.RelationType,
-                    Relation = r.Relation,
-                    Confidence = r.Confidence,
-                }).ToList();
-            },
+            ftsSearch: callbacks.FtsSearch,
+            symbolSearch: callbacks.SymbolSearch,
+            importSearch: callbacks.ImportSearch,
+            symbolSearchDetailed: callbacks.SymbolSearchDetailed,
+            relationSearch: callbacks.RelationSearch,
             semanticSearch: SemanticReferenceHelper.CreateSemanticSearch(appData.Root, workspace.Id.Value),
-            reverseRelationSearch: target =>
-            {
-                var querySvc = new SqliteIndexQueryService(factory);
-                var results = querySvc.GetFilesByRelationTargetAsync(snapshotId, target).GetAwaiter().GetResult();
-                return results.Select(r => new RelationHit
-                {
-                    TargetName = r.TargetName,
-                    RelationType = r.RelationType,
-                    Relation = r.Relation,
-                    Confidence = r.Confidence,
-                    SourcePath = r.NormalizedPath,
-                }).ToList();
-            },
-            fileSymbolsProvider: path =>
-            {
-                var querySvc = new SqliteIndexQueryService(factory);
-                var results = querySvc.GetFileSymbolsAsync(snapshotId, path).GetAwaiter().GetResult();
-                return results.Select(r => new Context.Recall.SymbolHit
-                {
-                    NormalizedPath = path,
-                    Name = r.Name,
-                    Kind = r.Kind,
-                    StartLine = r.StartLine,
-                    EndLine = r.EndLine,
-                    ExactMatch = true,
-                }).ToList();
-            });
+            reverseRelationSearch: callbacks.ReverseRelationSearch,
+            fileSymbolsProvider: callbacks.FileSymbolsProvider);
 
         // Persist manifest
         var ctxRepo = new SqliteContextPackageRepository(factory);
