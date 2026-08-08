@@ -16,10 +16,10 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
 
@@ -59,10 +59,10 @@ jobs:
             desktop_binary: publish-desktop/CacheHub.Desktop
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
 
@@ -76,6 +76,7 @@ jobs:
             -p:RuntimeIdentifier=${{ matrix.rid }}
 
       - name: Publish Desktop (Web UI)
+        shell: bash
         run: dotnet publish src/CacheHub.Desktop/CacheHub.Desktop.csproj -c Release -o publish-desktop --nologo
 
       - name: Smoke — CLI version
@@ -87,12 +88,13 @@ jobs:
         run: ${{ matrix.binary }} capabilities --output=json
 
       - name: Smoke — CLI doctor (diagnose env, tolerate env-dependent exit)
-        run: |
-          ${{ matrix.binary }} doctor > /tmp/doctor.out 2>&1 || true
-          grep -qi "cachehub" /tmp/doctor.out || { echo "doctor produced no output"; exit 1; }
         shell: bash
+        run: |
+          ${{ matrix.binary }} doctor > doctor.out 2>&1 || true
+          grep -qi "cachehub" doctor.out || { echo "doctor produced no output"; exit 1; }
 
       - name: Smoke — Desktop binary present
+        shell: bash
         run: |
           if [ -f "${{ matrix.desktop_binary }}" ]; then
             echo "Desktop binary present"
@@ -101,4 +103,3 @@ jobs:
             echo "ERROR: Desktop binary missing"
             exit 1
           fi
-        shell: bash
