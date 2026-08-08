@@ -331,6 +331,10 @@ public static class IndexCommands
         Console.WriteLine($"Refreshing index for: {workspace.Name}");
         Console.WriteLine($"  Snapshot: {snapshotId.Value}");
 
+        // V8-P1-01: Capture fresh git state with fileFilter (fingerprint scope = index scope)
+        var fingerprintFilter = ContextCommands.CreateFingerprintFilter(workspace.RootPath);
+        var refreshGitState = await new GitStateProvider().CaptureAsync(workspace.RootPath, fingerprintFilter);
+
         // Build ignore rules
         var ignoreEngine = new IgnoreRuleEngine()
             .WithDefaults()
@@ -351,7 +355,48 @@ public static class IndexCommands
 
         if (result.IsConsistent)
         {
-            Console.WriteLine("Index is up to date. No changes needed.");
+            // V8-audit-33: Even when files are consistent, git state (commit/branch/fingerprint) may have changed.
+            // If so, create a metadata-only snapshot with updated git provenance.
+            var oldGitState = await GetSnapshotGitStateAsync(factory, snapshotId);
+            var gitStateChanged = oldGitState is null ||
+                !string.Equals(oldGitState.Fingerprint, refreshGitState.Fingerprint, StringComparison.Ordinal);
+
+            if (!gitStateChanged)
+            {
+                Console.WriteLine("Index is up to date. No changes needed.");
+                return 0;
+            }
+
+            // Files unchanged but git state changed — create metadata-only snapshot
+            Console.WriteLine("  Files unchanged, but workspace version changed (commit/branch/dirty).");
+            Console.WriteLine($"  Creating metadata-only snapshot with updated git provenance...");
+
+            var metaSnapshotId = IndexSnapshotId.New();
+            await InsertSnapshotAsync(factory, metaSnapshotId, workspace.Id, refreshGitState);
+
+            // Clone all file data from old snapshot to new
+            await CloneSnapshotDataAsync(factory, snapshotId, metaSnapshotId);
+
+            // Update file_count on new snapshot
+            await using var metaConn = factory.CreateOpenConnection();
+            using var metaCmd = metaConn.CreateCommand();
+            metaCmd.CommandText = "UPDATE index_snapshots SET file_count = $count WHERE id = $id;";
+            metaCmd.Parameters.AddWithValue("$count", activeSnapshot.Value.fileCount);
+            metaCmd.Parameters.AddWithValue("$id", metaSnapshotId.Value);
+            await metaCmd.ExecuteNonQueryAsync();
+
+            // Atomically switch: new → Active, old → Archived
+            using var switchCmd = metaConn.CreateCommand();
+            switchCmd.CommandText = """
+                UPDATE index_snapshots SET status = 'Archived' WHERE id = $old;
+                UPDATE index_snapshots SET status = 'Active' WHERE id = $new;
+                """;
+            switchCmd.Parameters.AddWithValue("$old", snapshotId.Value);
+            switchCmd.Parameters.AddWithValue("$new", metaSnapshotId.Value);
+            await switchCmd.ExecuteNonQueryAsync();
+
+            Console.WriteLine($"  Metadata-only snapshot: {snapshotId.Value} → {metaSnapshotId.Value} (Active)");
+            Console.WriteLine("  Git provenance updated.");
             return 0;
         }
 
@@ -365,8 +410,7 @@ public static class IndexCommands
         // If anything fails, Active snapshot remains untouched.
         var oldSnapshotId = snapshotId;
         var buildingSnapshotId = IndexSnapshotId.New();
-        // V7-W01: Capture fresh git state for the new snapshot
-        var refreshGitState = await new GitStateProvider().CaptureAsync(workspace.RootPath);
+        // V7-W01: reuse git state captured at start of RefreshAsync (with fileFilter)
         await InsertSnapshotAsync(factory, buildingSnapshotId, workspace.Id, refreshGitState);
 
         // Clone all data from Active to Building
@@ -943,6 +987,30 @@ public static class IndexCommands
         await using var reader = await cmd.ExecuteReaderAsync();
         if (await reader.ReadAsync())
             return (IndexSnapshotId.Parse(reader.GetString(0)), reader.GetInt32(1));
+        return null;
+    }
+
+    /// <summary>
+    /// V8-audit-33: Gets the git state metadata stored on a snapshot.
+    /// Used to detect metadata-only changes (commit/branch changed but file content unchanged).
+    /// </summary>
+    private static async Task<GitState?> GetSnapshotGitStateAsync(SqliteConnectionFactory factory, IndexSnapshotId snapshotId)
+    {
+        await using var conn = factory.CreateOpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT repository_commit, branch, is_dirty, workspace_fingerprint FROM index_snapshots WHERE id = $id;";
+        cmd.Parameters.AddWithValue("$id", snapshotId.Value);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        if (await reader.ReadAsync())
+        {
+            return new GitState
+            {
+                Commit = reader.IsDBNull(0) ? null : reader.GetString(0),
+                Branch = reader.IsDBNull(1) ? null : reader.GetString(1),
+                IsDirty = reader.GetBoolean(2),
+                Fingerprint = reader.IsDBNull(3) ? null : reader.GetString(3),
+            };
+        }
         return null;
     }
 
