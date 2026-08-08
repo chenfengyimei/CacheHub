@@ -1,8 +1,8 @@
 {
     "schemaVersion":  1,
     "project":  "CacheHub",
-    "currentPhase":  "V7-Benchmark-Matrix",
-    "currentTask":  "V965 Benchmark Matrix: 965 tasks × 965 fixture repos. Matrix Runner + CLI command + Phase Gate. 965 tests.",
+    "currentPhase":  "V8-Product-Proof-Context-Integrity",
+    "currentTask":  "V8 P0-01~05 + P1-01~03 + FIX-01 complete. Context Strict Version Gate, Immutable Payload, Path Security, Benchmark Matrix Ground Truth elimination, PhaseGate Incomplete, Fingerprint Scope, Gateway Header, Repair Loop. 990 tests.",
     "repository":  {
                        "branch":  "main",
                        "dirty":  false,
@@ -12,7 +12,7 @@
                    },
     "qualityGates":  {
                          "build":  "pass (0 errors, 0 warnings, warnings-as-errors enabled)",
-                         "unitTests":  "pass (965/967, 2 skipped)",
+                         "unitTests":  "pass (990/992, 2 skipped)",
                          "integrationTests":  "pass (real SQLite + FTS5 + Context Engine pipeline + Snapshot Clone + Agent Benchmark + Cache Invalidate)",
                          "securityTests":  "pass (path traversal, auth, XSS, secret scan, symlink, offline mode, unified SecurityPolicyResolver, offline hard-block before gateway, Gateway Offline final defense V6-W04)",
                          "format":  "pass"
@@ -71,11 +71,11 @@
                                           "CacheHub.Gateway (server, provider, SSE, router, multi-provider config, Offline defense — separated from Core)",
                                           "CacheHub.Cli (CLI entry, 21 command groups)",
                                           "CacheHub.Desktop (Web UI, Minimal API, 17 routes, UsageStatsService)",
-                                          "CacheHub.Tests (965 tests)"
+                                          "CacheHub.Tests (990 tests)"
                                       ],
                          "dependencyChain":  "Core ← Storage, Indexing, Gateway; Context ← Core+Storage+Indexing; Cli/Desktop ← all",
                          "databaseMigrations":  11
                      },
-    "testCount":  965,
-    "lastUpdated":  "2026-08-08T01:25:00Z"
+    "testCount":  990,
+    "lastUpdated":  "2026-08-08T14:15:00Z"
 }
