@@ -407,7 +407,8 @@ async function loadDashboard() {
             { label: 'Cache Hit Rate', value: ((stats.cacheHitRate || 0) * 100).toFixed(1) + '%' },
             { label: 'Prompt Tokens', value: (stats.totalPromptTokens || 0).toLocaleString() },
             { label: 'Completion Tokens', value: (stats.totalCompletionTokens || 0).toLocaleString() },
-            { label: 'Tokens Saved (Cache)', value: (stats.cachedTokensSaved || 0).toLocaleString() },
+            { label: 'Tokens Saved (Context)', value: (stats.estimatedContextTokensSaved || 0).toLocaleString() },
+            { label: 'Tokens Saved (Cache)', value: (stats.actualCacheTokensSaved || 0).toLocaleString() },
             { label: 'Avg Latency (ms)', value: Math.round(stats.avgLatencyMs || 0) },
         ];
         container.innerHTML = items.map(i =>

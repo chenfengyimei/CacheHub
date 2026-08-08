@@ -1011,7 +1011,9 @@ app.MapGet("/api/v1/stats", async (SqliteConnectionFactory factory, UsageStatsSe
         cacheHitRate = usage.CacheHitRate,
         totalPromptTokens = usage.TotalPromptTokens,
         totalCompletionTokens = usage.TotalCompletionTokens,
-        cachedTokensSaved = usage.CachedTokensSaved,
+        // V7-W12: Separate estimated context savings from actual cache token savings
+        estimatedContextTokensSaved = usage.EstimatedContextSaved,
+        actualCacheTokensSaved = usage.ActualCacheTokensSaved,
         avgLatencyMs = usage.AvgLatencyMs,
         // Workspace stats
         workspaces = workspaces.Count,
@@ -1327,6 +1329,8 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
     var modelPromptTokens = 0;
     var modelCompletionTokens = 0;
     var modelTotalTokens = 0;
+    var gatewayLatencyMs = 0L;  // V7-W12: real latency tracking
+    var gatewayCacheHit = false;  // V7-W12: real cache hit from Gateway response header
 
     if (req.CallGateway && !string.IsNullOrEmpty(req.ModelId))
     {
@@ -1361,8 +1365,19 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
                 if (!string.IsNullOrEmpty(gatewayToken))
                     msg.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", gatewayToken);
 
+                // V7-W12: Track real latency
+                var gwSw = System.Diagnostics.Stopwatch.StartNew();
                 var resp = await http.SendAsync(msg);
                 var body = await resp.Content.ReadAsStringAsync();
+                gwSw.Stop();
+                gatewayLatencyMs = gwSw.ElapsedMilliseconds;
+
+                // V7-W12: Check for cache hit header from Gateway
+                if (resp.Headers.TryGetValues("X-CacheHub-Cache-Hit", out var cacheHitValues))
+                {
+                    var hitValue = cacheHitValues.FirstOrDefault();
+                    gatewayCacheHit = string.Equals(hitValue, "true", StringComparison.OrdinalIgnoreCase);
+                }
 
                 if (resp.IsSuccessStatusCode)
                 {
@@ -1398,15 +1413,15 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
     var estimatedContextSaved = Math.Max(0, estimatedBaselineTokens - modelPromptTokens);
 
     // V6: Record usage stats for Dashboard
+    // V7-W12: Use real cache hit + latency from Gateway response
     if (req.CallGateway)
     {
-        var cacheHit = false; // TODO: track from gateway response
         usageStats.RecordRequest(
             modelPromptTokens,
             modelCompletionTokens,
-            cacheHit,
+            gatewayCacheHit,
             (int)estimatedContextSaved,
-            0); // latency tracked externally if needed
+            gatewayLatencyMs);
     }
 
     return Results.Ok(new
