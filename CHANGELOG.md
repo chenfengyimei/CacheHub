@@ -5,9 +5,37 @@ All notable changes to CacheHub will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0-prealpha] — 2026-08-07
+## [0.2.0-prealpha] — 2026-08-08
 
-### V3: True Closure & Production Wiring (2026-08-07)
+### V7: Truth Closure & Benchmark Matrix (2026-08-08)
+
+**"版本真实性"和"价值证据真实性"彻底做实。**
+
+#### P0: Version-Aware Context Package
+- **WorkspaceVersionFingerprint** (W01): GitStateProvider + Migration0011 + IndexSnapshot/Manifest/CacheKey 全链路绑定 git 指纹
+- **Context Build stale detection** (W02): StaleDetector 比较当前 workspace fingerprint vs snapshot，防止"旧 Hash + 新 Content"
+- **AgentBenchmark 多轮成功率修复** (W03): per-round success 替代累计 testsPassed/Total，新增 fail→pass 回归测试
+- **DNS rebinding + launch nonce** (W04): Host 精确匹配 + auth/init 一次性 nonce
+
+#### P1: Benchmark Framework Hardening
+- **Benchmark patch protocol** (W05): unified diff system prompt + 失败轮错误反馈 + async timeout + RunsPerTask 生效
+- **RecallWiringFactory + SecurityPolicy 指纹化** (W06): 统一 7 callback 组装 + SecurityPolicy.Version 改为真实 SHA256 指纹
+- **Baseline 公平性** (W07): 移除 name.Contains("token") 误排源码 + relative path + 稳定排序
+- **GUI/Stats/Provider/Docs/Release** (W08-W15): sync JSON 修复 + Provider URL 规范化 + Dashboard 真实 stats + Gateway 持久化 stats + CI 多平台 smoke
+
+#### Benchmark Matrix (W16-W19)
+- **13 个 fixture 仓库** (W16): TS/Python/Go/Rust/Monorepo × 70 文件，每个含真实源码 + 测试 + 有意 bug
+- **25 个任务** (W17): 全部指向真实 fixture 路径，新增 RepositoryPath/TestCommand/TestCommandArgs 字段
+- **BenchmarkMatrixRunner** (W18): `cachehub benchmark matrix` CLI 命令 + Phase Gate 评估
+- **11 个测试** (W19): 矩阵运行 + Phase Gate 通过/失败场景
+
+#### Continuous Hardening (W20-W23)
+- **CI format 修复 + Windows publish-smoke 兼容** (W20): dotnet format 自动修复 + shell: bash
+- **文档同步** (W21): 全部文档同步到 965 tests
+- **ResolveFileHash 磁盘优先** (W22): 彻底消除"旧 Hash + 新 Content"不一致
+- **publish-smoke 跨平台一致性** (W23): 全部步骤统一 shell: bash
+
+### V6: Beta Closure & Evidence (2026-08-08)
 
 Closing the gap between "module exists" and "module is on the production main chain."
 
