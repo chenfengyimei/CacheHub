@@ -358,6 +358,7 @@ public static class BenchmarkCommands
             ?? "";
         var model = GetOpt(args, "--model") ?? "gpt-4o-mini";
         var maxRounds = int.TryParse(GetOpt(args, "--rounds"), out var r) ? r : 2;
+        var runsPerTask = int.TryParse(GetOpt(args, "--runs-per-task"), out var rpt) ? rpt : 1; // V8-P1-03
         var compare = HasFlag(args, "--compare");
         // V6: Real test — apply patch to git worktree and run build/test command
         var realTest = HasFlag(args, "--real-test");
@@ -682,7 +683,7 @@ public static class BenchmarkCommands
             ModelId = model,
             AgentId = "cachehub-cli-agent",
             SystemPrompt = "cachehub",
-            RunsPerTask = 1,
+            RunsPerTask = runsPerTask, // V8-P1-03: expose --runs-per-task
             ResetBetweenRuns = true,
             ShareBuildCache = false,
         };

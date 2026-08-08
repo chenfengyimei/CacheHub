@@ -48,7 +48,12 @@ public sealed class GitWorktreePatchTester : IDisposable
 
         using var proc = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start git process");
-        proc.WaitForExit(30_000);
+        var worktreeExited = proc.WaitForExit(30_000);
+        if (!worktreeExited)
+        {
+            try { proc.Kill(entireProcessTree: true); } catch { }
+            throw new InvalidOperationException("git worktree add timed out after 30s");
+        }
         if (proc.ExitCode != 0)
         {
             var err = proc.StandardError.ReadToEnd();
@@ -83,7 +88,14 @@ public sealed class GitWorktreePatchTester : IDisposable
 
         using var proc = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start git process");
-        proc.WaitForExit(15_000);
+        var exited = proc.WaitForExit(15_000);
+        if (!exited)
+        {
+            // V8-P1-03: Kill process on timeout instead of reading ExitCode on a still-running process
+            try { proc.Kill(entireProcessTree: true); } catch { }
+            try { File.Delete(patchFile); } catch { }
+            return false;
+        }
 
         try { File.Delete(patchFile); } catch { }
 

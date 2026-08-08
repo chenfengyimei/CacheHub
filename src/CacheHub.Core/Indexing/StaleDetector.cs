@@ -32,11 +32,13 @@ public static class StaleDetector
     /// <summary>
     /// Checks if the workspace state matches the snapshot.
     /// Returns IsFresh=true if fingerprints match.
+    /// V8-P1-01: fileFilter parameter allows callers to scope fingerprint to indexed files only.
     /// </summary>
     public static async Task<StaleDetectionResult> CheckAsync(
         string workspaceRoot,
         string? snapshotFingerprint,
         GitStateProvider? gitStateProvider = null,
+        Func<string, bool>? fileFilter = null,
         CancellationToken ct = default)
     {
         // No fingerprint means pre-V7 snapshot — can't check, allow with warning
@@ -53,7 +55,7 @@ public static class StaleDetector
         }
 
         var provider = gitStateProvider ?? new GitStateProvider();
-        var currentState = await provider.CaptureAsync(workspaceRoot, ct);
+        var currentState = await provider.CaptureAsync(workspaceRoot, fileFilter, ct);
 
         if (string.IsNullOrEmpty(currentState.Fingerprint))
         {

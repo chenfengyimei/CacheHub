@@ -133,8 +133,9 @@ public sealed class GitStateProvider
     /// <summary>
     /// Captures the current Git state of a workspace.
     /// Returns a non-git state if the directory is not a git repository.
+    /// V8-P1-01: fileFilter parameter allows callers to exclude non-indexed files from fingerprint scope.
     /// </summary>
-    public async Task<GitState> CaptureAsync(string workspaceRoot, CancellationToken ct = default)
+    public async Task<GitState> CaptureAsync(string workspaceRoot, Func<string, bool>? fileFilter = null, CancellationToken ct = default)
     {
         if (!Directory.Exists(workspaceRoot))
             return new GitState { Fingerprint = null };
@@ -144,9 +145,15 @@ public sealed class GitStateProvider
         if (!commitResult.Success)
         {
             // Not a git repo — use file-based fingerprint
-            return GitState.CreateNonGit(workspaceRoot, Directory.EnumerateFiles(workspaceRoot, "*.*", SearchOption.AllDirectories)
-                .Select(f => Path.GetRelativePath(workspaceRoot, f).Replace('\\', '/'))
-                .Where(p => !p.StartsWith(".git/", StringComparison.OrdinalIgnoreCase)));
+            // V8-P1-01: Filter files to only include indexed files (exclude node_modules, bin, obj, etc.)
+            var allFiles = Directory.EnumerateFiles(workspaceRoot, "*.*", SearchOption.AllDirectories)
+                .Select(f => Path.GetRelativePath(workspaceRoot, f).Replace('\\', '/'));
+            // Always exclude .git/
+            allFiles = allFiles.Where(p => !p.StartsWith(".git/", StringComparison.OrdinalIgnoreCase));
+            // V8-P1-01: Apply caller's filter (e.g., IgnoreRuleEngine + FileTypeDetector) if provided
+            if (fileFilter is not null)
+                allFiles = allFiles.Where(fileFilter);
+            return GitState.CreateNonGit(workspaceRoot, allFiles);
         }
 
         var commit = commitResult.Output.Trim();
@@ -174,6 +181,11 @@ public sealed class GitStateProvider
                 }
             }
         }
+
+        // V8-P1-01: Filter dirty files to only include indexed files when filter is provided.
+        // This prevents non-indexed files (e.g., binary, generated) from invalidating the fingerprint.
+        if (fileFilter is not null)
+            dirtyFiles = dirtyFiles.Where(fileFilter).ToList();
 
         var isDirty = dirtyFiles.Count > 0;
         var fingerprint = GitState.ComputeFingerprint(commit, branch, workspaceRoot, dirtyFiles);

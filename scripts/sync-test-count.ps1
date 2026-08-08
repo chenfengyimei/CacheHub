@@ -79,15 +79,14 @@ if (Test-Path $statePath) {
         $state = $jsonText | ConvertFrom-Json
         $state.testCount = $Count
         $state.qualityGates.unitTests = "pass ($Count/$TotalCount, $SkippedCount skipped)"
-        # Update currentTask test count if it mentions tests
-        if ($state.currentTask -match '\d+') {
-            $state.currentTask = $state.currentTask -replace '\d+', $Count
-        }
-        # Update architecture test counts
+        # V8-FIX-01: Do NOT regex-replace all digits in currentTask — it corrupts version numbers, task counts, etc.
+        # Only update testCount and qualityGates.unitTests (done above).
+        # Update architecture test counts — only replace the specific pattern "N tests" or "N passed"
         if ($state.architecture) {
             foreach ($proj in $state.architecture.PSObject.Properties) {
-                if ($proj.Value.tests -match '\d+') {
-                    $proj.Value.tests = $proj.Value.tests -replace '\d+', $Count
+                if ($proj.Value.tests -is [string]) {
+                    # Only replace patterns like "965 tests" or "965 passed" — not arbitrary numbers
+                    $proj.Value.tests = $proj.Value.tests -replace '^\d+\s+(tests|passed)', "$Count `$1"
                 }
             }
         }

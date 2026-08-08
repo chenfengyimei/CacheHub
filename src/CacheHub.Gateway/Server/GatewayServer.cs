@@ -267,6 +267,8 @@ public sealed class GatewayServer : IDisposable
                             var cachedBytes = System.Text.Encoding.UTF8.GetBytes(cachedEnvelope.ResponseBody);
                             resp.StatusCode = 200;
                             resp.ContentType = "application/json";
+                            // V8-P1-02: Set cache hit header for Desktop Dashboard
+                            resp.Headers["X-CacheHub-Cache-Hit"] = "true";
                             resp.ContentLength64 = cachedBytes.Length;
                             await resp.OutputStream.WriteAsync(cachedBytes, ct);
                             return;
@@ -297,6 +299,8 @@ public sealed class GatewayServer : IDisposable
                     var cachedBytes = System.Text.Encoding.UTF8.GetBytes(cachedEntry.ResponseBody);
                     resp.StatusCode = 200;
                     resp.ContentType = "application/json";
+                    // V8-P1-02: Set cache hit header for Desktop Dashboard
+                    resp.Headers["X-CacheHub-Cache-Hit"] = "true";
                     resp.ContentLength64 = cachedBytes.Length;
                     await resp.OutputStream.WriteAsync(cachedBytes, ct);
                     return;
@@ -390,6 +394,8 @@ public sealed class GatewayServer : IDisposable
             // R5-W004: Forward provider status code and select headers
             resp.StatusCode = providerResponse.StatusCode;
             resp.ContentType = "application/json";
+            // V8-P1-02: Set cache miss header for Desktop Dashboard
+            resp.Headers["X-CacheHub-Cache-Hit"] = "false";
             ForwardAllowedHeaders(providerResponse.Headers, resp);
             var respBytes = System.Text.Encoding.UTF8.GetBytes(providerResponse.Body);
             resp.ContentLength64 = respBytes.Length;

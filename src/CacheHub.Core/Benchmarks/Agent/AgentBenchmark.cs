@@ -125,6 +125,7 @@ public sealed class AgentBenchmarkRunner
         var applyPatches = new List<string>();
         var errorMsg = (string?)null;
         var previousError = (string?)null;  // V7-W05: feed test errors back to next round
+        var previousPatch = (string?)null;  // V8-P1-03: feed previous patch to next round
 
         // V7-W05: System prompt enforces unified diff format
         var systemPrompt = """
@@ -138,7 +139,7 @@ public sealed class AgentBenchmarkRunner
         {
             rounds++;
             var context = contextBuilder(task.TaskDescription);
-            var prompt = ComposePrompt(task.TaskDescription, context.FileSnippets, previousError);
+            var prompt = ComposePrompt(task.TaskDescription, context.FileSnippets, previousError, previousPatch);
 
             // V6: Local estimate of assembled context (for comparison against Provider actual)
             totalLocalEstimated += _tokenizer.CountTokens(prompt);
@@ -176,6 +177,8 @@ public sealed class AgentBenchmarkRunner
 
             // V7-W05: Feed test errors back to next round for agent repair loop
             previousError = result.ErrorMessage ?? "Tests failed but no error message was provided.";
+            // V8-P1-03: Feed previous patch so the model knows what it already tried
+            previousPatch = patch;
         }
 
         sw.Stop();
@@ -237,7 +240,7 @@ public sealed class AgentBenchmarkRunner
         };
     }
 
-    private static string ComposePrompt(string taskDescription, IReadOnlyList<string> fileSnippets, string? previousError = null)
+    private static string ComposePrompt(string taskDescription, IReadOnlyList<string> fileSnippets, string? previousError = null, string? previousPatch = null)
     {
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("Task: ").AppendLine(taskDescription);
@@ -247,6 +250,15 @@ public sealed class AgentBenchmarkRunner
         {
             sb.AppendLine("---");
             sb.AppendLine(snippet);
+        }
+        // V8-P1-03: Include previous patch so the model knows what it already tried
+        if (!string.IsNullOrEmpty(previousPatch))
+        {
+            sb.AppendLine();
+            sb.AppendLine("Your previous patch (which failed):");
+            sb.AppendLine("```diff");
+            sb.AppendLine(previousPatch);
+            sb.AppendLine("```");
         }
         // V7-W05: Feed previous round's test errors back for agent repair loop
         if (!string.IsNullOrEmpty(previousError))
