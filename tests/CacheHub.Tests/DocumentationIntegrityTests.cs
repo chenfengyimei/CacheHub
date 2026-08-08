@@ -184,4 +184,45 @@ public class DocumentationIntegrityTests
         Assert.True(arch.TryGetProperty("databaseMigrations", out var dbMigrations));
         Assert.Equal(actualMigrations, dbMigrations.GetInt32());
     }
+
+    // V8-audit-53: currentTask must not have all numbers replaced with testCount.
+    // The sync-test-count.ps1 bug replaced ALL digits in currentTask with the test count,
+    // producing "V965 Benchmark Matrix: 965 tasks × 965 fixture repos" instead of "V8 ... 25 tasks × 13 repos".
+    // This test catches that class of error: currentTask should NOT contain the testCount
+    // as its version number or as the task/repo count.
+    [Fact]
+    public void AiDevState_CurrentTask_NotCorruptedByTestCount()
+    {
+        var root = GetRepoRoot();
+        var statePath = Path.Combine(root, "Docs", "ai", "AI_DEV_STATE.json");
+        if (!File.Exists(statePath)) return;
+
+        var json = File.ReadAllText(statePath);
+        var doc = System.Text.Json.JsonDocument.Parse(json);
+        var root_ = doc.RootElement;
+
+        Assert.True(root_.TryGetProperty("testCount", out var testCountEl));
+        var tc = testCountEl.GetInt32();
+
+        Assert.True(root_.TryGetProperty("currentTask", out var currentTaskEl));
+        var currentTask = currentTaskEl.GetString() ?? "";
+
+        // The test count should NOT appear as a version prefix (e.g., "V965" when testCount=965)
+        Assert.DoesNotContain($"V{tc} ", currentTask);
+
+        // If currentTask mentions "tasks", the number before it should not equal testCount
+        // (tasks count is 25, not 965 — if it equals testCount, the regex bug is present)
+        if (currentTask.Contains("tasks", StringComparison.OrdinalIgnoreCase))
+        {
+            Assert.DoesNotContain($"{tc} tasks", currentTask);
+        }
+
+        // If currentTask mentions "repos" or "fixture", same check
+        if (currentTask.Contains("repos", StringComparison.OrdinalIgnoreCase) ||
+            currentTask.Contains("fixture", StringComparison.OrdinalIgnoreCase))
+        {
+            Assert.DoesNotContain($"{tc} fixture", currentTask);
+            Assert.DoesNotContain($"{tc} repos", currentTask);
+        }
+    }
 }
