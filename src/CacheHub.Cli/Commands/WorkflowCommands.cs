@@ -98,6 +98,14 @@ public static class WorkflowCommands
         }
         var activeSnapshotId = activeSnapshot.SnapshotId;
 
+        // V7-W02: Stale detection
+        var staleResult = await CacheHub.Core.Indexing.StaleDetector.CheckAsync(
+            workspace.RootPath, activeSnapshot.WorkspaceFingerprint);
+        if (!staleResult.IsFresh)
+        {
+            Console.Error.WriteLine($"  ⚠ WARNING: {staleResult.Message}");
+        }
+
         var tokenizers = TokenizerRegistry.CreateWithDefaults();
         var cache = ContextCommands.CreateContextCache(factory);
         var (secPolicy, secEnforcer) = SecurityPolicyResolver.CreateEnforcer();

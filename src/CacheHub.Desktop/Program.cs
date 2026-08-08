@@ -649,6 +649,10 @@ app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextE
     var activeSnapshotId = activeSnapshot.Value.SnapshotId;
     var indexedFiles = await GetIndexedFilesAsync(factory, req.WorkspaceId);
 
+    // V7-W02: Stale detection — check workspace state vs snapshot
+    var staleResult = await CacheHub.Core.Indexing.StaleDetector.CheckAsync(
+        ws.RootPath, activeSnapshot.Value.WorkspaceFingerprint);
+
     var manifest = engine.Build(
         new ContextBuildRequest
         {
@@ -1166,6 +1170,10 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
 
     var activeSnapshotId = activeSnapshot.SnapshotId;
     var indexedFiles = await querySvc.GetIndexedFilesBySnapshotAsync(activeSnapshotId);
+
+    // V7-W02: Stale detection
+    var staleResult = await CacheHub.Core.Indexing.StaleDetector.CheckAsync(
+        workspace.RootPath, activeSnapshot.WorkspaceFingerprint);
 
     // V5-W02 (P0): Use unified SecurityPolicyResolver
     var (secPolicy, secEnforcer) = CacheHub.Core.Security.SecurityPolicyResolver.CreateEnforcer();

@@ -164,6 +164,20 @@ public static class ContextCommands
         var snapshotId = activeSnapshot.Value.SnapshotId;
         var indexedFiles = await GetIndexedFilesAsync(factory, wsId, snapshotId);
 
+        // V7-W02: Stale detection — warn if workspace state has changed since snapshot
+        var staleResult = await CacheHub.Core.Indexing.StaleDetector.CheckAsync(
+            workspace.RootPath, activeSnapshot.Value.WorkspaceFingerprint);
+        if (!staleResult.IsFresh)
+        {
+            Console.Error.WriteLine($"  ⚠ WARNING: {staleResult.Message}");
+            Console.Error.WriteLine("  Context may be inconsistent (old index + new disk content).");
+            Console.Error.WriteLine("  Run 'cachehub index refresh' to fix this.");
+        }
+        else if (staleResult.NoFingerprint)
+        {
+            Console.Error.WriteLine($"  ℹ {staleResult.Message}");
+        }
+
         var manifest = engine.Build(
             new ContextBuildRequest
             {
