@@ -1111,11 +1111,21 @@ app.MapGet("/api/v1/context/{id}/payload", async (string id, IContextPackageRepo
         }
     }
 
-    var payload = generator.Generate(manifest, path =>
+    ContextPackagePayload payload;
+    try
     {
-        var fullPath = ResolvePathSafe(ws.RootPath, path);
-        return fullPath is not null && File.Exists(fullPath) ? File.ReadAllTextAsync(fullPath).GetAwaiter().GetResult() : "";
-    }, payloadEnforcer);
+        payload = generator.Generate(manifest, path =>
+        {
+            var fullPath = ResolvePathSafe(ws.RootPath, path);
+            return fullPath is not null && File.Exists(fullPath) ? File.ReadAllTextAsync(fullPath).GetAwaiter().GetResult() : "";
+        }, payloadEnforcer);
+    }
+    catch (ContextVersionMismatchException ex)
+    {
+        // V8-P0-02: Content has changed since Context Package was built
+        return Results.Json(ErrorEnvelope.From(ErrorCode.ContextVersionMismatch, ex.Message),
+            statusCode: 409);
+    }
 
     return Results.Ok(new
     {
@@ -1379,11 +1389,21 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
     // Assemble prompt
     var promptAssembly = new PromptAssemblyService();
     var payloadGenerator = new PayloadGenerator();
-    var payloadContent = payloadGenerator.GenerateMarkdown(manifest, path =>
+    string payloadContent;
+    try
     {
-        var fullPath = ResolvePathSafe(workspace.RootPath, path);
-        return fullPath is not null && File.Exists(fullPath) ? File.ReadAllTextAsync(fullPath).GetAwaiter().GetResult() : "";
-    }, secEnforcer);
+        payloadContent = payloadGenerator.GenerateMarkdown(manifest, path =>
+        {
+            var fullPath = ResolvePathSafe(workspace.RootPath, path);
+            return fullPath is not null && File.Exists(fullPath) ? File.ReadAllTextAsync(fullPath).GetAwaiter().GetResult() : "";
+        }, secEnforcer);
+    }
+    catch (ContextVersionMismatchException ex)
+    {
+        // V8-P0-02: Content has changed since Context Package was built
+        return Results.Json(ErrorEnvelope.From(ErrorCode.ContextVersionMismatch, ex.Message),
+            statusCode: 409);
+    }
     var (systemPrompt, userContent) = promptAssembly.Assemble(manifest, payloadContent);
 
     // Call Gateway if requested

@@ -269,7 +269,7 @@ public class UniversalSkillContractTests
                     var fullPath = Path.Combine(workspacePath, path.Replace('/', Path.DirectorySeparatorChar));
                     return File.Exists(fullPath) ? File.ReadAllTextAsync(fullPath).GetAwaiter().GetResult() : "";
                 },
-                path => "sha256:test");
+                path => "sha256:pending"); // V8-P0-02: use pending to skip hash verification
 
             Assert.NotEmpty(manifest.SelectedFiles);
             Assert.NotEmpty(manifest.Task.ExtractedSymbols!);
@@ -302,7 +302,7 @@ public class UniversalSkillContractTests
                     var fullPath = Path.Combine(workspacePath, path.Replace('/', Path.DirectorySeparatorChar));
                     return File.Exists(fullPath) ? File.ReadAllTextAsync(fullPath).GetAwaiter().GetResult() : "";
                 },
-                path => "sha256:test");
+                path => "sha256:pending"); // V8-P0-02: use pending to skip hash verification
             await ctxRepo.SaveAsync(manifest);
 
             // Expand by file
@@ -343,7 +343,7 @@ public class UniversalSkillContractTests
                     var fullPath = Path.Combine(workspacePath, path.Replace('/', Path.DirectorySeparatorChar));
                     return File.Exists(fullPath) ? File.ReadAllTextAsync(fullPath).GetAwaiter().GetResult() : "";
                 },
-                path => "sha256:test");
+                path => "sha256:pending"); // V8-P0-02: use pending to skip hash verification
             await ctxRepo.SaveAsync(manifest);
 
             // Submit feedback as documented in SKILL.md
@@ -397,7 +397,7 @@ public class UniversalSkillContractTests
                     var fullPath = Path.Combine(workspacePath, path.Replace('/', Path.DirectorySeparatorChar));
                     return File.Exists(fullPath) ? File.ReadAllTextAsync(fullPath).GetAwaiter().GetResult() : "";
                 },
-                path => "sha256:test");
+                path => "sha256:pending"); // V8-P0-02: use pending to skip hash verification
             await ctxRepo.SaveAsync(manifest);
 
             // Verify context was saved and can be retrieved

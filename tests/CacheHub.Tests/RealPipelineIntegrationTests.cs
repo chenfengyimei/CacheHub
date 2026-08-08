@@ -209,7 +209,7 @@ public class RealPipelineIntegrationTests
                     var fullPath = Path.Combine(tempRoot, path.Replace('/', Path.DirectorySeparatorChar));
                     return File.Exists(fullPath) ? File.ReadAllText(fullPath) : "";
                 },
-                path => "sha256:test");
+                path => "sha256:pending"); // V8-P0-02: use pending hash to skip verification in tests
 
             // 10. Verify manifest
             Assert.NotNull(manifest);

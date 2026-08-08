@@ -3,6 +3,7 @@ using CacheHub.Core.Context;
 using CacheHub.Core.Identifiers;
 using CacheHub.Core.Security;
 using CacheHub.Context.Chunking;
+using System.Security.Cryptography;
 
 namespace CacheHub.Context.Payload;
 
@@ -12,6 +13,7 @@ namespace CacheHub.Context.Payload;
 /// Security: if a SecurityPolicyEnforcer is provided, every file is evaluated
 /// before inclusion in the Payload. Denied files are excluded; ApprovalRequired
 /// files are excluded from content but listed as requiring approval.
+/// V8-P0-02: ContentHash verification — payload is immutable per ContextPackageId.
 /// </summary>
 public sealed class PayloadGenerator
 {
@@ -20,6 +22,7 @@ public sealed class PayloadGenerator
     /// <summary>
     /// Generates a Payload from a Manifest and content provider.
     /// If securityEnforcer is provided, files are filtered by policy.
+    /// V8-P0-02: Verifies ContentHash before emitting content.
     /// </summary>
     public ContextPackagePayload Generate(
         ContextPackageManifest manifest,
@@ -34,6 +37,10 @@ public sealed class PayloadGenerator
         {
             var content = contentProvider(file.Path);
             if (string.IsNullOrEmpty(content)) continue;
+
+            // V8-P0-02: Verify content hash to ensure payload immutability.
+            // Skip verification for fingerprint hashes (fp:) and expanded files (sha256:expanded).
+            VerifyContentHash(file.Path, file.ContentHash, content);
 
             // Security: evaluate file before including in payload
             if (securityEnforcer is not null)
@@ -101,6 +108,7 @@ public sealed class PayloadGenerator
     /// <summary>
     /// Generates a Markdown-formatted payload string.
     /// If securityEnforcer is provided, files are filtered by policy.
+    /// V8-P0-02: Verifies ContentHash before emitting content.
     /// </summary>
     public string GenerateMarkdown(
         ContextPackageManifest manifest,
@@ -120,6 +128,9 @@ public sealed class PayloadGenerator
         {
             var content = contentProvider(file.Path);
             if (string.IsNullOrEmpty(content)) continue;
+
+            // V8-P0-02: Verify content hash to ensure payload immutability
+            VerifyContentHash(file.Path, file.ContentHash, content);
 
             // Security: evaluate file before including in payload
             if (securityEnforcer is not null)
@@ -191,5 +202,36 @@ public sealed class PayloadGenerator
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// V8-P0-02: Verifies that the content matches the manifest's ContentHash.
+    /// Throws ContextVersionMismatchException if the file has been modified since the Context Package was built.
+    /// Only verifies full SHA-256 hashes (sha256:hexstring format).
+    /// Skips: fingerprint hashes (fp:), placeholder hashes (sha256:expanded, sha256:pending),
+    /// empty/null hashes, and non-standard hash formats.
+    /// </summary>
+    private static void VerifyContentHash(string filePath, string? expectedHash, string content)
+    {
+        if (string.IsNullOrEmpty(expectedHash))
+            return;
+
+        // Only verify hashes that start with "sha256:" (full content hashes)
+        if (!expectedHash.StartsWith("sha256:", StringComparison.Ordinal))
+            return;
+
+        // Skip placeholder hashes — expanded files or pending hashes
+        if (expectedHash == "sha256:expanded" || expectedHash == "sha256:pending")
+            return;
+
+        // Compute SHA-256 of the content
+        var contentBytes = Encoding.UTF8.GetBytes(content);
+        var actualHashBytes = SHA256.HashData(contentBytes);
+        var actualHash = "sha256:" + Convert.ToHexString(actualHashBytes).ToLowerInvariant();
+
+        if (!string.Equals(expectedHash, actualHash, StringComparison.Ordinal))
+        {
+            throw new ContextVersionMismatchException(filePath, expectedHash, actualHash);
+        }
     }
 }

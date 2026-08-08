@@ -249,8 +249,8 @@ public class AuditFixVerificationTests
             },
             SelectedFiles =
             [
-                new SelectedFile { Path = "src/safe.ts", ContentHash = "sha256:abc", Mode = SelectionMode.Full, Score = 1.0, Reasons = ["match"] },
-                new SelectedFile { Path = ".env", ContentHash = "sha256:def", Mode = SelectionMode.Full, Score = 0.5, Reasons = ["match"] },
+                new SelectedFile { Path = "src/safe.ts", ContentHash = "sha256:pending", Mode = SelectionMode.Full, Score = 1.0, Reasons = ["match"] },
+                new SelectedFile { Path = ".env", ContentHash = "sha256:pending", Mode = SelectionMode.Full, Score = 0.5, Reasons = ["match"] },
             ],
             ExcludedCandidates = [],
             Safety = new SafetyInfo { CloudSendAllowed = true, SecretsScanPassed = true },

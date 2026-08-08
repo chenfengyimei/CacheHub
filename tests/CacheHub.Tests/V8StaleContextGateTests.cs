@@ -211,5 +211,5 @@ public class V8StaleContextGateTests
         path == "src/auth.cs" ? "public class Auth { }" : "";
 
     private static string ProvideHash(string path) =>
-        path == "src/auth.cs" ? "sha256:abc" : "sha256:unknown";
+        path == "src/auth.cs" ? "sha256:pending" : "sha256:unknown";
 }

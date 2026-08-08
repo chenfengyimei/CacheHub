@@ -245,7 +245,7 @@ public class ExpandAndCompressionTests
                 new SelectedFile
                 {
                     Path = "src/auth.ts",
-                    ContentHash = "sha256:abc",
+                    ContentHash = "sha256:pending",
                     Mode = SelectionMode.Full,
                     Score = 0.8,
                     Reasons = ["test"],

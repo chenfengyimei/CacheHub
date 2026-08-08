@@ -168,6 +168,7 @@ public sealed class ContextExpander
     /// R5-W007: Creates a revision ContextPackageManifest from an expansion result.
     /// The new manifest has ParentPackageId set to the original, includes the expanded files,
     /// and records the incremental token count.
+    /// V8-P0-02: Propagates DirtyStateHash from parent to ensure version consistency.
     /// </summary>
     public ContextPackageManifest CreateRevision(
         ContextPackageManifest parentManifest,
@@ -196,6 +197,9 @@ public sealed class ContextExpander
             SchemaVersion = parentManifest.SchemaVersion,
             WorkspaceId = parentManifest.WorkspaceId,
             IndexSnapshotId = parentManifest.IndexSnapshotId,
+            RepositoryCommit = parentManifest.RepositoryCommit,
+            Branch = parentManifest.Branch,
+            DirtyStateHash = parentManifest.DirtyStateHash, // V8-P0-02: propagate version fingerprint
             Task = parentManifest.Task,
             Ranking = parentManifest.Ranking,
             Budget = new BudgetInfo
@@ -217,6 +221,7 @@ public sealed class ContextExpander
             ContextEngineVersion = parentManifest.ContextEngineVersion,
             ChunkingStrategyVersion = parentManifest.ChunkingStrategyVersion,
             TokenBudgetPolicyVersion = parentManifest.TokenBudgetPolicyVersion,
+            RepoMapVersion = parentManifest.RepoMapVersion,
             CreatedAt = DateTimeOffset.UtcNow,
             ParentPackageId = parentManifest.Id,
         };

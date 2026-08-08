@@ -38,7 +38,7 @@ public class PayloadPlanConsistencyTests
                 new SelectedFile
                 {
                     Path = "test.ts",
-                    ContentHash = "sha256:abc",
+                    ContentHash = "sha256:pending",
                     Mode = SelectionMode.Chunks,
                     Score = 0.8,
                     Reasons = ["test"],
@@ -97,7 +97,7 @@ public class PayloadPlanConsistencyTests
                 new SelectedFile
                 {
                     Path = "test.ts",
-                    ContentHash = "sha256:abc",
+                    ContentHash = "sha256:pending",
                     Mode = SelectionMode.Full,
                     Score = 0.8,
                     Reasons = ["test"],
