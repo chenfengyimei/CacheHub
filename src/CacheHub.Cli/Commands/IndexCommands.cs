@@ -269,9 +269,15 @@ public static class IndexCommands
         }
 
         // Activate snapshot — use Degraded status if FTS failed (FTS is a core recall source)
-        var snapshotStatus = ftsBuildFailed ? "ActiveDegraded" : "Active";
+        // V8-audit-35: Two-pass fingerprint — re-capture git state after indexing to detect
+        // workspace changes during the (potentially long) indexing process.
+        var endGitState = await gitStateProvider.CaptureAsync(workspace.RootPath, ContextCommands.CreateFingerprintFilter(workspace.RootPath));
+        var workspaceChangedDuringBuild = !string.Equals(
+            gitState.Fingerprint, endGitState.Fingerprint, StringComparison.Ordinal);
+
+        var snapshotStatus = (ftsBuildFailed || workspaceChangedDuringBuild) ? "ActiveDegraded" : "Active";
         await ActivateSnapshotAsync(factory, snapshotId, workspace.Id, fileCount, snapshotStatus);
-        await repo.UpdateStatusAsync(workspace.Id, ftsBuildFailed ? WorkspaceStatus.Indexing : WorkspaceStatus.Ready);
+        await repo.UpdateStatusAsync(workspace.Id, (ftsBuildFailed || workspaceChangedDuringBuild) ? WorkspaceStatus.Indexing : WorkspaceStatus.Ready);
 
         Console.WriteLine($"Index build complete:");
         Console.WriteLine($"  Indexed: {fileCount}");
@@ -280,6 +286,8 @@ public static class IndexCommands
         Console.WriteLine($"  Snapshot: {snapshotId.Value}");
         if (ftsBuildFailed)
             Console.WriteLine($"  ⚠️ FTS build failed — snapshot is ActiveDegraded. Full-text search may not work correctly.");
+        if (workspaceChangedDuringBuild)
+            Console.WriteLine($"  ⚠️ Workspace changed during indexing — snapshot is ActiveDegraded. Run 'cachehub index refresh' for a consistent snapshot.");
         return 0;
     }
 
