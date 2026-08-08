@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.0-prealpha] — 2026-08-08
 
+### V8: Product Proof & Context Integrity (2026-08-08)
+
+**"Context Package 严格不可变 + 安全边界统一 + Benchmark Ground Truth 隔离"。**
+
+#### P0: Context Integrity & Security
+- **Context Strict Version Gate** (P0-01): Stale 默认拒绝构建 + `--allow-stale` opt-in + Cache 跳过 stale key；新增 `CurrentWorkspaceFingerprint` + `AllowStale` 字段
+- **Immutable Context Payload** (P0-02): PayloadGenerator 验证 ContentHash，不匹配抛 `ContextVersionMismatchException`；Desktop 返回 409；ContextExpander 传播版本指纹
+- **Path Security Unification** (P0-03): 删除 Desktop 弱版 `SafeResolvePath`，全项目统一 `SafePathResolver`；新增父目录 symlink 逐级检查 `IsPathChainSafe`
+- **Benchmark Matrix Ground Truth 消除** (P0-04): 重写 `BenchmarkMatrixRunner`，`contextBuildCallback` 调用真实 ContextEngine；Ground Truth 仅在评价阶段使用
+- **PhaseGate Incomplete** (P0-05): 无 Agent 数据时 `Status=Incomplete`（不再 Passed）；新增 `MatrixGateStatus` 枚举
+
+#### P1: Hardening
+- **Fingerprint Scope = Index Scope** (P1-01): `GitStateProvider.CaptureAsync` 新增 `fileFilter` 参数；非 Git 目录不再枚举 node_modules/bin/obj
+- **Gateway Cache Hit Header** (P1-02): 缓存命中/未命中写入 `X-CacheHub-Cache-Hit` header
+- **Benchmark Repair Loop** (P1-03): `ComposePrompt` 新增 `previousPatch`；`ApplyPatch` 检查 `WaitForExit` + Kill；CLI `--runs-per-task` 暴露
+- **sync-test-count.ps1 修复** (FIX-01): 删除 `-replace '\d+', $Count` 全量替换，只更新专用字段
+
 ### V7: Truth Closure & Benchmark Matrix (2026-08-08)
 
 **"版本真实性"和"价值证据真实性"彻底做实。**
