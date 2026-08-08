@@ -77,7 +77,7 @@ jobs:
 
       - name: Publish Desktop (Web UI)
         shell: bash
-        run: dotnet publish src/CacheHub.Desktop/CacheHub.Desktop.csproj -c Release -o publish-desktop --nologo
+        run: dotnet publish src/CacheHub.Desktop/CacheHub.Desktop.csproj -c Release -o publish-desktop --nologo -p:PublishSingleFile=false -p:EnableCompressionInSingleFile=false
 
       - name: Smoke — CLI version
         shell: bash
