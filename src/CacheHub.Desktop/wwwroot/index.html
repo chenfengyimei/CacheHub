@@ -251,6 +251,12 @@
 function getAuthToken() { return localStorage.getItem('cachehub_token') || ''; }
 function setAuthToken(token) { localStorage.setItem('cachehub_token', token); }
 
+// V7-W04: Extract launch nonce from URL query parameter
+function getLaunchNonce() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('nonce') || '';
+}
+
 async function api(path, opts) {
     const token = getAuthToken();
     const headers = { ...(opts?.headers || {}) };
@@ -258,10 +264,12 @@ async function api(path, opts) {
     let res = await fetch(path, { ...opts, headers, credentials: 'same-origin' });
 
     // V6: If the session cookie expired (401), re-init the cookie and retry once.
-    // Avoids silent failures after 24h idle; keeps "open box, no manual token" promise.
+    // V7-W04: Pass launch nonce for re-init (may fail if nonce already used — that's OK for cookie refresh)
     if (res.status === 401) {
         try {
-            await fetch('/api/v1/auth/init', { method: 'POST', credentials: 'same-origin' });
+            const nonce = getLaunchNonce();
+            const initUrl = '/api/v1/auth/init' + (nonce ? '?nonce=' + encodeURIComponent(nonce) : '');
+            await fetch(initUrl, { method: 'POST', credentials: 'same-origin' });
             res = await fetch(path, { ...opts, headers, credentials: 'same-origin' });
         } catch (e) { /* retry failed — surface original 401 */ }
     }
@@ -269,9 +277,16 @@ async function api(path, opts) {
 }
 
 // V6: Auto-init session cookie on page load (no manual token copy needed)
+// V7-W04: Pass launch nonce from URL
 async function autoInitAuth() {
     try {
-        await fetch('/api/v1/auth/init', { method: 'POST', credentials: 'same-origin' });
+        const nonce = getLaunchNonce();
+        const initUrl = '/api/v1/auth/init' + (nonce ? '?nonce=' + encodeURIComponent(nonce) : '');
+        await fetch(initUrl, { method: 'POST', credentials: 'same-origin' });
+        // Clean the nonce from the URL after successful init
+        if (nonce && window.history.replaceState) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
     } catch (e) { /* fail silently — user can still set token manually */ }
 }
 autoInitAuth();

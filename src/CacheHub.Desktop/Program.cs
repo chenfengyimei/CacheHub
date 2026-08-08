@@ -36,6 +36,12 @@ var accessToken = builder.Configuration["ApiToken"]
     ?? Environment.GetEnvironmentVariable("CACHEHUB_API_TOKEN")
     ?? Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
 
+// V7-W04: Launch nonce — one-time token for /api/v1/auth/init, prevents arbitrary process from claiming session
+// In Testing environment, nonce is bypassed for test convenience
+var isTestingEnv = builder.Environment.EnvironmentName == "Testing";
+var launchNonce = isTestingEnv ? "test-nonce" : Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
+var nonceUsed = false;
+
 builder.Services.AddSingleton<AppDataDirectory>();
 builder.Services.AddSingleton<SqliteConnectionFactory>(sp =>
 {
@@ -105,14 +111,38 @@ var app = builder.Build();
 
 // Security: API authentication middleware — all /api/ routes require a valid bearer token
 // V6: Also accept HttpOnly session cookie for same-origin GUI auto-authentication
+// V7-W04: Host validation moved BEFORE auth/init; exact match (not StartsWith) to prevent DNS rebinding
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path.Value;
     if (path is not null && path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
     {
-        // V6: /api/v1/auth/init is excluded — it's the bootstrap endpoint that sets the cookie
+        // V7-W04: Host validation FIRST — before any auth logic, including /auth/init
+        // Use exact match to prevent DNS rebinding (localhost.evil.com must NOT pass)
+        var hostHeader = context.Request.Headers.Host.ToString();
+        var hostPart = hostHeader.Split(':')[0]; // strip port
+        if (!string.Equals(hostPart, "127.0.0.1", StringComparison.Ordinal) &&
+            !string.Equals(hostPart, "localhost", StringComparison.Ordinal) &&
+            !string.Equals(hostPart, "::1", StringComparison.Ordinal))
+        {
+            context.Response.StatusCode = 403;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync("{\"error\":\"Forbidden\",\"code\":\"INVALID_HOST\",\"hint\":\"Only localhost/127.0.0.1 access is allowed.\"}");
+            return;
+        }
+
+        // V7-W04: /api/v1/auth/init requires launch nonce (one-time use)
         if (path.Equals("/api/v1/auth/init", StringComparison.OrdinalIgnoreCase))
         {
+            var nonce = context.Request.Query["nonce"].ToString();
+            if (!isTestingEnv && (string.IsNullOrEmpty(nonce) || !nonce.Equals(launchNonce, StringComparison.Ordinal) || nonceUsed))
+            {
+                context.Response.StatusCode = 403;
+                context.Response.ContentType = "application/json";
+                await context.Response.WriteAsync("{\"error\":\"Forbidden\",\"code\":\"INVALID_NONCE\",\"hint\":\"Launch nonce is required, invalid, or already used.\"}");
+                return;
+            }
+            nonceUsed = true; // one-time use
             await next();
             return;
         }
@@ -135,17 +165,6 @@ app.Use(async (context, next) =>
             context.Response.StatusCode = 401;
             context.Response.ContentType = "application/json";
             await context.Response.WriteAsync($"{{\"error\":\"Unauthorized\",\"code\":\"AUTH_REQUIRED\",\"hint\":\"Call POST /api/v1/auth/init to get a session cookie, or use Authorization: Bearer <token> header.\"}}");
-            return;
-        }
-
-        // Host header validation — prevent DNS rebinding attacks
-        var host = context.Request.Headers.Host.ToString();
-        if (!host.StartsWith("127.0.0.1", StringComparison.OrdinalIgnoreCase) &&
-            !host.StartsWith("localhost", StringComparison.OrdinalIgnoreCase))
-        {
-            context.Response.StatusCode = 403;
-            context.Response.ContentType = "application/json";
-            await context.Response.WriteAsync("{\"error\":\"Forbidden\",\"code\":\"INVALID_HOST\",\"hint\":\"Only localhost/127.0.0.1 access is allowed.\"}");
             return;
         }
     }
@@ -1048,6 +1067,7 @@ app.MapGet("/api/v1/context/{id}/payload", async (string id, IContextPackageRepo
 Console.WriteLine("============================================================");
 Console.WriteLine("CacheHub Local API started on http://127.0.0.1:5099");
 Console.WriteLine($"Access Token: {accessToken}");
+Console.WriteLine($"Launch URL: http://127.0.0.1:5099/?nonce={launchNonce}");
 Console.WriteLine("All API requests require: Authorization: Bearer <token>");
 Console.WriteLine("============================================================");
 
