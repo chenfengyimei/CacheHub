@@ -796,6 +796,21 @@ app.MapPost("/api/v1/context/{id}/expand", async (string id, ExpandApiRequest re
     var ws = await wsRepo.FindByIdAsync(manifest.WorkspaceId);
     if (ws is null) return Results.NotFound(ErrorEnvelope.From(ErrorCode.WorkspaceNotFound, "Workspace not found"));
 
+    // V8-audit-32: Verify workspace hasn't changed since the parent context package was built.
+    // Prevents creating cross-version child revision chains (parent on snapshot A, disk now B).
+    if (!string.IsNullOrEmpty(manifest.DirtyStateHash))
+    {
+        var expandStaleResult = await CacheHub.Core.Indexing.StaleDetector.CheckAsync(
+            ws.RootPath, manifest.DirtyStateHash,
+            fileFilter: CreateDesktopFingerprintFilter(ws.RootPath));
+        if (!expandStaleResult.IsFresh)
+        {
+            return Results.Json(ErrorEnvelope.From(ErrorCode.ContextStale,
+                $"Workspace state has changed since this context package was built. {expandStaleResult.Message} Run index refresh and rebuild context."),
+                statusCode: 409);
+        }
+    }
+
     var targetPath = req.File ?? req.Symbol ?? "";
     var fullPath = ResolvePathSafe(ws.RootPath, targetPath);
 
