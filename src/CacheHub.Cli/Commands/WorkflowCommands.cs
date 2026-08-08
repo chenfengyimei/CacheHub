@@ -101,7 +101,8 @@ public static class WorkflowCommands
 
         // V7-W02 / V8-P0-01: Stale detection — default: reject build when stale
         var staleResult = await CacheHub.Core.Indexing.StaleDetector.CheckAsync(
-            workspace.RootPath, activeSnapshot.WorkspaceFingerprint);
+            workspace.RootPath, activeSnapshot.WorkspaceFingerprint,
+            fileFilter: ContextCommands.CreateFingerprintFilter(workspace.RootPath));
         if (!staleResult.IsFresh)
         {
             if (!allowStale)

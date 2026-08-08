@@ -166,8 +166,10 @@ public static class ContextCommands
         var indexedFiles = await GetIndexedFilesAsync(factory, wsId, snapshotId);
 
         // V7-W02 / V8-P0-01: Stale detection — default: reject build when stale
+        // V8-P1-01: Pass fileFilter so fingerprint scope = index scope (excludes node_modules/bin/obj)
         var staleResult = await CacheHub.Core.Indexing.StaleDetector.CheckAsync(
-            workspace.RootPath, activeSnapshot.Value.WorkspaceFingerprint);
+            workspace.RootPath, activeSnapshot.Value.WorkspaceFingerprint,
+            fileFilter: CreateFingerprintFilter(workspace.RootPath));
         if (!staleResult.IsFresh)
         {
             if (!allowStale)
@@ -756,6 +758,28 @@ public static class ContextCommands
 
     private static bool HasFlag(string[] args, string flag) =>
         args.Contains(flag, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// V8-P1-01: Creates a file filter for fingerprint scope.
+    /// Only indexed files (not ignored, not binary) participate in the workspace fingerprint.
+    /// This prevents node_modules/bin/obj changes from causing unnecessary stale detection.
+    /// </summary>
+    internal static Func<string, bool> CreateFingerprintFilter(string workspaceRoot)
+    {
+        var ignoreEngine = new CacheHub.Indexing.IgnoreRules.IgnoreRuleEngine()
+            .WithDefaults()
+            .WithGitIgnore(Path.Combine(workspaceRoot, ".gitignore"))
+            .WithCacheHubIgnore(Path.Combine(workspaceRoot, ".cachehubignore"));
+
+        return relativePath =>
+        {
+            if (ignoreEngine.IsIgnored(relativePath)) return false;
+            // Check if the file type should be indexed
+            var fullPath = Path.Combine(workspaceRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
+            var typeInfo = CacheHub.Indexing.Detection.FileTypeDetector.Detect(fullPath, new FileInfo(fullPath).Length);
+            return typeInfo.ShouldIndex;
+        };
+    }
 
     /// <summary>
     /// Creates a ContextPackageCache with persistent SQLite backend when available.

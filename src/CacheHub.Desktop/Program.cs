@@ -183,6 +183,25 @@ static string? ResolvePathSafe(string rootPath, string relativePath)
     return new SafePathResolver(rootPath).Resolve(relativePath);
 }
 
+// V8-P1-01: Creates a file filter for fingerprint scope.
+// Only indexed files (not ignored, not binary) participate in the workspace fingerprint.
+static Func<string, bool> CreateDesktopFingerprintFilter(string workspaceRoot)
+{
+    var ignoreEngine = new CacheHub.Indexing.IgnoreRules.IgnoreRuleEngine()
+        .WithDefaults()
+        .WithGitIgnore(System.IO.Path.Combine(workspaceRoot, ".gitignore"))
+        .WithCacheHubIgnore(System.IO.Path.Combine(workspaceRoot, ".cachehubignore"));
+
+    return relativePath =>
+    {
+        if (ignoreEngine.IsIgnored(relativePath)) return false;
+        var fullPath = System.IO.Path.Combine(workspaceRoot, relativePath.Replace('/', System.IO.Path.DirectorySeparatorChar));
+        if (!System.IO.File.Exists(fullPath)) return false;
+        var typeInfo = CacheHub.Indexing.Detection.FileTypeDetector.Detect(fullPath, new FileInfo(fullPath).Length);
+        return typeInfo.ShouldIndex;
+    };
+}
+
 static async Task<List<IndexedFileInfo>> GetIndexedFilesAsync(SqliteConnectionFactory factory, string workspaceId)
 {
     var result = new List<IndexedFileInfo>();
@@ -669,7 +688,8 @@ app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextE
 
     // V7-W02 / V8-P0-01: Stale detection — default: reject build when stale
     var staleResult = await CacheHub.Core.Indexing.StaleDetector.CheckAsync(
-        ws.RootPath, activeSnapshot.Value.WorkspaceFingerprint);
+        ws.RootPath, activeSnapshot.Value.WorkspaceFingerprint,
+        fileFilter: CreateDesktopFingerprintFilter(ws.RootPath));
     if (!staleResult.IsFresh)
     {
         // V8-P0-01: Desktop API returns 409 Conflict with CONTEXT_STALE error code
@@ -1274,7 +1294,8 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
 
     // V7-W02 / V8-P0-01: Stale detection — default: reject build when stale
     var staleResult = await CacheHub.Core.Indexing.StaleDetector.CheckAsync(
-        workspace.RootPath, activeSnapshot.WorkspaceFingerprint);
+        workspace.RootPath, activeSnapshot.WorkspaceFingerprint,
+        fileFilter: CreateDesktopFingerprintFilter(workspace.RootPath));
     if (!staleResult.IsFresh)
     {
         return Results.Json(ErrorEnvelope.From(ErrorCode.ContextStale,
