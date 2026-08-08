@@ -79,9 +79,11 @@ jobs:
         run: dotnet publish src/CacheHub.Desktop/CacheHub.Desktop.csproj -c Release -o publish-desktop --nologo
 
       - name: Smoke — CLI version
+        shell: bash
         run: ${{ matrix.binary }} version
 
       - name: Smoke — CLI capabilities
+        shell: bash
         run: ${{ matrix.binary }} capabilities --output=json
 
       - name: Smoke — CLI doctor (diagnose env, tolerate env-dependent exit)
