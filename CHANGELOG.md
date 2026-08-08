@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **sync-test-count.ps1 修复** (FIX-01): 删除 `-replace '\d+', $Count` 全量替换，只更新专用字段
 - **Index Refresh fingerprint 边界修复** (审计§33): 文件内容一致但 GitState 变化时创建 metadata-only Snapshot
 - **Stats 双重统计修复** (审计§41): Desktop 调用 Gateway 时不记录模型 token，Gateway 成为模型调用统计唯一来源
+- **CLI ResolveFileContent 路径安全统一** (P0-03 遗漏): 3 个 CLI 命令文件的 ResolveFileContent 全部改用 SafePathResolver
+- **Expand 端点 stale 检查** (审计§32): Desktop expand endpoint 在读取磁盘前检查 fingerprint，防止跨版本修订链
+- **Index Build 二次指纹验证** (审计§35): 扫描完成后重新捕获 GitState，不一致时标记 ActiveDegraded
+- **Gateway Stats 生命周期管理** (审计§42): PurgeOlderThan + VACUUM，启动时自动清理 30 天以上数据
+- **Universal Skill stale 自动恢复协议** (审计§51): SKILL.md 新增 CONTEXT_STALE 三步恢复流程
 
 ### V7: Truth Closure & Benchmark Matrix (2026-08-08)
 
