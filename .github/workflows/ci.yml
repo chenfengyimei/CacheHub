@@ -48,12 +48,12 @@ jobs:
         with:
           global-json-file: global.json
 
-      - name: Publish single-file CLI
+      - name: Publish single-file CLI (self-contained)
         run: |
           mkdir -p publish
           dotnet publish src/CacheHub.Cli/CacheHub.Cli.csproj -c Release -o publish --nologo \
             -p:PublishSingleFile=true \
-            -p:SelfContained=false
+            -p:SelfContained=true
 
       - name: Publish Desktop (Web UI)
         run: dotnet publish src/CacheHub.Desktop/CacheHub.Desktop.csproj -c Release -o publish-desktop --nologo

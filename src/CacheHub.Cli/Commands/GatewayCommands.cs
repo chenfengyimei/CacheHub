@@ -115,6 +115,9 @@ public static class GatewayCommands
             CacheStore = cacheStore,
             FallbackProviders = LoadFallbackProviders(appData),
             IsOfflineMode = isOffline,
+            // V7-W08: Apply EnableCache/EnableSingleFlight from GUI-saved config
+            EnableCache = storedGw?.EnableCache ?? true,
+            EnableSingleFlight = storedGw?.EnableSingleFlight ?? true,
         };
 
         Console.Error.WriteLine($"Starting CacheHub Gateway on http://127.0.0.1:{config.Port}");

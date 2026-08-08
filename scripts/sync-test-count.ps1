@@ -71,14 +71,39 @@ function Update-FileUtf8 {
 }
 
 # Update AI_DEV_STATE.json
+# V7-W08: Use ConvertFrom-Json/ConvertTo-Json instead of regex to prevent corruption
 $statePath = Join-Path $RepoRoot "Docs\ai\AI_DEV_STATE.json"
 if (Test-Path $statePath) {
-    Update-FileUtf8 $statePath {
-        param($json)
-        $json = $json -replace '"testCount":\s*\d+', "`"testCount`": $Count"
-        # Keep numerator + total in sync: "pass (N/M, X skipped)" -> "pass (Count/TotalCount, X skipped)"
-        $json = $json -replace 'pass \(\d+/\d+', "pass ($Count/$TotalCount)"
-        return $json
+    $jsonText = [System.IO.File]::ReadAllText($statePath, [System.Text.Encoding]::UTF8)
+    try {
+        $state = $jsonText | ConvertFrom-Json
+        $state.testCount = $Count
+        $state.qualityGates.unitTests = "pass ($Count/$TotalCount, $SkippedCount skipped)"
+        # Update currentTask test count if it mentions tests
+        if ($state.currentTask -match '\d+') {
+            $state.currentTask = $state.currentTask -replace '\d+', $Count
+        }
+        # Update architecture test counts
+        if ($state.architecture) {
+            foreach ($proj in $state.architecture.PSObject.Properties) {
+                if ($proj.Value.tests -match '\d+') {
+                    $proj.Value.tests = $proj.Value.tests -replace '\d+', $Count
+                }
+            }
+        }
+        $updatedJson = $state | ConvertTo-Json -Depth 10
+        [System.IO.File]::WriteAllText($statePath, $updatedJson, $utf8NoBom)
+        Write-Host "  Updated: $statePath" -ForegroundColor Yellow
+    }
+    catch {
+        Write-Warning "Failed to parse AI_DEV_STATE.json as JSON, falling back to regex: $_"
+        Update-FileUtf8 $statePath {
+            param($json)
+            $json = $json -replace '"testCount":\s*\d+', "`"testCount`": $Count"
+            # V7-W08: Fixed regex to match full "pass (N/M, X skipped)" pattern including trailing content
+            $json = $json -replace 'pass \(\d+/\d+(?:[),]\s*[^"]*)?\)', "pass ($Count/$TotalCount, $SkippedCount skipped)"
+            return $json
+        }
     }
 }
 

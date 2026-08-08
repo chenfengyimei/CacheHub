@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "project": "CacheHub",
-  "currentPhase": "V6-Beta-Closure",
-  "currentTask": "V6 Beta Closure & Evidence: 10/10 items complete. Real worktree apply-patch/build/test for Agent Benchmark (W10). Bootstrap dir safety + Init Plan (W08). CacheKey tokenizerVersion + GUI auto-auth (W08). 875 tests, 0 warnings.",
+  "currentPhase": "V7-Truth-Closure",
+  "currentTask": "V7 Truth Closure: 7/8 items complete. WorkspaceVersionFingerprint + stale detection + AgentBenchmark success fix + DNS rebinding + launch nonce + patch protocol + RecallWiringFactory + baseline fairness. 940 tests.",
   "repository": {
     "branch": "main",
     "dirty": false,
@@ -10,7 +10,7 @@
   },
   "qualityGates": {
     "build": "pass (0 errors, 0 warnings, warnings-as-errors enabled)",
-    "unitTests": "pass (918/920))))))))))), 2 skipped)",
+    "unitTests": "pass (940/942, 2 skipped)",
     "integrationTests": "pass (real SQLite + FTS5 + Context Engine pipeline + Snapshot Clone + Agent Benchmark + Cache Invalidate)",
     "securityTests": "pass (path traversal, auth, XSS, secret scan, symlink, offline mode, unified SecurityPolicyResolver, offline hard-block before gateway, Gateway Offline final defense V6-W04)",
     "format": "pass"
@@ -69,11 +69,11 @@
       "CacheHub.Gateway (server, provider, SSE, router, multi-provider config, Offline defense — separated from Core)",
       "CacheHub.Cli (CLI entry, 21 command groups)",
       "CacheHub.Desktop (Web UI, Minimal API, 17 routes, UsageStatsService)",
-      "CacheHub.Tests (865 tests)"
+      "CacheHub.Tests (940 tests)"
     ],
     "dependencyChain": "Core ← Storage, Indexing, Gateway; Context ← Core+Storage+Indexing; Cli/Desktop ← all",
-    "databaseMigrations": 10
+    "databaseMigrations": 11
   },
-  "testCount": 918,
+  "testCount": 940,
   "lastUpdated": "2026-08-08T01:25:00Z"
 }

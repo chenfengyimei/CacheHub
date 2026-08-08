@@ -148,4 +148,40 @@ public class DocumentationIntegrityTests
         var readme = File.ReadAllText(Path.Combine(root, "README.md"));
         Assert.Contains($"{actualCount} 个迁移", readme);
     }
+
+    // V7-W08: AI_DEV_STATE.json must be valid JSON and internally consistent
+    [Fact]
+    public void AiDevState_IsValidJson_AndConsistent()
+    {
+        var root = GetRepoRoot();
+        var statePath = Path.Combine(root, "Docs", "ai", "AI_DEV_STATE.json");
+        Assert.True(File.Exists(statePath), "AI_DEV_STATE.json should exist");
+
+        var json = File.ReadAllText(statePath);
+
+        // Must be valid JSON (no regex-corrupted content like ))))))))
+        Assert.DoesNotContain("))))", json);
+
+        // Parse as JSON to verify structure
+        var doc = System.Text.Json.JsonDocument.Parse(json);
+        var root_ = doc.RootElement;
+
+        // testCount must be a positive integer
+        Assert.True(root_.TryGetProperty("testCount", out var testCount));
+        Assert.True(testCount.GetInt32() > 0, "testCount should be positive");
+
+        // qualityGates.unitTests must not contain corrupted parentheses
+        Assert.True(root_.TryGetProperty("qualityGates", out var gates));
+        Assert.True(gates.TryGetProperty("unitTests", out var unitTests));
+        var unitTestsStr = unitTests.GetString() ?? "";
+        Assert.DoesNotContain("))))", unitTestsStr);
+        Assert.Contains("pass (", unitTestsStr);
+
+        // architecture.databaseMigrations must match actual migration count
+        var migrationsDir = Path.Combine(root, "src", "CacheHub.Storage", "Database", "Migrations");
+        var actualMigrations = Directory.GetFiles(migrationsDir, "Migration*.cs").Length;
+        Assert.True(root_.TryGetProperty("architecture", out var arch));
+        Assert.True(arch.TryGetProperty("databaseMigrations", out var dbMigrations));
+        Assert.Equal(actualMigrations, dbMigrations.GetInt32());
+    }
 }
