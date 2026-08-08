@@ -235,16 +235,9 @@ static async Task<(IndexSnapshotId SnapshotId, string? RepositoryCommit, string?
 
 static string ResolveFileHashFromDb(SqliteConnectionFactory factory, IndexSnapshotId snapshotId, string path, string? rootPath = null)
 {
-    using var conn = factory.CreateOpenConnection();
-    using var cmd = conn.CreateCommand();
-    cmd.CommandText = "SELECT content_hash FROM files WHERE snapshot_id = $snap AND normalized_path = $path LIMIT 1;";
-    cmd.Parameters.AddWithValue("$snap", snapshotId.Value);
-    cmd.Parameters.AddWithValue("$path", path);
-    var result = cmd.ExecuteScalar();
-    if (result is string hash && !string.IsNullOrEmpty(hash) && hash != "pending" && !hash.StartsWith("fp:", StringComparison.Ordinal))
-        return hash;
-
-    // DB hash is pending/fingerprint: compute real SHA-256 from file on disk
+    // V7-W22: Always compute hash from disk first when file exists.
+    // This ensures ContentHash matches the actual content being read from disk,
+    // preventing "old Hash + new Content" inconsistency in Context Package.
     if (rootPath is not null)
     {
         var fullPath = SafeResolvePath(rootPath, path);
@@ -254,9 +247,19 @@ static string ResolveFileHashFromDb(SqliteConnectionFactory factory, IndexSnapsh
             {
                 return CacheHub.Indexing.Hashing.FileHasher.ComputeFullHashAsync(fullPath).GetAwaiter().GetResult();
             }
-            catch { /* fall through to pending */ }
+            catch { /* fall through to DB hash */ }
         }
     }
+
+    // Fallback: read hash from files table (file may have been deleted from disk)
+    using var conn = factory.CreateOpenConnection();
+    using var cmd = conn.CreateCommand();
+    cmd.CommandText = "SELECT content_hash FROM files WHERE snapshot_id = $snap AND normalized_path = $path LIMIT 1;";
+    cmd.Parameters.AddWithValue("$snap", snapshotId.Value);
+    cmd.Parameters.AddWithValue("$path", path);
+    var result = cmd.ExecuteScalar();
+    if (result is string hash && !string.IsNullOrEmpty(hash) && hash != "pending" && !hash.StartsWith("fp:", StringComparison.Ordinal))
+        return hash;
     return "sha256:pending";
 }
 
