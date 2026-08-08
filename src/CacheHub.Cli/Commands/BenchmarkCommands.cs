@@ -892,13 +892,12 @@ public static class BenchmarkCommands
 
         Console.Error.WriteLine("CacheHub Benchmark Matrix — Retrieval Mode");
         Console.Error.WriteLine($"  Repository root: {repoRoot}");
-        Console.Error.WriteLine($"  Tasks: {BenchmarkTaskSet.Tasks.Count}");
 
         var tasks = string.IsNullOrEmpty(language)
             ? BenchmarkTaskSet.Tasks
             : BenchmarkTaskSet.Tasks.Where(t => t.Language == language).ToList();
 
-        Console.Error.WriteLine($"  Filtered: {tasks.Count} tasks" + (language is not null ? $" (lang={language})" : ""));
+        Console.Error.WriteLine($"  Tasks: {tasks.Count}" + (language is not null ? $" (lang={language})" : ""));
 
         // For each task, read fixture files and compute retrieval metrics
         var matrixRunner = new BenchmarkMatrixRunner();
@@ -906,7 +905,8 @@ public static class BenchmarkCommands
             task => GetFixtureFiles(repoRoot, task),
             (task, path) => ReadFixtureFile(repoRoot, task, path),
             (task, path) => ReadFixtureHash(repoRoot, task, path),
-            modelId: "retrieval-matrix");
+            modelId: "retrieval-matrix",
+            tasks: tasks);
 
         // Console report
         if (!jsonOutput)

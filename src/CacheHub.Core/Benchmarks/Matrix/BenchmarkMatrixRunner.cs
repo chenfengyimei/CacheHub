@@ -32,15 +32,22 @@ public sealed class BenchmarkMatrixRunner
     /// Runs the retrieval-only benchmark matrix (no model calls needed).
     /// For each task: builds context, computes Recall@10 and TokenReduction.
     /// </summary>
+    /// <param name="indexedFilesProvider">Provides indexed files for a task.</param>
+    /// <param name="contentProvider">Provides file content for a task and path.</param>
+    /// <param name="hashProvider">Provides file hash for a task and path.</param>
+    /// <param name="modelId">Model identifier for the report.</param>
+    /// <param name="tasks">Optional filtered task list. If null, uses all tasks.</param>
     public MatrixResult RunRetrievalMatrix(
         Func<BenchmarkTask, IReadOnlyList<MatrixFileInfo>> indexedFilesProvider,
         Func<BenchmarkTask, string, string> contentProvider,
         Func<BenchmarkTask, string, string> hashProvider,
-        string modelId = "retrieval-only")
+        string modelId = "retrieval-only",
+        IReadOnlyList<BenchmarkTask>? tasks = null)
     {
+        var taskList = tasks ?? BenchmarkTaskSet.Tasks;
         var results = new List<MatrixTaskResult>();
 
-        foreach (var task in BenchmarkTaskSet.Tasks)
+        foreach (var task in taskList)
         {
             var indexedFiles = indexedFilesProvider(task);
             var recall = ComputeRecall(task, indexedFiles);
