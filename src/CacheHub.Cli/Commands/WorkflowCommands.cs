@@ -309,8 +309,9 @@ public static class WorkflowCommands
 
     private static string ResolveFileContent(string rootPath, string relativePath)
     {
-        var fullPath = Path.Combine(rootPath, relativePath.Replace('/', Path.DirectorySeparatorChar));
-        return File.Exists(fullPath) ? File.ReadAllText(fullPath) : "";
+        // V8-P0-03: Use SafePathResolver for consistent path security
+        var fullPath = new CacheHub.Core.Paths.SafePathResolver(rootPath).ResolveFile(relativePath);
+        return fullPath is not null ? File.ReadAllText(fullPath) : "";
     }
 
     /// <summary>

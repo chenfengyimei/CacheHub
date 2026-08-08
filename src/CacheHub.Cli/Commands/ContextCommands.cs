@@ -746,11 +746,9 @@ public static class ContextCommands
 
     private static string ResolveFileContent(string rootPath, string relativePath)
     {
-        if (relativePath.Contains("..")) return "";
-        var fullPath = Path.GetFullPath(Path.Combine(rootPath, relativePath.Replace('/', Path.DirectorySeparatorChar)));
-        var normalizedRoot = Path.GetFullPath(rootPath);
-        if (!fullPath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase)) return "";
-        return File.Exists(fullPath) ? File.ReadAllText(fullPath) : "";
+        // V8-P0-03: Use SafePathResolver for consistent path security (traversal, symlink, boundary)
+        var fullPath = new CacheHub.Core.Paths.SafePathResolver(rootPath).ResolveFile(relativePath);
+        return fullPath is not null ? File.ReadAllText(fullPath) : "";
     }
 
     private static string? GetOpt(string[] args, string prefix) =>
