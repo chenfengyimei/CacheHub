@@ -1518,14 +1518,17 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
 
     // V6: Record usage stats for Dashboard
     // V7-W12: Use real cache hit + latency from Gateway response
+    // V8-audit-41: When Gateway is called, Gateway records model tokens to gateway/stats.db.
+    // Desktop should NOT double-count model tokens — only record estimated context saved (unique to Desktop).
     if (req.CallGateway)
     {
+        // Only record estimated context saved — Gateway is the single source of truth for model token stats
         usageStats.RecordRequest(
-            modelPromptTokens,
-            modelCompletionTokens,
-            gatewayCacheHit,
+            0,  // Don't count prompt tokens here — Gateway already recorded them
+            0,  // Don't count completion tokens here — Gateway already recorded them
+            false,  // Cache hit is tracked by Gateway
             (int)estimatedContextSaved,
-            gatewayLatencyMs);
+            0);  // Latency is tracked by Gateway
     }
 
     return Results.Ok(new
