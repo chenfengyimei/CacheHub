@@ -19,10 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **PhaseGate Incomplete** (P0-05): 无 Agent 数据时 `Status=Incomplete`（不再 Passed）；新增 `MatrixGateStatus` 枚举
 
 #### P1: Hardening
-- **Fingerprint Scope = Index Scope** (P1-01): `GitStateProvider.CaptureAsync` 新增 `fileFilter` 参数；非 Git 目录不再枚举 node_modules/bin/obj
+- **Fingerprint Scope = Index Scope** (P1-01): `GitStateProvider.CaptureAsync` 新增 `fileFilter` 参数；非 Git 目录不再枚举 node_modules/bin/obj；CLI/Desktop 所有 StaleDetector 调用站点已接入 `CreateFingerprintFilter`
 - **Gateway Cache Hit Header** (P1-02): 缓存命中/未命中写入 `X-CacheHub-Cache-Hit` header
 - **Benchmark Repair Loop** (P1-03): `ComposePrompt` 新增 `previousPatch`；`ApplyPatch` 检查 `WaitForExit` + Kill；CLI `--runs-per-task` 暴露
 - **sync-test-count.ps1 修复** (FIX-01): 删除 `-replace '\d+', $Count` 全量替换，只更新专用字段
+- **Index Refresh fingerprint 边界修复** (审计§33): 文件内容一致但 GitState 变化时创建 metadata-only Snapshot
+- **Stats 双重统计修复** (审计§41): Desktop 调用 Gateway 时不记录模型 token，Gateway 成为模型调用统计唯一来源
 
 ### V7: Truth Closure & Benchmark Matrix (2026-08-08)
 
