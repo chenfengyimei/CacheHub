@@ -15,6 +15,15 @@ public sealed record BenchmarkTask
     public IReadOnlyList<string> RequiredFiles { get; init; } = [];
     public IReadOnlyList<string> HelpfulFiles { get; init; } = [];
     public IReadOnlyList<string> DistractorFiles { get; init; } = [];
+
+    /// <summary>V7-W17: Local fixture path for the repository (relative to project root or absolute).</summary>
+    public string? RepositoryPath { get; init; }
+
+    /// <summary>V7-W17: Test command to run for --real-test verification (e.g., "npm test", "pytest", "go test").</summary>
+    public string? TestCommand { get; init; }
+
+    /// <summary>V7-W17: Arguments for the test command.</summary>
+    public string? TestCommandArgs { get; init; }
 }
 
 /// <summary>

@@ -3,14 +3,16 @@ using CacheHub.Core.Benchmarks;
 namespace CacheHub.Core.Benchmarks.Tasks;
 
 /// <summary>
-/// Built-in benchmark task definitions for CacheHub R4 validation.
-/// 20 tasks across 5 repository types (C#, TypeScript, Python, Go, Rust),
+/// Built-in benchmark task definitions for CacheHub Benchmark Matrix.
+/// 25 tasks across 13 repository fixtures (C#, TypeScript, Python, Go, Rust, Monorepo),
 /// including Chinese task descriptions and Monorepo structure.
-/// Each task includes Ground Truth with Required/Helpful/Distractor files.
-/// R4-W001: Fixed, reproducible task set.
+/// V7-W17: All tasks now point at real fixture repos under tests/fixtures/repos/.
 /// </summary>
 public static class BenchmarkTaskSet
 {
+    // Fixture paths relative to the solution root
+    private const string FixturesRoot = "tests/fixtures/repos";
+
     public static IReadOnlyList<BenchmarkTask> Tasks { get; } =
     [
         // === C# Tasks (cachehub-self) ===
@@ -25,6 +27,9 @@ public static class BenchmarkTaskSet
             RequiredFiles = ["src/CacheHub.Cli/Commands/WorkspaceCommands.cs", "src/CacheHub.Core/Errors/ErrorCode.cs"],
             HelpfulFiles = ["src/CacheHub.Core/Errors/CacheHubException.cs", "src/CacheHub.Core/Results/Result.cs"],
             DistractorFiles = ["README.md", "docs/ai/AI_DEV_STATE.json", "src/CacheHub.Desktop/Program.cs"],
+            RepositoryPath = ".", // Self-referential
+            TestCommand = "dotnet",
+            TestCommandArgs = "test -c Release --nologo --verbosity quiet",
         },
 
         new BenchmarkTask
@@ -37,6 +42,9 @@ public static class BenchmarkTaskSet
             RequiredFiles = ["src/CacheHub.Storage/Database/Migrations/Migration0001Initial.cs", "src/CacheHub.Storage/Database/IMigration.cs"],
             HelpfulFiles = ["src/CacheHub.Storage/Database/MigrationRunner.cs", "src/CacheHub.Core/Feedback/ContextFeedback.cs"],
             DistractorFiles = ["src/CacheHub.Core/Capabilities/CapabilityDiscovery.cs", ".gitignore"],
+            RepositoryPath = ".",
+            TestCommand = "dotnet",
+            TestCommandArgs = "test -c Release --nologo --verbosity quiet",
         },
 
         new BenchmarkTask
@@ -49,6 +57,9 @@ public static class BenchmarkTaskSet
             RequiredFiles = ["src/CacheHub.Core/Paths/PathNormalizer.cs"],
             HelpfulFiles = ["tests/CacheHub.Tests/PathAndWorkspaceTests.cs", "src/CacheHub.Core/Errors/ErrorCode.cs"],
             DistractorFiles = ["src/CacheHub.Core/Parsing/ICodeParser.cs", "NOTICE"],
+            RepositoryPath = ".",
+            TestCommand = "dotnet",
+            TestCommandArgs = "test -c Release --nologo --verbosity quiet",
         },
 
         new BenchmarkTask
@@ -61,6 +72,9 @@ public static class BenchmarkTaskSet
             RequiredFiles = ["src/CacheHub.Context/Ranking/RankingEngine.cs", "src/CacheHub.Context/Recall/RecallPipeline.cs"],
             HelpfulFiles = ["src/CacheHub.Context/Parsing/TaskParser.cs", "tests/CacheHub.Tests/RecallAndRankingTests.cs"],
             DistractorFiles = ["src/CacheHub.Core/Benchmarks/BenchmarkModels.cs", "CODE_OF_CONDUCT.md"],
+            RepositoryPath = ".",
+            TestCommand = "dotnet",
+            TestCommandArgs = "test -c Release --nologo --verbosity quiet",
         },
 
         new BenchmarkTask
@@ -73,6 +87,9 @@ public static class BenchmarkTaskSet
             RequiredFiles = ["src/CacheHub.Context/Recall/RecallPipeline.cs", "src/CacheHub.Context/Parsing/TaskParser.cs"],
             HelpfulFiles = ["tests/CacheHub.Tests/RecallAndRankingTests.cs", "src/CacheHub.Context/Ranking/RankingEngine.cs"],
             DistractorFiles = ["src/CacheHub.Core/Benchmarks/BenchmarkModels.cs", "LICENSE"],
+            RepositoryPath = ".",
+            TestCommand = "dotnet",
+            TestCommandArgs = "test -c Release --nologo --verbosity quiet",
         },
 
         new BenchmarkTask
@@ -85,6 +102,9 @@ public static class BenchmarkTaskSet
             RequiredFiles = ["src/CacheHub.Desktop/Program.cs", "src/CacheHub.Storage/Repositories/SqliteWorkspaceRepository.cs"],
             HelpfulFiles = ["src/CacheHub.Cli/Commands/IndexCommands.cs", "src/CacheHub.Core/Workspaces/Workspace.cs"],
             DistractorFiles = ["src/CacheHub.Core/Semantic/SemanticModels.cs", "CHANGELOG.md"],
+            RepositoryPath = ".",
+            TestCommand = "dotnet",
+            TestCommandArgs = "test -c Release --nologo --verbosity quiet",
         },
 
         // === TypeScript Tasks ===
@@ -95,10 +115,13 @@ public static class BenchmarkTaskSet
             RepositoryId = "sample-ts-auth",
             Language = "typescript",
             TaskDescription = "Fix the token refresh logic that doesn't handle 401 retries in AuthService",
-            CommitHash = "a1b2c3d",
+            CommitHash = "HEAD",
             RequiredFiles = ["src/auth/AuthService.ts", "src/auth/TokenManager.ts"],
             HelpfulFiles = ["src/auth/types.ts", "src/config/http.ts"],
             DistractorFiles = ["README.md", "src/legacy/OldAuth.ts", "package.json"],
+            RepositoryPath = $"{FixturesRoot}/sample-ts-auth",
+            TestCommand = "npx",
+            TestCommandArgs = "jest --passWithNoTests",
         },
 
         new BenchmarkTask
@@ -107,10 +130,13 @@ public static class BenchmarkTaskSet
             RepositoryId = "sample-ts-react",
             Language = "typescript",
             TaskDescription = "Add error boundary to the user dashboard component",
-            CommitHash = "b2c3d4e",
+            CommitHash = "HEAD",
             RequiredFiles = ["src/components/Dashboard.tsx", "src/components/ErrorBoundary.tsx"],
             HelpfulFiles = ["src/hooks/useAuth.ts", "src/types/user.ts"],
-            DistractorFiles = ["src/legacy/OldDashboard.tsx", "public/index.html", "package-lock.json"],
+            DistractorFiles = ["README.md"],
+            RepositoryPath = $"{FixturesRoot}/sample-ts-react",
+            TestCommand = "npx",
+            TestCommandArgs = "tsc --noEmit",
         },
 
         new BenchmarkTask
@@ -119,10 +145,13 @@ public static class BenchmarkTaskSet
             RepositoryId = "sample-ts-api",
             Language = "typescript",
             TaskDescription = "实现 Express 路由中间件的请求日志记录功能",
-            CommitHash = "c3d4e5f",
+            CommitHash = "HEAD",
             RequiredFiles = ["src/middleware/logger.ts", "src/app.ts"],
             HelpfulFiles = ["src/config/env.ts", "src/utils/logger.ts"],
-            DistractorFiles = ["src/legacy/old-logger.ts", "tsconfig.json", ".eslintrc.js"],
+            DistractorFiles = ["README.md", "tsconfig.json", ".eslintrc.js"],
+            RepositoryPath = $"{FixturesRoot}/sample-ts-api",
+            TestCommand = "npx",
+            TestCommandArgs = "tsc --noEmit",
         },
 
         new BenchmarkTask
@@ -131,10 +160,13 @@ public static class BenchmarkTaskSet
             RepositoryId = "sample-ts-monorepo",
             Language = "typescript",
             TaskDescription = "Fix the shared types package export in the monorepo",
-            CommitHash = "d4e5f6g",
+            CommitHash = "HEAD",
             RequiredFiles = ["packages/shared-types/src/index.ts", "packages/shared-types/package.json"],
             HelpfulFiles = ["packages/api/src/types.ts", "packages/web/src/types.ts"],
-            DistractorFiles = ["packages/web/src/App.tsx", "packages/api/src/server.ts", "turbo.json"],
+            DistractorFiles = ["README.md", "turbo.json"],
+            RepositoryPath = $"{FixturesRoot}/sample-ts-monorepo",
+            TestCommand = "npx",
+            TestCommandArgs = "tsc --noEmit",
         },
 
         // === Python Tasks ===
@@ -145,10 +177,13 @@ public static class BenchmarkTaskSet
             RepositoryId = "sample-py-api",
             Language = "python",
             TaskDescription = "Add a retry decorator to the user_repository fetch function",
-            CommitHash = "e4f5g6h",
+            CommitHash = "HEAD",
             RequiredFiles = ["src/repositories/user_repository.py", "src/utils/decorators.py"],
             HelpfulFiles = ["src/config/settings.py", "src/tests/test_user_repo.py"],
-            DistractorFiles = ["docs/api.md", "src/legacy/old_repo.py", "requirements.txt"],
+            DistractorFiles = ["README.md", "src/legacy/old_repo.py", "requirements.txt"],
+            RepositoryPath = $"{FixturesRoot}/sample-py-api",
+            TestCommand = "python",
+            TestCommandArgs = "-m pytest src/tests/ -v",
         },
 
         new BenchmarkTask
@@ -157,10 +192,13 @@ public static class BenchmarkTaskSet
             RepositoryId = "sample-py-django",
             Language = "python",
             TaskDescription = "Fix the Django model serializer that drops nullable fields",
-            CommitHash = "f5g6h7i",
+            CommitHash = "HEAD",
             RequiredFiles = ["src/serializers/user_serializer.py", "src/models/user.py"],
             HelpfulFiles = ["src/views/user_views.py", "src/tests/test_serializer.py"],
-            DistractorFiles = ["src/legacy/old_serializer.py", "manage.py", "setup.py"],
+            DistractorFiles = ["README.md", "manage.py", "setup.py"],
+            RepositoryPath = $"{FixturesRoot}/sample-py-django",
+            TestCommand = "python",
+            TestCommandArgs = "-m pytest src/tests/ -v",
         },
 
         new BenchmarkTask
@@ -169,10 +207,13 @@ public static class BenchmarkTaskSet
             RepositoryId = "sample-py-ml",
             Language = "python",
             TaskDescription = "在数据处理管线中添加数据验证步骤，确保输入数据完整性",
-            CommitHash = "g6h7i8j",
+            CommitHash = "HEAD",
             RequiredFiles = ["src/pipeline/data_processor.py", "src/validators/schema_validator.py"],
             HelpfulFiles = ["src/config/pipeline_config.py", "src/tests/test_pipeline.py"],
-            DistractorFiles = ["src/legacy/old_processor.py", "notebooks/exploration.ipynb", "requirements.txt"],
+            DistractorFiles = ["README.md", "notebooks/exploration.ipynb", "requirements.txt"],
+            RepositoryPath = $"{FixturesRoot}/sample-py-ml",
+            TestCommand = "python",
+            TestCommandArgs = "-m pytest src/tests/ -v",
         },
 
         // === Go Tasks ===
@@ -183,10 +224,13 @@ public static class BenchmarkTaskSet
             RepositoryId = "sample-go-server",
             Language = "go",
             TaskDescription = "Fix the goroutine leak in the HTTP handler pool",
-            CommitHash = "h7i8j9k",
+            CommitHash = "HEAD",
             RequiredFiles = ["internal/handler/pool.go", "internal/server/server.go"],
-            HelpfulFiles = ["internal/config/config.go", "internal/handler/middleware.go"],
-            DistractorFiles = ["cmd/main.go", "README.md", "go.mod"],
+            HelpfulFiles = ["internal/config/config.go", "internal/handler/pool_test.go"],
+            DistractorFiles = ["README.md", "go.mod"],
+            RepositoryPath = $"{FixturesRoot}/sample-go-server",
+            TestCommand = "go",
+            TestCommandArgs = "test ./...",
         },
 
         new BenchmarkTask
@@ -195,10 +239,13 @@ public static class BenchmarkTaskSet
             RepositoryId = "sample-go-cli",
             Language = "go",
             TaskDescription = "Add context cancellation support to the file walker",
-            CommitHash = "i8j9k0l",
+            CommitHash = "HEAD",
             RequiredFiles = ["internal/walker/walker.go", "internal/cli/commands.go"],
             HelpfulFiles = ["internal/config/config.go", "internal/walker/test_walker.go"],
-            DistractorFiles = ["internal/legacy/old_walker.go", "Makefile", ".golangci.yml"],
+            DistractorFiles = ["README.md", "Makefile", ".golangci.yml"],
+            RepositoryPath = $"{FixturesRoot}/sample-go-cli",
+            TestCommand = "go",
+            TestCommandArgs = "test ./...",
         },
 
         new BenchmarkTask
@@ -207,10 +254,13 @@ public static class BenchmarkTaskSet
             RepositoryId = "sample-go-monorepo",
             Language = "go",
             TaskDescription = "修复微服务间 gRPC 通信的超时处理逻辑",
-            CommitHash = "j9k0l1m",
+            CommitHash = "HEAD",
             RequiredFiles = ["services/auth/client.go", "services/user/server.go"],
             HelpfulFiles = ["pkg/grpc/interceptor.go", "pkg/config/service.go"],
-            DistractorFiles = ["services/gateway/main.go", "go.work", "Makefile"],
+            DistractorFiles = ["README.md", "go.work", "Makefile"],
+            RepositoryPath = $"{FixturesRoot}/sample-go-monorepo",
+            TestCommand = "go",
+            TestCommandArgs = "test ./...",
         },
 
         // === Rust Tasks ===
@@ -221,10 +271,13 @@ public static class BenchmarkTaskSet
             RepositoryId = "sample-rust-cli",
             Language = "rust",
             TaskDescription = "Fix the panic in the config parser when encountering unknown keys",
-            CommitHash = "k0l1m2n",
+            CommitHash = "HEAD",
             RequiredFiles = ["src/config/parser.rs", "src/config/error.rs"],
             HelpfulFiles = ["src/main.rs", "tests/test_config.rs"],
-            DistractorFiles = ["src/legacy/old_parser.rs", "Cargo.lock", "README.md"],
+            DistractorFiles = ["README.md", "Cargo.lock"],
+            RepositoryPath = $"{FixturesRoot}/sample-rust-cli",
+            TestCommand = "cargo",
+            TestCommandArgs = "test",
         },
 
         new BenchmarkTask
@@ -233,10 +286,13 @@ public static class BenchmarkTaskSet
             RepositoryId = "sample-rust-server",
             Language = "rust",
             TaskDescription = "Add connection pooling to the database layer",
-            CommitHash = "l1m2n3o",
+            CommitHash = "HEAD",
             RequiredFiles = ["src/db/pool.rs", "src/db/connection.rs"],
-            HelpfulFiles = ["src/config/db_config.rs", "src/db/test_pool.rs"],
-            DistractorFiles = ["src/server/main.rs", "Cargo.toml", ".cargo/config.toml"],
+            HelpfulFiles = ["src/config/db_config.rs", "tests/test_pool.rs"],
+            DistractorFiles = ["README.md", "Cargo.toml", ".cargo/config.toml"],
+            RepositoryPath = $"{FixturesRoot}/sample-rust-server",
+            TestCommand = "cargo",
+            TestCommandArgs = "test",
         },
 
         // === Monorepo / Mixed Tasks ===
@@ -247,10 +303,13 @@ public static class BenchmarkTaskSet
             RepositoryId = "sample-monorepo-fullstack",
             Language = "mixed",
             TaskDescription = "Fix the authentication flow between the frontend and backend in the monorepo",
-            CommitHash = "m2n3o4p",
+            CommitHash = "HEAD",
             RequiredFiles = ["frontend/src/auth/AuthContext.tsx", "backend/src/auth/middleware.ts"],
             HelpfulFiles = ["shared/types/auth.ts", "frontend/src/api/client.ts"],
-            DistractorFiles = ["frontend/src/pages/Home.tsx", "backend/src/routes/health.ts", "docker-compose.yml"],
+            DistractorFiles = ["README.md", "docker-compose.yml"],
+            RepositoryPath = $"{FixturesRoot}/sample-monorepo-fullstack",
+            TestCommand = "npx",
+            TestCommandArgs = "tsc --noEmit",
         },
 
         new BenchmarkTask
@@ -259,10 +318,90 @@ public static class BenchmarkTaskSet
             RepositoryId = "sample-monorepo-fullstack",
             Language = "mixed",
             TaskDescription = "在 Monorepo 中添加跨服务的数据一致性检查中间件",
-            CommitHash = "m2n3o4p",
-            RequiredFiles = ["backend/src/middleware/consistency.ts", "shared/types/events.ts"],
-            HelpfulFiles = ["backend/src/services/sync.ts", "frontend/src/hooks/useSync.ts"],
-            DistractorFiles = ["frontend/src/components/Footer.tsx", "backend/src/routes/health.ts", "package.json"],
+            CommitHash = "HEAD",
+            RequiredFiles = ["backend/src/services/sync.ts", "shared/types/events.ts"],
+            HelpfulFiles = ["frontend/src/hooks/useSync.ts", "shared/types/auth.ts"],
+            DistractorFiles = ["README.md", "package.json"],
+            RepositoryPath = $"{FixturesRoot}/sample-monorepo-fullstack",
+            TestCommand = "npx",
+            TestCommandArgs = "tsc --noEmit",
+        },
+
+        // === V7-W17: Additional tasks (bench-021 to bench-025) ===
+
+        new BenchmarkTask
+        {
+            Id = "bench-021",
+            RepositoryId = "sample-ts-auth",
+            Language = "typescript",
+            TaskDescription = "Add token expiry check before making authenticated API requests",
+            CommitHash = "HEAD",
+            RequiredFiles = ["src/auth/TokenManager.ts", "src/auth/AuthService.ts"],
+            HelpfulFiles = ["src/auth/types.ts", "src/config/http.ts"],
+            DistractorFiles = ["README.md", "src/legacy/OldAuth.ts"],
+            RepositoryPath = $"{FixturesRoot}/sample-ts-auth",
+            TestCommand = "npx",
+            TestCommandArgs = "jest --passWithNoTests",
+        },
+
+        new BenchmarkTask
+        {
+            Id = "bench-022",
+            RepositoryId = "sample-py-api",
+            Language = "python",
+            TaskDescription = "Add bulk delete operation to the user repository with proper error handling",
+            CommitHash = "HEAD",
+            RequiredFiles = ["src/repositories/user_repository.py", "src/utils/decorators.py"],
+            HelpfulFiles = ["src/config/settings.py", "src/tests/test_user_repo.py"],
+            DistractorFiles = ["README.md", "src/legacy/old_repo.py"],
+            RepositoryPath = $"{FixturesRoot}/sample-py-api",
+            TestCommand = "python",
+            TestCommandArgs = "-m pytest src/tests/ -v",
+        },
+
+        new BenchmarkTask
+        {
+            Id = "bench-023",
+            RepositoryId = "sample-go-server",
+            Language = "go",
+            TaskDescription = "Add graceful shutdown with context to the HTTP server",
+            CommitHash = "HEAD",
+            RequiredFiles = ["internal/server/server.go", "internal/handler/pool.go"],
+            HelpfulFiles = ["internal/config/config.go", "internal/handler/pool_test.go"],
+            DistractorFiles = ["README.md", "go.mod"],
+            RepositoryPath = $"{FixturesRoot}/sample-go-server",
+            TestCommand = "go",
+            TestCommandArgs = "test ./...",
+        },
+
+        new BenchmarkTask
+        {
+            Id = "bench-024",
+            RepositoryId = "sample-rust-cli",
+            Language = "rust",
+            TaskDescription = "Add default value support to the config parser",
+            CommitHash = "HEAD",
+            RequiredFiles = ["src/config/parser.rs", "src/config/error.rs"],
+            HelpfulFiles = ["src/main.rs", "tests/test_config.rs"],
+            DistractorFiles = ["README.md", "Cargo.lock"],
+            RepositoryPath = $"{FixturesRoot}/sample-rust-cli",
+            TestCommand = "cargo",
+            TestCommandArgs = "test",
+        },
+
+        new BenchmarkTask
+        {
+            Id = "bench-025",
+            RepositoryId = "sample-monorepo-fullstack",
+            Language = "mixed",
+            TaskDescription = "Add API client retry interceptor with exponential backoff",
+            CommitHash = "HEAD",
+            RequiredFiles = ["frontend/src/api/client.ts", "backend/src/auth/middleware.ts"],
+            HelpfulFiles = ["shared/types/auth.ts", "shared/types/events.ts"],
+            DistractorFiles = ["README.md"],
+            RepositoryPath = $"{FixturesRoot}/sample-monorepo-fullstack",
+            TestCommand = "npx",
+            TestCommandArgs = "tsc --noEmit",
         },
     ];
 
@@ -300,4 +439,10 @@ public static class BenchmarkTaskSet
     /// </summary>
     public static IReadOnlyList<string> GetLanguages() =>
         Tasks.Select(t => t.Language).Distinct().ToList();
+
+    /// <summary>
+    /// V7-W17: Gets all tasks for a specific repository.
+    /// </summary>
+    public static IReadOnlyList<BenchmarkTask> GetTasksForRepository(string repositoryId) =>
+        Tasks.Where(t => t.RepositoryId == repositoryId).ToList();
 }
