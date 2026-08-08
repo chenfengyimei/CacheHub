@@ -77,6 +77,7 @@ public static class WorkflowCommands
             new Migration0008ContextPackageFk(),
             new Migration0009PersistentCache(),
             new Migration0010RelationSourceColumn(),
+            new Migration0011SnapshotGitState(),
         ]);
         runner.Migrate();
 
@@ -89,12 +90,13 @@ public static class WorkflowCommands
         }
 
         var querySvc = new SqliteIndexQueryService(factory);
-        var activeSnapshotId = await querySvc.GetActiveSnapshotIdAsync(workspace.Id.Value);
-        if (activeSnapshotId is null)
+        var activeSnapshot = await querySvc.GetActiveSnapshotWithGitStateAsync(workspace.Id.Value);
+        if (activeSnapshot is null)
         {
             Console.Error.WriteLine("Error: No active index snapshot. Run 'cachehub index build' first.");
             return 1;
         }
+        var activeSnapshotId = activeSnapshot.SnapshotId;
 
         var tokenizers = TokenizerRegistry.CreateWithDefaults();
         var cache = ContextCommands.CreateContextCache(factory);
@@ -119,6 +121,10 @@ public static class WorkflowCommands
             ModelId = model,
             CurrentFile = currentFile,
             SecurityPolicyVersion = secPolicy.Version,
+            RepositoryCommit = activeSnapshot.RepositoryCommit,
+            Branch = activeSnapshot.Branch,
+            IsDirty = activeSnapshot.IsDirty,
+            WorkspaceFingerprint = activeSnapshot.WorkspaceFingerprint,
         };
 
         var manifest = engine.Build(

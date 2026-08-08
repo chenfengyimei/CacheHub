@@ -172,6 +172,10 @@ public static class ContextCommands
                 Task = task,
                 GitDiffFiles = gitDiffFiles,
                 ModelId = effectiveModel,
+                RepositoryCommit = activeSnapshot.Value.RepositoryCommit,
+                Branch = activeSnapshot.Value.Branch,
+                IsDirty = activeSnapshot.Value.IsDirty,
+                WorkspaceFingerprint = activeSnapshot.Value.WorkspaceFingerprint,
             },
             () => indexedFiles,
             path => ResolveFileContent(workspace.RootPath, path),
@@ -651,6 +655,7 @@ public static class ContextCommands
         new Migration0008ContextPackageFk(),
         new Migration0009PersistentCache(),
         new Migration0010RelationSourceColumn(),
+            new Migration0011SnapshotGitState(),
         ]);
         runner.Migrate();
 
@@ -689,15 +694,21 @@ public static class ContextCommands
         return result;
     }
 
-    private static async Task<(IndexSnapshotId SnapshotId, int FileCount)?> GetActiveSnapshotAsync(SqliteConnectionFactory factory, string workspaceId)
+    private static async Task<(IndexSnapshotId SnapshotId, int FileCount, string? RepositoryCommit, string? Branch, bool IsDirty, string? WorkspaceFingerprint)?> GetActiveSnapshotAsync(SqliteConnectionFactory factory, string workspaceId)
     {
         await using var conn = factory.CreateOpenConnection();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id, file_count FROM index_snapshots WHERE workspace_id = $ws AND status IN ('Active', 'ActiveDegraded') LIMIT 1;";
+        cmd.CommandText = "SELECT id, file_count, repository_commit, branch, is_dirty, workspace_fingerprint FROM index_snapshots WHERE workspace_id = $ws AND status IN ('Active', 'ActiveDegraded') LIMIT 1;";
         cmd.Parameters.AddWithValue("$ws", workspaceId);
         await using var reader = await cmd.ExecuteReaderAsync();
         if (await reader.ReadAsync())
-            return (IndexSnapshotId.Parse(reader.GetString(0)), reader.GetInt32(1));
+        {
+            var commit = reader.IsDBNull(2) ? null : reader.GetString(2);
+            var branch = reader.IsDBNull(3) ? null : reader.GetString(3);
+            var isDirty = !reader.IsDBNull(4) && reader.GetBoolean(4);
+            var fingerprint = reader.IsDBNull(5) ? null : reader.GetString(5);
+            return (IndexSnapshotId.Parse(reader.GetString(0)), reader.GetInt32(1), commit, branch, isDirty, fingerprint);
+        }
         return null;
     }
 
@@ -799,6 +810,7 @@ public static class ContextCommands
                 new Migration0008ContextPackageFk(),
                 new Migration0009PersistentCache(),
                 new Migration0010RelationSourceColumn(),
+            new Migration0011SnapshotGitState(),
             ]);
             runner.Migrate();
             var store = new CacheHub.Storage.Caching.SqliteCacheStore(cacheFactory,

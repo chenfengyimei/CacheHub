@@ -44,6 +44,7 @@ public class FtsRecallIntegrationTests
             new Migration0008ContextPackageFk(),
         new Migration0009PersistentCache(),
         new Migration0010RelationSourceColumn(),
+            new Migration0011SnapshotGitState(),
         ]);
         runner.Migrate();
 

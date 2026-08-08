@@ -138,6 +138,7 @@ public static class BenchmarkCommands
             new Migration0008ContextPackageFk(),
             new Migration0009PersistentCache(),
             new Migration0010RelationSourceColumn(),
+            new Migration0011SnapshotGitState(),
         ]);
         runner.Migrate();
 
@@ -383,6 +384,7 @@ public static class BenchmarkCommands
             new Migration0008ContextPackageFk(),
             new Migration0009PersistentCache(),
             new Migration0010RelationSourceColumn(),
+            new Migration0011SnapshotGitState(),
         ]);
         runner.Migrate();
 

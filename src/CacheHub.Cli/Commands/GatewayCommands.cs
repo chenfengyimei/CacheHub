@@ -92,6 +92,7 @@ public static class GatewayCommands
                 new Migration0008ContextPackageFk(),
                 new Migration0009PersistentCache(),
                 new Migration0010RelationSourceColumn(),
+            new Migration0011SnapshotGitState(),
             ]);
             cacheRunner.Migrate();
             cacheStore = new Storage.Caching.SqliteCacheStore(cacheFactory, Path.Combine(appData.Root, "gateway", "blobs"));

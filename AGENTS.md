@@ -109,7 +109,7 @@ dotnet format CacheHub.sln --verify-no-changes
 ```
 src/
   CacheHub.Core/         — Domain models, errors, identifiers, context, security, tokens, Semantic/LSP contracts
-  CacheHub.Storage/      — SQLite, 10 migrations, 3 repositories, FTS5 search, persistent cache store
+  CacheHub.Storage/      — SQLite, 11 migrations, 3 repositories, FTS5 search, persistent cache store
   CacheHub.Indexing/     — Directory scanning, ignore rules, file detection, 12-language regex parsers, RepoMap, reconciler
   CacheHub.Context/      — Task parser, 12-source recall, ranking (ScoreHint+BM25), anchor chunking, budget validation, engine, cache
   CacheHub.Gateway/      — Gateway server, multi-provider fallback, SSE streaming, Responses API streaming, persistent cache (separated from Core)

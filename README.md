@@ -182,7 +182,7 @@ CacheHub/
 │
 ├── src/                            # 源代码（8 个项目）
 │   ├── CacheHub.Core/              # 领域核心：模型、错误、标识符、安全、Tokenizer
-│   ├── CacheHub.Storage/           # 存储层：SQLite、10 个迁移、3 个仓储、FTS5、CacheStore
+│   ├── CacheHub.Storage/           # 存储层：SQLite、11 个迁移、3 个仓储、FTS5、CacheStore
 │   ├── CacheHub.Indexing/          # 索引层：扫描、忽略规则、4 语言解析器 v2.0、RepoMap、Reconciler
 │   ├── CacheHub.Context/           # 上下文层：12 源召回、排序、锚点分块、预算验证、引擎、缓存
 │   ├── CacheHub.Gateway/           # 可选网关：Server、Provider 路由、SSE 流式（独立项目）

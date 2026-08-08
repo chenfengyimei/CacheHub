@@ -39,6 +39,7 @@ public class CiSmokeTests
         new Migration0008ContextPackageFk(),
         new Migration0009PersistentCache(),
         new Migration0010RelationSourceColumn(),
+            new Migration0011SnapshotGitState(),
     ];
 
     private static string GetTempDbPath() =>
@@ -56,7 +57,7 @@ public class CiSmokeTests
     // === 1. DB Migration Upgrade ===
 
     [Fact]
-    public void MigrationUpgrade_FromV5ToV10_Succeeds()
+    public void MigrationUpgrade_FromV5ToV11_Succeeds()
     {
         var dbPath = GetTempDbPath();
         try
@@ -68,10 +69,10 @@ public class CiSmokeTests
             Assert.Equal(5, runnerOld.Migrate());
             Assert.Equal(5, runnerOld.GetCurrentVersion());
 
-            // Phase 2: upgrade to all 10 migrations
+            // Phase 2: upgrade to all 11 migrations
             var runnerNew = new MigrationRunner(factory, dbPath, AllMigrations);
-            Assert.Equal(5, runnerNew.Migrate());
-            Assert.Equal(10, runnerNew.GetCurrentVersion());
+            Assert.Equal(6, runnerNew.Migrate());
+            Assert.Equal(11, runnerNew.GetCurrentVersion());
 
             // Verify new tables exist
             using (var conn = factory.CreateOpenConnection())
@@ -95,9 +96,9 @@ public class CiSmokeTests
         {
             var factory = new SqliteConnectionFactory(dbPath);
             var runner = new MigrationRunner(factory, dbPath, AllMigrations);
-            Assert.Equal(10, runner.Migrate());
+            Assert.Equal(11, runner.Migrate());
             Assert.Equal(0, runner.Migrate());
-            Assert.Equal(10, runner.GetCurrentVersion());
+            Assert.Equal(11, runner.GetCurrentVersion());
         }
         finally { CleanupDb(dbPath); }
     }

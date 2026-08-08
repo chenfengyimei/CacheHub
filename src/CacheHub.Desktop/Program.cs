@@ -55,6 +55,7 @@ builder.Services.AddSingleton<SqliteConnectionFactory>(sp =>
         new Migration0008ContextPackageFk(),
         new Migration0009PersistentCache(),
         new Migration0010RelationSourceColumn(),
+        new Migration0011SnapshotGitState(),
     ]);
     runner.Migrate();
     return factory;
@@ -82,6 +83,7 @@ builder.Services.AddSingleton<ContextPackageCache>(_ =>
             new Migration0008ContextPackageFk(),
             new Migration0009PersistentCache(),
             new Migration0010RelationSourceColumn(),
+            new Migration0011SnapshotGitState(),
         ]);
         runner.Migrate();
         var store = new CacheHub.Storage.Caching.SqliteCacheStore(cacheFactory,
@@ -194,14 +196,22 @@ static async Task<List<IndexedFileInfo>> GetIndexedFilesAsync(SqliteConnectionFa
     return result;
 }
 
-static async Task<IndexSnapshotId?> GetActiveSnapshotIdAsync(SqliteConnectionFactory factory, string workspaceId)
+static async Task<(IndexSnapshotId SnapshotId, string? RepositoryCommit, string? Branch, bool IsDirty, string? WorkspaceFingerprint)?> GetActiveSnapshotIdAsync(SqliteConnectionFactory factory, string workspaceId)
 {
     await using var conn = factory.CreateOpenConnection();
     using var cmd = conn.CreateCommand();
-    cmd.CommandText = "SELECT id FROM index_snapshots WHERE workspace_id = $ws AND status IN ('Active', 'ActiveDegraded') LIMIT 1;";
+    cmd.CommandText = "SELECT id, repository_commit, branch, is_dirty, workspace_fingerprint FROM index_snapshots WHERE workspace_id = $ws AND status IN ('Active', 'ActiveDegraded') LIMIT 1;";
     cmd.Parameters.AddWithValue("$ws", workspaceId);
-    var result = await cmd.ExecuteScalarAsync();
-    return result is string id ? IndexSnapshotId.Parse(id) : null;
+    await using var reader = await cmd.ExecuteReaderAsync();
+    if (await reader.ReadAsync())
+    {
+        var commit = reader.IsDBNull(1) ? null : reader.GetString(1);
+        var branch = reader.IsDBNull(2) ? null : reader.GetString(2);
+        var isDirty = !reader.IsDBNull(3) && reader.GetBoolean(3);
+        var fingerprint = reader.IsDBNull(4) ? null : reader.GetString(4);
+        return (IndexSnapshotId.Parse(reader.GetString(0)), commit, branch, isDirty, fingerprint);
+    }
+    return null;
 }
 
 static string ResolveFileHashFromDb(SqliteConnectionFactory factory, IndexSnapshotId snapshotId, string path, string? rootPath = null)
@@ -508,13 +518,21 @@ app.MapPost("/api/v1/workspaces/bootstrap", async (BootstrapApiRequest req, IWor
     var workspace = Workspace.CreateValidated(req.Name ?? repoName, dest);
     await repo.InsertAsync(workspace);
 
+    // V7-W01: Capture Git state for version-aware snapshots
+    var gitStateProvider = new CacheHub.Core.Repository.GitStateProvider();
+    var gitState = await gitStateProvider.CaptureAsync(workspace.RootPath);
+
     // Step 4: Build index (reuse the same indexing logic as /index endpoint)
     var snapshotId = IndexSnapshotId.New();
     await using var initConn = factory.CreateOpenConnection();
     using var snapCmd = initConn.CreateCommand();
-    snapCmd.CommandText = "INSERT INTO index_snapshots (id, workspace_id, status, file_count) VALUES ($id, $ws, 'Building', 0);";
+    snapCmd.CommandText = "INSERT INTO index_snapshots (id, workspace_id, status, file_count, repository_commit, branch, is_dirty, workspace_fingerprint) VALUES ($id, $ws, 'Building', 0, $commit, $branch, $dirty, $fp);";
     snapCmd.Parameters.AddWithValue("$id", snapshotId.Value);
     snapCmd.Parameters.AddWithValue("$ws", workspace.Id.Value);
+    snapCmd.Parameters.AddWithValue("$commit", (object?)gitState.Commit ?? DBNull.Value);
+    snapCmd.Parameters.AddWithValue("$branch", (object?)gitState.Branch ?? DBNull.Value);
+    snapCmd.Parameters.AddWithValue("$dirty", gitState.IsDirty);
+    snapCmd.Parameters.AddWithValue("$fp", (object?)gitState.Fingerprint ?? DBNull.Value);
     await snapCmd.ExecuteNonQueryAsync();
     await initConn.DisposeAsync();
 
@@ -573,12 +591,20 @@ app.MapPost("/api/v1/workspaces/{id}/index", async (string id, IWorkspaceReposit
 
     var snapshotId = IndexSnapshotId.New();
 
+    // V7-W01: Capture Git state for version-aware snapshots
+    var gitStateProvider = new CacheHub.Core.Repository.GitStateProvider();
+    var gitState = await gitStateProvider.CaptureAsync(ws.RootPath);
+
     // Insert snapshot as Building
     await using var initConn = factory.CreateOpenConnection();
     using var snapCmd = initConn.CreateCommand();
-    snapCmd.CommandText = "INSERT INTO index_snapshots (id, workspace_id, status, file_count) VALUES ($id, $ws, 'Building', 0);";
+    snapCmd.CommandText = "INSERT INTO index_snapshots (id, workspace_id, status, file_count, repository_commit, branch, is_dirty, workspace_fingerprint) VALUES ($id, $ws, 'Building', 0, $commit, $branch, $dirty, $fp);";
     snapCmd.Parameters.AddWithValue("$id", snapshotId.Value);
     snapCmd.Parameters.AddWithValue("$ws", ws.Id.Value);
+    snapCmd.Parameters.AddWithValue("$commit", (object?)gitState.Commit ?? DBNull.Value);
+    snapCmd.Parameters.AddWithValue("$branch", (object?)gitState.Branch ?? DBNull.Value);
+    snapCmd.Parameters.AddWithValue("$dirty", gitState.IsDirty);
+    snapCmd.Parameters.AddWithValue("$fp", (object?)gitState.Fingerprint ?? DBNull.Value);
     await snapCmd.ExecuteNonQueryAsync();
     await initConn.DisposeAsync();
 
@@ -616,10 +642,11 @@ app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextE
     var ws = await repo.FindByIdAsync(WorkspaceId.Parse(req.WorkspaceId));
     if (ws is null) return Results.NotFound(ErrorEnvelope.From(ErrorCode.WorkspaceNotFound, "Workspace not found"));
 
-    var activeSnapshotId = await GetActiveSnapshotIdAsync(factory, req.WorkspaceId);
-    if (activeSnapshotId is null)
+    var activeSnapshot = await GetActiveSnapshotIdAsync(factory, req.WorkspaceId);
+    if (activeSnapshot is null)
         return Results.BadRequest(ErrorEnvelope.From(ErrorCode.IndexNotFound, "No active index snapshot. Run 'cachehub index build' first."));
 
+    var activeSnapshotId = activeSnapshot.Value.SnapshotId;
     var indexedFiles = await GetIndexedFilesAsync(factory, req.WorkspaceId);
 
     var manifest = engine.Build(
@@ -628,6 +655,10 @@ app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextE
             WorkspaceId = ws.Id,
             IndexSnapshotId = activeSnapshotId,
             Task = req.Task,
+            RepositoryCommit = activeSnapshot.Value.RepositoryCommit,
+            Branch = activeSnapshot.Value.Branch,
+            IsDirty = activeSnapshot.Value.IsDirty,
+            WorkspaceFingerprint = activeSnapshot.Value.WorkspaceFingerprint,
         },
         () => indexedFiles,
         path =>
@@ -1129,10 +1160,11 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
         return Results.NotFound(ErrorEnvelope.From(ErrorCode.WorkspaceNotFound, "Workspace not found"));
 
     var querySvc = new CacheHub.Storage.Query.SqliteIndexQueryService(factory);
-    var activeSnapshotId = await querySvc.GetActiveSnapshotIdAsync(workspace.Id.Value);
-    if (activeSnapshotId is null)
+    var activeSnapshot = await querySvc.GetActiveSnapshotWithGitStateAsync(workspace.Id.Value);
+    if (activeSnapshot is null)
         return Results.BadRequest(ErrorEnvelope.From(ErrorCode.IndexNotFound, "No active index snapshot. Run index build first."));
 
+    var activeSnapshotId = activeSnapshot.SnapshotId;
     var indexedFiles = await querySvc.GetIndexedFilesBySnapshotAsync(activeSnapshotId);
 
     // V5-W02 (P0): Use unified SecurityPolicyResolver
@@ -1155,6 +1187,10 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
         ModelId = req.ModelId,
         CurrentFile = req.CurrentFile,
         SecurityPolicyVersion = secPolicy.Version,
+        RepositoryCommit = activeSnapshot.RepositoryCommit,
+        Branch = activeSnapshot.Branch,
+        IsDirty = activeSnapshot.IsDirty,
+        WorkspaceFingerprint = activeSnapshot.WorkspaceFingerprint,
     };
 
     var manifest = engine.Build(

@@ -3,6 +3,7 @@ using CacheHub.Core.Indexing;
 using CacheHub.Core.Jobs;
 using CacheHub.Core.Paths;
 using CacheHub.Core.Parsing;
+using CacheHub.Core.Repository;
 using CacheHub.Core.Workspaces;
 using CacheHub.Indexing.Detection;
 using CacheHub.Indexing.Hashing;
@@ -64,6 +65,7 @@ public static class IndexCommands
         new Migration0008ContextPackageFk(),
         new Migration0009PersistentCache(),
         new Migration0010RelationSourceColumn(),
+        new Migration0011SnapshotGitState(),
         ]);
         runner.Migrate();
 
@@ -78,9 +80,14 @@ public static class IndexCommands
         Console.WriteLine($"Building index for: {workspace.Name}");
         Console.WriteLine($"  Root: {workspace.RootPath}");
 
-        // Create snapshot
+        // V7-W01: Capture Git state for version-aware snapshots
+        var gitStateProvider = new GitStateProvider();
+        var gitState = await gitStateProvider.CaptureAsync(workspace.RootPath);
+        Console.WriteLine($"  Git: {(gitState.Commit?[..8] ?? "non-git")} | Branch: {gitState.Branch ?? "detached"} | Dirty: {gitState.IsDirty}");
+
+        // Create snapshot with git state
         var snapshotId = IndexSnapshotId.New();
-        await InsertSnapshotAsync(factory, snapshotId, workspace.Id);
+        await InsertSnapshotAsync(factory, snapshotId, workspace.Id, gitState);
 
         // Build ignore rules
         var ignoreEngine = new IgnoreRuleEngine()
@@ -300,6 +307,7 @@ public static class IndexCommands
         new Migration0008ContextPackageFk(),
         new Migration0009PersistentCache(),
         new Migration0010RelationSourceColumn(),
+        new Migration0011SnapshotGitState(),
         ]);
         runner.Migrate();
 
@@ -357,7 +365,9 @@ public static class IndexCommands
         // If anything fails, Active snapshot remains untouched.
         var oldSnapshotId = snapshotId;
         var buildingSnapshotId = IndexSnapshotId.New();
-        await InsertSnapshotAsync(factory, buildingSnapshotId, workspace.Id);
+        // V7-W01: Capture fresh git state for the new snapshot
+        var refreshGitState = await new GitStateProvider().CaptureAsync(workspace.RootPath);
+        await InsertSnapshotAsync(factory, buildingSnapshotId, workspace.Id, refreshGitState);
 
         // Clone all data from Active to Building
         await CloneSnapshotDataAsync(factory, oldSnapshotId, buildingSnapshotId);
@@ -802,17 +812,21 @@ public static class IndexCommands
         await cmd.ExecuteNonQueryAsync();
     }
 
-    private static async Task InsertSnapshotAsync(SqliteConnectionFactory factory, IndexSnapshotId snapshotId, WorkspaceId workspaceId)
+    private static async Task InsertSnapshotAsync(SqliteConnectionFactory factory, IndexSnapshotId snapshotId, WorkspaceId workspaceId, GitState? gitState = null)
     {
         await using var conn = factory.CreateOpenConnection();
         using var cmd = conn.CreateCommand();
         cmd.CommandText =
             """
-            INSERT INTO index_snapshots (id, workspace_id, status, file_count)
-            VALUES ($id, $ws, 'Building', 0);
+            INSERT INTO index_snapshots (id, workspace_id, status, file_count, repository_commit, branch, is_dirty, workspace_fingerprint)
+            VALUES ($id, $ws, 'Building', 0, $commit, $branch, $dirty, $fp);
             """;
         cmd.Parameters.AddWithValue("$id", snapshotId.Value);
         cmd.Parameters.AddWithValue("$ws", workspaceId.Value);
+        cmd.Parameters.AddWithValue("$commit", (object?)gitState?.Commit ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$branch", (object?)gitState?.Branch ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$dirty", gitState?.IsDirty ?? false);
+        cmd.Parameters.AddWithValue("$fp", (object?)gitState?.Fingerprint ?? DBNull.Value);
         await cmd.ExecuteNonQueryAsync();
     }
 

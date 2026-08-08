@@ -15,6 +15,9 @@ public interface IIndexQueryService
     /// <summary>Gets the active snapshot ID for a workspace, or null if none.</summary>
     Task<IndexSnapshotId?> GetActiveSnapshotIdAsync(string workspaceId, CancellationToken ct = default);
 
+    /// <summary>Gets the active snapshot with Git state for version-aware context builds.</summary>
+    Task<ActiveSnapshotRecord?> GetActiveSnapshotWithGitStateAsync(string workspaceId, CancellationToken ct = default);
+
     /// <summary>Gets all indexed files for the active snapshot of a workspace.</summary>
     Task<IReadOnlyList<IndexedFileRecord>> GetIndexedFilesAsync(string workspaceId, CancellationToken ct = default);
 
@@ -136,6 +139,18 @@ public sealed record SnapshotStatusRecord
 }
 
 /// <summary>
+/// Active snapshot with Git state for version-aware context builds (V7-W01).
+/// </summary>
+public sealed record ActiveSnapshotRecord
+{
+    public required IndexSnapshotId SnapshotId { get; init; }
+    public string? RepositoryCommit { get; init; }
+    public string? Branch { get; init; }
+    public bool IsDirty { get; init; }
+    public string? WorkspaceFingerprint { get; init; }
+}
+
+/// <summary>
 /// SQLite-backed implementation of IIndexQueryService.
 /// </summary>
 public sealed class SqliteIndexQueryService : IIndexQueryService
@@ -155,6 +170,24 @@ public sealed class SqliteIndexQueryService : IIndexQueryService
         cmd.Parameters.AddWithValue("$ws", workspaceId);
         var result = await cmd.ExecuteScalarAsync(ct);
         return result is string id ? IndexSnapshotId.Parse(id) : null;
+    }
+
+    public async Task<ActiveSnapshotRecord?> GetActiveSnapshotWithGitStateAsync(string workspaceId, CancellationToken ct = default)
+    {
+        await using var conn = _factory.CreateOpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT id, repository_commit, branch, is_dirty, workspace_fingerprint FROM index_snapshots WHERE workspace_id = $ws AND status IN ('Active', 'ActiveDegraded') LIMIT 1;";
+        cmd.Parameters.AddWithValue("$ws", workspaceId);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct)) return null;
+        return new ActiveSnapshotRecord
+        {
+            SnapshotId = IndexSnapshotId.Parse(reader.GetString(0)),
+            RepositoryCommit = reader.IsDBNull(1) ? null : reader.GetString(1),
+            Branch = reader.IsDBNull(2) ? null : reader.GetString(2),
+            IsDirty = !reader.IsDBNull(3) && reader.GetBoolean(3),
+            WorkspaceFingerprint = reader.IsDBNull(4) ? null : reader.GetString(4),
+        };
     }
 
     public async Task<IReadOnlyList<IndexedFileRecord>> GetIndexedFilesAsync(string workspaceId, CancellationToken ct = default)

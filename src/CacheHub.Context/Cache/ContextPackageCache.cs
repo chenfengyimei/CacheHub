@@ -44,7 +44,8 @@ public sealed record CacheKey
         string? taskParserVersion = null,
         string? tokenBudgetPolicyVersion = null,
         string? repoMapVersion = null,
-        string? semanticStoreVersion = null)
+        string? semanticStoreVersion = null,
+        string? workspaceFingerprint = null)
     {
         var taskHash = Hash(task);
         var snapshotHash = Hash(indexSnapshotId);
@@ -52,7 +53,8 @@ public sealed record CacheKey
         var budgetHash = Hash($"{contextTarget}:{contextHardLimit}");
         var securityHash = Hash($"{securityPolicyVersion ?? "none"}|{ignoreRulesHash ?? "none"}");
         // V6: include tokenizer version so cache invalidates when tokenizer logic changes
-        var contextHash = Hash($"{currentFile ?? "none"}|{gitDiffHash ?? "none"}|{modelId ?? "none"}|{tokenizerId ?? "none"}|v{tokenizerVersion ?? "none"}");
+        // V7-W01: include workspaceFingerprint so cache invalidates when git state changes
+        var contextHash = Hash($"{currentFile ?? "none"}|{gitDiffHash ?? "none"}|{modelId ?? "none"}|{tokenizerId ?? "none"}|v{tokenizerVersion ?? "none"}|{workspaceFingerprint ?? "no-fp"}");
         // V5-W05: version hash ensures cache invalidation when any engine component is upgraded
         var versionHash = Hash($"{contextEngineVersion ?? "none"}|{chunkingStrategyVersion ?? "none"}|{taskParserVersion ?? "none"}|{tokenBudgetPolicyVersion ?? "none"}|{repoMapVersion ?? "none"}|{semanticStoreVersion ?? "none"}");
 

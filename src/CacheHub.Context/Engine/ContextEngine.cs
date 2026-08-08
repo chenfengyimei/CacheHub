@@ -29,6 +29,18 @@ public sealed record ContextBuildRequest
     public string? RepoMapVersion { get; init; }
     public string? ModelId { get; init; }
     public SecurityPolicy? SecurityPolicy { get; init; }
+
+    /// <summary>V7-W01: Git commit hash from the index snapshot (for manifest provenance).</summary>
+    public string? RepositoryCommit { get; init; }
+
+    /// <summary>V7-W01: Git branch from the index snapshot (for manifest provenance).</summary>
+    public string? Branch { get; init; }
+
+    /// <summary>V7-W01: Workspace version fingerprint from the index snapshot (for stale detection + cache binding).</summary>
+    public string? WorkspaceFingerprint { get; init; }
+
+    /// <summary>V7-W01: True if the snapshot was created with a dirty working tree.</summary>
+    public bool IsDirty { get; init; }
 }
 
 /// <summary>
@@ -105,7 +117,8 @@ public sealed class ContextEngine
                 TaskParser.Version,
                 DefaultTokenBudgetPolicy.Version,
                 request.RepoMapVersion,
-                "local-hash-embedding-1.0");
+                "local-hash-embedding-1.0",
+                request.WorkspaceFingerprint);
 
             var cached = _cache.TryGet(cacheKey);
             if (cached is not null)
@@ -146,6 +159,9 @@ public sealed class ContextEngine
             SchemaVersion = 1,
             WorkspaceId = request.WorkspaceId,
             IndexSnapshotId = request.IndexSnapshotId,
+            RepositoryCommit = request.RepositoryCommit,
+            Branch = request.Branch,
+            DirtyStateHash = request.WorkspaceFingerprint,
             Task = new Core.Context.TaskInfo
             {
                 OriginalText = parsedTask.OriginalText,
@@ -228,7 +244,8 @@ public sealed class ContextEngine
                 TaskParser.Version,
                 DefaultTokenBudgetPolicy.Version,
                 request.RepoMapVersion,
-                "local-hash-embedding-1.0");
+                "local-hash-embedding-1.0",
+                request.WorkspaceFingerprint);
             _cache.Put(storeKey, manifest);
         }
 
