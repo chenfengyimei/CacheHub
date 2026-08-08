@@ -13,6 +13,8 @@ using CacheHub.Storage.Database.Migrations;
 using CacheHub.Storage.Query;
 using CacheHub.Storage.Repositories;
 
+using CacheHub.Core.Benchmarks.Matrix;
+
 namespace CacheHub.Cli.Commands;
 
 /// <summary>
@@ -54,6 +56,7 @@ public static class BenchmarkCommands
             Console.WriteLine("  list    List available benchmark tasks");
             Console.WriteLine("  run     Run a retrieval benchmark (Recall/Token) against a real workspace");
             Console.WriteLine("  agent   Run a real Agent Benchmark (task→model→patch→test→cost) via Gateway");
+            Console.WriteLine("  matrix  Run Benchmark Matrix across all fixture repositories (V7-W18)");
             Console.WriteLine("  report  Generate aggregated report from all retrieval benchmark runs");
             Console.WriteLine();
             Console.WriteLine("Agent options:");
@@ -76,6 +79,7 @@ public static class BenchmarkCommands
             "list" => List(),
             "run" => Run(args.AsSpan(1).ToArray()),
             "agent" => Agent(args.AsSpan(1).ToArray()),
+            "matrix" => Matrix(args.AsSpan(1).ToArray()),
             "report" => Report(),
             _ => 1,
         };
@@ -877,6 +881,170 @@ public static class BenchmarkCommands
         Console.WriteLine(report);
         Console.Error.WriteLine($"\nReport based on {runs.Count} real benchmark run(s) across {aggregated.Count} task(s).");
         return 0;
+    }
+
+    // V7-W18: Benchmark Matrix — runs retrieval benchmark across all fixture repos
+    private static int Matrix(string[] args)
+    {
+        var jsonOutput = HasFlag(args, "--json") || HasFlag(args, "--output=json");
+        var repoRoot = GetOpt(args, "--repo-root") ?? FindRepoRoot();
+        var language = GetOpt(args, "--lang"); // filter by language
+
+        Console.Error.WriteLine("CacheHub Benchmark Matrix — Retrieval Mode");
+        Console.Error.WriteLine($"  Repository root: {repoRoot}");
+        Console.Error.WriteLine($"  Tasks: {BenchmarkTaskSet.Tasks.Count}");
+
+        var tasks = string.IsNullOrEmpty(language)
+            ? BenchmarkTaskSet.Tasks
+            : BenchmarkTaskSet.Tasks.Where(t => t.Language == language).ToList();
+
+        Console.Error.WriteLine($"  Filtered: {tasks.Count} tasks" + (language is not null ? $" (lang={language})" : ""));
+
+        // For each task, read fixture files and compute retrieval metrics
+        var matrixRunner = new BenchmarkMatrixRunner();
+        var result = matrixRunner.RunRetrievalMatrix(
+            task => GetFixtureFiles(repoRoot, task),
+            (task, path) => ReadFixtureFile(repoRoot, task, path),
+            (task, path) => ReadFixtureHash(repoRoot, task, path),
+            modelId: "retrieval-matrix");
+
+        // Console report
+        if (!jsonOutput)
+        {
+            Console.Error.WriteLine();
+            Console.Error.WriteLine(GenerateMatrixConsoleReport(result));
+        }
+        else
+        {
+            Console.WriteLine(JsonSerializer.Serialize(result, _jsonOpts));
+        }
+
+        // Persist result
+        try
+        {
+            var appData = new AppDataDirectory();
+            var benchDir = Path.Combine(appData.Root, "benchmarks");
+            Directory.CreateDirectory(benchDir);
+            var fileName = $"matrix-{DateTime.UtcNow:yyyyMMddHHmmss}.json";
+            File.WriteAllText(Path.Combine(benchDir, fileName),
+                JsonSerializer.Serialize(result, _jsonOpts));
+            Console.Error.WriteLine($"  Saved: {Path.Combine(benchDir, fileName)}");
+        }
+        catch { }
+
+        return result.PhaseGate.Passed ? 0 : 1;
+    }
+
+    private static string FindRepoRoot()
+    {
+        var dir = Environment.CurrentDirectory;
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir, "CacheHub.sln")))
+                return dir;
+            dir = Path.GetDirectoryName(dir);
+        }
+        return Environment.CurrentDirectory;
+    }
+
+    private static List<MatrixFileInfo> GetFixtureFiles(string repoRoot, BenchmarkTask task)
+    {
+        var fixturePath = task.RepositoryPath ?? ".";
+        var fullPath = Path.IsPathRooted(fixturePath)
+            ? fixturePath
+            : Path.Combine(repoRoot, fixturePath);
+
+        if (!Directory.Exists(fullPath))
+        {
+            Console.Error.WriteLine($"  ⚠ Fixture not found: {fullPath} (task {task.Id})");
+            return [];
+        }
+
+        var files = new List<MatrixFileInfo>();
+        foreach (var file in Directory.EnumerateFiles(fullPath, "*", SearchOption.AllDirectories))
+        {
+            if (file.Contains("\\.git\\", StringComparison.OrdinalIgnoreCase) ||
+                file.Contains("/.git/", StringComparison.OrdinalIgnoreCase) ||
+                file.Contains("\\node_modules\\", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var relPath = Path.GetRelativePath(fullPath, file).Replace('\\', '/');
+            var info = new FileInfo(file);
+            var ext = info.Extension.ToLowerInvariant();
+            var lang = ext switch
+            {
+                ".cs" => "csharp", ".ts" or ".tsx" => "typescript", ".js" => "javascript",
+                ".py" => "python", ".go" => "go", ".rs" => "rust", ".md" => "markdown",
+                _ => "text",
+            };
+
+            files.Add(new MatrixFileInfo
+            {
+                Path = relPath,
+                NormalizedPath = relPath,
+                Language = lang,
+                Size = (int)info.Length,
+            });
+        }
+        return files;
+    }
+
+    private static string ReadFixtureFile(string repoRoot, BenchmarkTask task, string relativePath)
+    {
+        var fixturePath = task.RepositoryPath ?? ".";
+        var fullPath = Path.IsPathRooted(fixturePath)
+            ? Path.Combine(fixturePath, relativePath.Replace('/', Path.DirectorySeparatorChar))
+            : Path.Combine(repoRoot, fixturePath, relativePath.Replace('/', Path.DirectorySeparatorChar));
+        return File.Exists(fullPath) ? File.ReadAllText(fullPath) : "";
+    }
+
+    private static string ReadFixtureHash(string repoRoot, BenchmarkTask task, string relativePath)
+    {
+        var content = ReadFixtureFile(repoRoot, task, relativePath);
+        if (string.IsNullOrEmpty(content)) return "empty";
+        var bytes = System.Text.Encoding.UTF8.GetBytes(content);
+        var hash = System.Security.Cryptography.SHA256.HashData(bytes);
+        return Convert.ToHexString(hash).ToLowerInvariant()[..16];
+    }
+
+    private static string GenerateMatrixConsoleReport(MatrixResult result)
+    {
+        var lines = new List<string>
+        {
+            "=== CacheHub Benchmark Matrix Report ===",
+            $"Generated: {result.GeneratedAt:O}",
+            $"Model: {result.ModelId}",
+            $"Tasks: {result.Summary.TotalTasks}",
+            "",
+            $"  Mean File Recall@10:  {result.Summary.MeanFileRecallAt10,6:P2}",
+            $"  Mean Token Reduction: {result.Summary.MeanTokenReduction,6:P2}",
+        };
+
+        if (result.Summary.CacheHubSuccessRate.HasValue)
+        {
+            lines.Add($"  CacheHub Success:     {result.Summary.CacheHubSuccessRate,6:P1}");
+            lines.Add($"  Baseline Success:     {result.Summary.BaselineSuccessRate,6:P1}");
+            lines.Add($"  Input Token Reduction:{result.Summary.MeanInputTokenReduction,6:P2}");
+            lines.Add($"  Positive Token Tasks: {result.Summary.PositiveTokenTaskRatio,6:P1}");
+        }
+
+        lines.Add("");
+        lines.Add($"  Phase Gate: {(result.PhaseGate.Passed ? "PASSED" : "FAILED")}");
+
+        if (result.PhaseGate.FailedGates.Count > 0)
+            lines.AddRange(result.PhaseGate.FailedGates.Select(g => $"    - {g}"));
+
+        lines.Add("");
+        lines.Add("=== Per-Task Results ===");
+        lines.Add($"{"Task",-10} {"Lang",-5} {"Recall@10",-10} {"Tok.Red",-10} {"Files",-6}");
+        lines.Add(new string('-', 50));
+
+        foreach (var task in result.Tasks)
+        {
+            lines.Add($"{task.TaskId,-10} {task.Language,-5} {task.FileRecallAt10,8:P1}   {task.TokenReduction,8:P1}   {task.SelectedFileCount,-6}");
+        }
+
+        return string.Join(Environment.NewLine, lines);
     }
 
     private static string ResolveFileContent(string rootPath, string relativePath)
