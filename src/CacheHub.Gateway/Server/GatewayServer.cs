@@ -4,6 +4,7 @@ using System.Text.Json;
 using CacheHub.Core.Caching;
 using CacheHub.Core.Errors;
 using CacheHub.Gateway;
+using CacheHub.Gateway.Stats;
 
 namespace CacheHub.Gateway.Server;
 
@@ -34,6 +35,7 @@ public sealed class GatewayServer : IDisposable
     private long _cachedTokensSaved;
     private double _totalLatencyMs;
     private bool _disposed;
+    private readonly GatewayStatsStore? _statsStore;  // V7-W14: persistent stats
 
     public GatewayServer(GatewayConfig config)
     {
@@ -53,6 +55,19 @@ public sealed class GatewayServer : IDisposable
 
         // Security: generate a random access token
         _accessToken = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+
+        // V7-W14: Initialize persistent stats store so Desktop Dashboard can read Gateway stats
+        var statsDbPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "CacheHub", "gateway", "stats.db");
+        try
+        {
+            _statsStore = new GatewayStatsStore(statsDbPath);
+        }
+        catch
+        {
+            _statsStore = null; // non-fatal: Gateway works without persistent stats
+        }
     }
 
     /// <summary>
@@ -741,6 +756,10 @@ public sealed class GatewayServer : IDisposable
             if (cached)
                 _cachedTokensSaved += promptTokens;
         }
+
+        // V7-W14: Persist to SQLite so Desktop Dashboard can read cross-process Gateway stats
+        _statsStore?.RecordRequest(endpoint, model, statusCode, cached, streaming,
+            promptTokens, completionTokens, (long)latency.TotalMilliseconds);
     }
 
     private void EvictStaleCacheLocked()

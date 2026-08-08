@@ -1003,18 +1003,67 @@ app.MapGet("/api/v1/stats", async (SqliteConnectionFactory factory, UsageStatsSe
 
     var usage = usageStats.GetStats();
 
+    // V7-W14: Read Gateway persistent stats (cross-process: Codex → Gateway → stats.db → Desktop)
+    var gatewayStatsPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "CacheHub", "gateway", "stats.db");
+    long gwTotalRequests = 0, gwCacheHits = 0, gwPromptTokens = 0, gwCompletionTokens = 0, gwCachedSaved = 0;
+    double gwCacheHitRate = 0, gwAvgLatency = 0;
+    if (File.Exists(gatewayStatsPath))
+    {
+        try
+        {
+            using var gwConn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={gatewayStatsPath}");
+            gwConn.Open();
+            using var gwCmd = gwConn.CreateCommand();
+            gwCmd.CommandText = """
+                SELECT
+                    COUNT(*),
+                    SUM(CASE WHEN cached = 1 THEN 1 ELSE 0 END),
+                    SUM(prompt_tokens),
+                    SUM(completion_tokens),
+                    SUM(CASE WHEN cached = 1 THEN prompt_tokens ELSE 0 END),
+                    AVG(latency_ms)
+                FROM gateway_stats;
+                """;
+            using var gwReader = gwCmd.ExecuteReader();
+            if (gwReader.Read() && !gwReader.IsDBNull(0))
+            {
+                gwTotalRequests = gwReader.GetInt64(0);
+                gwCacheHits = gwReader.IsDBNull(1) ? 0 : gwReader.GetInt64(1);
+                gwPromptTokens = gwReader.IsDBNull(2) ? 0 : gwReader.GetInt64(2);
+                gwCompletionTokens = gwReader.IsDBNull(3) ? 0 : gwReader.GetInt64(3);
+                gwCachedSaved = gwReader.IsDBNull(4) ? 0 : gwReader.GetInt64(4);
+                gwAvgLatency = gwReader.IsDBNull(5) ? 0 : gwReader.GetDouble(5);
+                gwCacheHitRate = gwTotalRequests > 0 ? (double)gwCacheHits / gwTotalRequests : 0;
+            }
+        }
+        catch { /* non-fatal: Gateway may not have written stats yet */ }
+    }
+
+    // Merge Desktop + Gateway stats
+    var mergedRequests = usage.TotalRequests + gwTotalRequests;
+    var mergedCacheHits = usage.CacheHits + gwCacheHits;
+    var mergedPromptTokens = usage.TotalPromptTokens + gwPromptTokens;
+    var mergedCompletionTokens = usage.TotalCompletionTokens + gwCompletionTokens;
+    var mergedCachedSaved = usage.ActualCacheTokensSaved + gwCachedSaved;
+    var mergedCacheHitRate = mergedRequests > 0 ? (double)mergedCacheHits / mergedRequests : 0;
+
     return Results.Ok(new
     {
-        // Usage stats (for Dashboard)
-        totalRequests = usage.TotalRequests,
-        cacheHits = usage.CacheHits,
-        cacheHitRate = usage.CacheHitRate,
-        totalPromptTokens = usage.TotalPromptTokens,
-        totalCompletionTokens = usage.TotalCompletionTokens,
+        // Usage stats (Desktop + Gateway merged, for Dashboard)
+        totalRequests = mergedRequests,
+        cacheHits = mergedCacheHits,
+        cacheHitRate = mergedCacheHitRate,
+        totalPromptTokens = mergedPromptTokens,
+        totalCompletionTokens = mergedCompletionTokens,
         // V7-W12: Separate estimated context savings from actual cache token savings
         estimatedContextTokensSaved = usage.EstimatedContextSaved,
-        actualCacheTokensSaved = usage.ActualCacheTokensSaved,
-        avgLatencyMs = usage.AvgLatencyMs,
+        actualCacheTokensSaved = mergedCachedSaved,
+        avgLatencyMs = gwAvgLatency > 0 ? gwAvgLatency : usage.AvgLatencyMs,
+        // V7-W14: Breakdown for transparency
+        desktopRequests = usage.TotalRequests,
+        gatewayRequests = gwTotalRequests,
         // Workspace stats
         workspaces = workspaces.Count,
         contextPackages = totalContexts,
