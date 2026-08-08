@@ -142,7 +142,7 @@ src/auth/refresh.ts  Score: 0.92  Mode: chunks  Tokens: 450
 | Git 仓库操作 | ✅ Implemented | clone/pull/status/diff + LFS 修复 + 凭据脱敏 |
 | 文件导出 | ✅ Implemented | Markdown/JSON/File + Plan/Apply 分离 + 真实 RepoMap |
 | 语义参考缓存 | 🧪 Experimental | FNV-1a 稳定哈希 + 接入 RecallPipeline + Snapshot/ContentHash 绑定 |
-| Benchmark | 🧪 Experimental | CLI 使用真实 ContextEngine 度量 Recall@10/TokenReduction |
+| Benchmark | ✅ Implemented | CLI 真实 ContextEngine 度量 Recall@10/TokenReduction + Agent Benchmark (--real-test git worktree) + Benchmark Matrix (13 fixture × 25 任务 + Phase Gate) |
 | Tree-sitter | 📦 Scaffold | regex fallback 始终可用 |
 | LSP | 📦 Scaffold | 帧读取器 + 请求关联 + 审批模型就绪 |
 | 插件/团队/企业 | 📦 Planned | 签名验证 + 权限隔离 + 企业策略模型已预留 |
