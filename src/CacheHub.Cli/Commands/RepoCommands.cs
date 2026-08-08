@@ -251,13 +251,19 @@ public static class RepoCommands
                 }
                 else
                 {
-                    Console.Error.WriteLine("  Warning: Could not read remote URL from existing .git. Proceeding with caution.");
+                    Console.Error.WriteLine("  ERROR: Could not read remote URL from existing .git directory.");
+                    Console.Error.WriteLine("  For automatic bootstrap, remote verification is required.");
+                    Console.Error.WriteLine("  Use a different --dest or manually verify the repository.");
+                    return 1;
                 }
             }
             else
             {
-                Console.Error.WriteLine($"  Destination already exists and is not empty (no .git): {dest}");
-                Console.Error.WriteLine("  Skipping clone. Use a different --dest or remove the directory.");
+                // V7-W10: Non-git non-empty directory must hard stop — not continue to Detect/Import/Index
+                Console.Error.WriteLine($"  ERROR: Destination already exists and is not empty (no .git): {dest}");
+                Console.Error.WriteLine("  For automatic bootstrap, the destination must be empty or a valid git repository.");
+                Console.Error.WriteLine("  Use a different --dest or remove the directory.");
+                return 1;
             }
         }
         else
