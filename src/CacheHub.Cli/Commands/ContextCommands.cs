@@ -116,6 +116,7 @@ public static class ContextCommands
         var outputJson = HasFlag(args, "--output=json") || HasFlag(args, "--json");
         var useGitDiff = HasFlag(args, "--git-diff");
         var modelId = GetOpt(args, "--model");
+        var allowStale = HasFlag(args, "--allow-stale"); // V8-P0-01: explicit opt-in for stale context
 
         if (string.IsNullOrEmpty(wsId) || string.IsNullOrEmpty(task))
         {
@@ -164,14 +165,22 @@ public static class ContextCommands
         var snapshotId = activeSnapshot.Value.SnapshotId;
         var indexedFiles = await GetIndexedFilesAsync(factory, wsId, snapshotId);
 
-        // V7-W02: Stale detection — warn if workspace state has changed since snapshot
+        // V7-W02 / V8-P0-01: Stale detection — default: reject build when stale
         var staleResult = await CacheHub.Core.Indexing.StaleDetector.CheckAsync(
             workspace.RootPath, activeSnapshot.Value.WorkspaceFingerprint);
         if (!staleResult.IsFresh)
         {
-            Console.Error.WriteLine($"  ⚠ WARNING: {staleResult.Message}");
-            Console.Error.WriteLine("  Context may be inconsistent (old index + new disk content).");
-            Console.Error.WriteLine("  Run 'cachehub index refresh' to fix this.");
+            if (!allowStale)
+            {
+                // V8-P0-01: Default behavior — reject build to prevent stale context
+                Console.Error.WriteLine($"  ✗ CONTEXT_STALE: {staleResult.Message}");
+                Console.Error.WriteLine("  Run 'cachehub index refresh --id=<workspace-id>' to update the index.");
+                Console.Error.WriteLine("  Or use --allow-stale to override (stale cache will be skipped).");
+                return 3; // distinct exit code for stale context
+            }
+            // --allow-stale: warn but proceed, cache will be skipped
+            Console.Error.WriteLine($"  ⚠ WARNING (stale, --allow-stale): {staleResult.Message}");
+            Console.Error.WriteLine("  Cache lookup will be skipped for this build.");
         }
         else if (staleResult.NoFingerprint)
         {
@@ -195,6 +204,8 @@ public static class ContextCommands
                 Branch = activeSnapshot.Value.Branch,
                 IsDirty = activeSnapshot.Value.IsDirty,
                 WorkspaceFingerprint = activeSnapshot.Value.WorkspaceFingerprint,
+                CurrentWorkspaceFingerprint = staleResult.CurrentFingerprint, // V8-P0-01: real-time fingerprint for cache key
+                AllowStale = allowStale, // V8-P0-01: explicit stale opt-in
             },
             () => indexedFiles,
             path => ResolveFileContent(workspace.RootPath, path),

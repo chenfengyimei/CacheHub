@@ -39,6 +39,14 @@ public sealed record ContextBuildRequest
     /// <summary>V7-W01: Workspace version fingerprint from the index snapshot (for stale detection + cache binding).</summary>
     public string? WorkspaceFingerprint { get; init; }
 
+    /// <summary>V8-P0-01: Real-time workspace fingerprint captured at build time (not snapshot's).
+    /// When set and differs from WorkspaceFingerprint, cache lookup is skipped to prevent stale cache hits.</summary>
+    public string? CurrentWorkspaceFingerprint { get; init; }
+
+    /// <summary>V8-P0-01: When true, allows building context even if the workspace is stale (index not refreshed).
+    /// Caller must set this explicitly via --allow-stale.</summary>
+    public bool AllowStale { get; init; }
+
     /// <summary>V7-W01: True if the snapshot was created with a dirty working tree.</summary>
     public bool IsDirty { get; init; }
 }
@@ -91,8 +99,19 @@ public sealed class ContextEngine
             ? _tokenizers.GetForModel(request.ModelId)
             : _tokenizers.Default;
 
+        // V8-P0-01: Use CurrentWorkspaceFingerprint for cache key when available.
+        // When stale (Current != Snapshot), the cache key changes, preventing stale cache hits.
+        var effectiveFingerprint = request.CurrentWorkspaceFingerprint ?? request.WorkspaceFingerprint;
+
+        // V8-P0-01: Skip cache lookup when stale and not explicitly allowed.
+        // This prevents returning a cached context that was built with old index data.
+        var skipCache = !request.AllowStale
+            && request.CurrentWorkspaceFingerprint is not null
+            && request.WorkspaceFingerprint is not null
+            && !string.Equals(request.CurrentWorkspaceFingerprint, request.WorkspaceFingerprint, StringComparison.Ordinal);
+
         // Cache: check if we already built this exact combination
-        if (_cache is not null)
+        if (_cache is not null && !skipCache)
         {
             var gitDiffHash = request.GitDiffFiles is { Count: > 0 }
                 ? string.Join(",", request.GitDiffFiles.OrderBy(p => p, StringComparer.Ordinal))
@@ -118,7 +137,7 @@ public sealed class ContextEngine
                 DefaultTokenBudgetPolicy.Version,
                 request.RepoMapVersion,
                 "local-hash-embedding-1.0",
-                request.WorkspaceFingerprint);
+                effectiveFingerprint);
 
             var cached = _cache.TryGet(cacheKey);
             if (cached is not null)
@@ -219,7 +238,8 @@ public sealed class ContextEngine
         };
 
         // Cache: store the built manifest for future identical requests
-        if (_cache is not null)
+        // V8-P0-01: Skip storing when stale (not AllowStale) to avoid polluting cache with stale-state entries
+        if (_cache is not null && !skipCache)
         {
             var gitDiffHash = request.GitDiffFiles is { Count: > 0 }
                 ? string.Join(",", request.GitDiffFiles.OrderBy(p => p, StringComparer.Ordinal))
@@ -245,7 +265,7 @@ public sealed class ContextEngine
                 DefaultTokenBudgetPolicy.Version,
                 request.RepoMapVersion,
                 "local-hash-embedding-1.0",
-                request.WorkspaceFingerprint);
+                effectiveFingerprint);
             _cache.Put(storeKey, manifest);
         }
 

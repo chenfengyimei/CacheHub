@@ -49,6 +49,7 @@ public static class WorkflowCommands
         var model = GetOpt(args, "--model");
         var callGateway = HasFlag(args, "--call-gateway");
         var currentFile = GetOpt(args, "--current-file");
+        var allowStale = HasFlag(args, "--allow-stale"); // V8-P0-01
 
         if (string.IsNullOrEmpty(wsId))
         {
@@ -98,12 +99,19 @@ public static class WorkflowCommands
         }
         var activeSnapshotId = activeSnapshot.SnapshotId;
 
-        // V7-W02: Stale detection
+        // V7-W02 / V8-P0-01: Stale detection — default: reject build when stale
         var staleResult = await CacheHub.Core.Indexing.StaleDetector.CheckAsync(
             workspace.RootPath, activeSnapshot.WorkspaceFingerprint);
         if (!staleResult.IsFresh)
         {
-            Console.Error.WriteLine($"  ⚠ WARNING: {staleResult.Message}");
+            if (!allowStale)
+            {
+                Console.Error.WriteLine($"  ✗ CONTEXT_STALE: {staleResult.Message}");
+                Console.Error.WriteLine("  Run 'cachehub index refresh --id=<workspace-id>' to update the index.");
+                Console.Error.WriteLine("  Or use --allow-stale to override.");
+                return 3;
+            }
+            Console.Error.WriteLine($"  ⚠ WARNING (stale, --allow-stale): {staleResult.Message}");
         }
 
         var tokenizers = TokenizerRegistry.CreateWithDefaults();
@@ -133,6 +141,8 @@ public static class WorkflowCommands
             Branch = activeSnapshot.Branch,
             IsDirty = activeSnapshot.IsDirty,
             WorkspaceFingerprint = activeSnapshot.WorkspaceFingerprint,
+            CurrentWorkspaceFingerprint = staleResult.CurrentFingerprint, // V8-P0-01
+            AllowStale = allowStale, // V8-P0-01
         };
 
         var manifest = engine.Build(

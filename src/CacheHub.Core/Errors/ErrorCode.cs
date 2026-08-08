@@ -29,6 +29,8 @@ public enum ErrorCode
     ContextBudgetExceeded = 4002,
     ContextBuildFailed = 4003,
     ContextExpandFailed = 4004,
+    ContextStale = 4005, // V8-P0-01: workspace state changed since last index build
+    ContextVersionMismatch = 4006, // V8-P0-02: payload content hash mismatch
 
     // Security
     SecurityPolicyViolation = 5001,

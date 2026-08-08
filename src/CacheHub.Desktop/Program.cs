@@ -667,9 +667,16 @@ app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextE
     var activeSnapshotId = activeSnapshot.Value.SnapshotId;
     var indexedFiles = await GetIndexedFilesAsync(factory, req.WorkspaceId);
 
-    // V7-W02: Stale detection — check workspace state vs snapshot
+    // V7-W02 / V8-P0-01: Stale detection — default: reject build when stale
     var staleResult = await CacheHub.Core.Indexing.StaleDetector.CheckAsync(
         ws.RootPath, activeSnapshot.Value.WorkspaceFingerprint);
+    if (!staleResult.IsFresh)
+    {
+        // V8-P0-01: Desktop API returns 409 Conflict with CONTEXT_STALE error code
+        return Results.Json(ErrorEnvelope.From(ErrorCode.ContextStale,
+            $"Workspace state has changed since last index build. {staleResult.Message} Run index refresh to update."),
+            statusCode: 409);
+    }
 
     var manifest = engine.Build(
         new ContextBuildRequest
@@ -681,6 +688,7 @@ app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextE
             Branch = activeSnapshot.Value.Branch,
             IsDirty = activeSnapshot.Value.IsDirty,
             WorkspaceFingerprint = activeSnapshot.Value.WorkspaceFingerprint,
+            CurrentWorkspaceFingerprint = staleResult.CurrentFingerprint, // V8-P0-01
         },
         () => indexedFiles,
         path =>
@@ -1254,9 +1262,15 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
     var activeSnapshotId = activeSnapshot.SnapshotId;
     var indexedFiles = await querySvc.GetIndexedFilesBySnapshotAsync(activeSnapshotId);
 
-    // V7-W02: Stale detection
+    // V7-W02 / V8-P0-01: Stale detection — default: reject build when stale
     var staleResult = await CacheHub.Core.Indexing.StaleDetector.CheckAsync(
         workspace.RootPath, activeSnapshot.WorkspaceFingerprint);
+    if (!staleResult.IsFresh)
+    {
+        return Results.Json(ErrorEnvelope.From(ErrorCode.ContextStale,
+            $"Workspace state has changed since last index build. {staleResult.Message} Run index refresh to update."),
+            statusCode: 409);
+    }
 
     // V5-W02 (P0): Use unified SecurityPolicyResolver
     var (secPolicy, secEnforcer) = CacheHub.Core.Security.SecurityPolicyResolver.CreateEnforcer();
@@ -1282,6 +1296,7 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
         Branch = activeSnapshot.Branch,
         IsDirty = activeSnapshot.IsDirty,
         WorkspaceFingerprint = activeSnapshot.WorkspaceFingerprint,
+        CurrentWorkspaceFingerprint = staleResult.CurrentFingerprint, // V8-P0-01
     };
 
     var manifest = engine.Build(
