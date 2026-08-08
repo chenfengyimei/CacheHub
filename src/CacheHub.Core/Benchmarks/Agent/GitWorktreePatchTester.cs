@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 
 namespace CacheHub.Core.Benchmarks.Agent;
 
@@ -92,8 +93,9 @@ public sealed class GitWorktreePatchTester : IDisposable
     /// <summary>
     /// Runs the specified build/test command in the worktree.
     /// Returns the exit code (0 = all tests passed).
+    /// V7-W05: Fixed timeout — uses async reads + CancellationTokenSource instead of blocking ReadToEnd.
     /// </summary>
-    public AgentTestResult RunTests(string command, string args = "")
+    public AgentTestResult RunTests(string command, string args = "", int timeoutMs = 120_000)
     {
         if (_worktreePath is null)
             throw new InvalidOperationException("CreateWorktree must be called first");
@@ -117,7 +119,6 @@ public sealed class GitWorktreePatchTester : IDisposable
         }
         catch (Exception ex)
         {
-            // Command not found — treat as a test failure with the error surfaced
             return new AgentTestResult
             {
                 Success = false,
@@ -138,13 +139,32 @@ public sealed class GitWorktreePatchTester : IDisposable
             };
         }
 
-        var stdout = proc.StandardOutput.ReadToEnd();
-        var stderr = proc.StandardError.ReadToEnd();
-        proc.WaitForExit(120_000); // 2 min timeout
+        // V7-W05: Use async reads with cancellation token to enforce real timeout
+        var stdoutBuilder = new StringBuilder();
+        var stderrBuilder = new StringBuilder();
+        var stdoutTask = Task.Run(() => { using var reader = proc.StandardOutput; stdoutBuilder.Append(reader.ReadToEnd()); });
+        var stderrTask = Task.Run(() => { using var reader = proc.StandardError; stderrBuilder.Append(reader.ReadToEnd()); });
 
+        var exited = proc.WaitForExit(timeoutMs);
+        if (!exited)
+        {
+            try { proc.Kill(entireProcessTree: true); } catch { }
+            return new AgentTestResult
+            {
+                Success = false,
+                Passed = 0,
+                Total = 1,
+                ErrorMessage = $"Test command timed out after {timeoutMs}ms",
+            };
+        }
+
+        // Wait for stream reads to complete
+        Task.WaitAll([stdoutTask, stderrTask], TimeSpan.FromSeconds(5));
+
+        var stdout = stdoutBuilder.ToString();
+        var stderr = stderrBuilder.ToString();
         var success = proc.ExitCode == 0;
 
-        // Parse "Passed: N" / "Failed: M" patterns from test output (xUnit, pytest, etc.)
         var passed = ParseCount(stdout, "通过:", "Passed:", "passed:", "passed ");
         var failed = ParseCount(stdout, "失败:", "Failed:", "failed:", "failed ");
         var total = passed + failed;

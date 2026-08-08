@@ -124,12 +124,21 @@ public sealed class AgentBenchmarkRunner
         var taskCompleted = false;  // V7-W03: track per-round success, not cumulative
         var applyPatches = new List<string>();
         var errorMsg = (string?)null;
+        var previousError = (string?)null;  // V7-W05: feed test errors back to next round
+
+        // V7-W05: System prompt enforces unified diff format
+        var systemPrompt = """
+            You are a code assistant. Your task is to modify code to satisfy the given requirement.
+            Return ONLY a unified git diff patch (--- a/file, +++ b/file, @@ hunks).
+            Do NOT include explanations, markdown wrappers, or code blocks.
+            The patch must be applicable via `git apply`.
+            """;
 
         while (rounds < _maxRounds)
         {
             rounds++;
             var context = contextBuilder(task.TaskDescription);
-            var prompt = ComposePrompt(task.TaskDescription, context.FileSnippets);
+            var prompt = ComposePrompt(task.TaskDescription, context.FileSnippets, previousError);
 
             // V6: Local estimate of assembled context (for comparison against Provider actual)
             totalLocalEstimated += _tokenizer.CountTokens(prompt);
@@ -137,7 +146,7 @@ public sealed class AgentBenchmarkRunner
             AgentModelResponse response;
             try
             {
-                response = await _model.GenerateAsync("You are a code assistant. Complete the task.", prompt, ct);
+                response = await _model.GenerateAsync(systemPrompt, prompt, ct);
             }
             catch (Exception ex)
             {
@@ -161,8 +170,12 @@ public sealed class AgentBenchmarkRunner
             if (result.Success)
             {
                 taskCompleted = true;  // V7-W03: any round success = task completed
+                previousError = null;
                 break;
             }
+
+            // V7-W05: Feed test errors back to next round for agent repair loop
+            previousError = result.ErrorMessage ?? "Tests failed but no error message was provided.";
         }
 
         sw.Stop();
@@ -187,6 +200,7 @@ public sealed class AgentBenchmarkRunner
 
     /// <summary>
     /// Runs all tasks in a benchmark set and aggregates results.
+    /// V7-W05: Honors config.RunsPerTask for multiple runs per task.
     /// </summary>
     public async Task<AgentBenchmarkResult> RunAllAsync(
         IReadOnlyList<BenchmarkTask> tasks,
@@ -196,10 +210,25 @@ public sealed class AgentBenchmarkRunner
         CancellationToken ct = default)
     {
         var results = new List<AgentRunResult>();
+        var runsPerTask = Math.Max(1, config.RunsPerTask);
+
         foreach (var task in tasks)
         {
-            var result = await RunTaskAsync(task, config, contextBuilder, testRunner, ct);
-            results.Add(result);
+            // V7-W05: Run each task multiple times for statistical significance
+            for (var run = 0; run < runsPerTask; run++)
+            {
+                var result = await RunTaskAsync(task, config, contextBuilder, testRunner, ct);
+                // Set the RunNumber correctly
+                result = result with { RunNumber = run };
+                results.Add(result);
+
+                // V7-W05: Reset between runs if configured
+                if (config.ResetBetweenRuns && run < runsPerTask - 1)
+                {
+                    // Reset is handled by the testRunner/contextBuilder delegates
+                    // (they should re-create state for each run)
+                }
+            }
         }
         return new AgentBenchmarkResult
         {
@@ -208,7 +237,7 @@ public sealed class AgentBenchmarkRunner
         };
     }
 
-    private static string ComposePrompt(string taskDescription, IReadOnlyList<string> fileSnippets)
+    private static string ComposePrompt(string taskDescription, IReadOnlyList<string> fileSnippets, string? previousError = null)
     {
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("Task: ").AppendLine(taskDescription);
@@ -218,6 +247,16 @@ public sealed class AgentBenchmarkRunner
         {
             sb.AppendLine("---");
             sb.AppendLine(snippet);
+        }
+        // V7-W05: Feed previous round's test errors back for agent repair loop
+        if (!string.IsNullOrEmpty(previousError))
+        {
+            sb.AppendLine();
+            sb.AppendLine("Previous attempt failed with the following error:");
+            sb.AppendLine("```");
+            sb.AppendLine(previousError);
+            sb.AppendLine("```");
+            sb.AppendLine("Please fix the issue and provide an updated patch.");
         }
         return sb.ToString();
     }
