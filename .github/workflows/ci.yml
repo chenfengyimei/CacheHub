@@ -67,6 +67,7 @@ jobs:
           global-json-file: global.json
 
       - name: Publish single-file CLI (self-contained, ${{ matrix.rid }})
+        shell: bash
         run: |
           mkdir -p publish
           dotnet publish src/CacheHub.Cli/CacheHub.Cli.csproj -c Release -o publish --nologo \

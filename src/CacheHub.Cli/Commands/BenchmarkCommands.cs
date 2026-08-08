@@ -973,8 +973,13 @@ public static class BenchmarkCommands
             var ext = info.Extension.ToLowerInvariant();
             var lang = ext switch
             {
-                ".cs" => "csharp", ".ts" or ".tsx" => "typescript", ".js" => "javascript",
-                ".py" => "python", ".go" => "go", ".rs" => "rust", ".md" => "markdown",
+                ".cs" => "csharp",
+                ".ts" or ".tsx" => "typescript",
+                ".js" => "javascript",
+                ".py" => "python",
+                ".go" => "go",
+                ".rs" => "rust",
+                ".md" => "markdown",
                 _ => "text",
             };
 
