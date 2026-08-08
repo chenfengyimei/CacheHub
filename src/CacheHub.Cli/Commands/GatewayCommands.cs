@@ -32,6 +32,12 @@ public static class GatewayCommands
         var baseUrl = GetOpt(args, "--provider-url");
         var port = GetOpt(args, "--port") ?? "5218";
 
+        // V7-W11: Normalize provider URL — TrimEnd('/') and strip trailing /v1 to prevent /v1/v1/chat/completions
+        if (!string.IsNullOrEmpty(baseUrl))
+        {
+            baseUrl = NormalizeProviderUrl(baseUrl);
+        }
+
         // CONFIG-P2-001 fix: API key only from environment variable, never from CLI args
         var apiKey = Environment.GetEnvironmentVariable("CACHEHUB_PROVIDER_KEY")
                      ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
@@ -43,7 +49,7 @@ public static class GatewayCommands
         var storedGw = storedConfig.Gateway;
         if (string.IsNullOrEmpty(baseUrl) && storedGw?.ProviderUrl is not null && storedGw.ProviderUrl.Length > 0)
         {
-            baseUrl = storedGw.ProviderUrl.TrimEnd('/');
+            baseUrl = NormalizeProviderUrl(storedGw.ProviderUrl);  // V7-W11: normalize GUI-saved URL too
             Console.Error.WriteLine($"  Using GUI-saved provider URL: {baseUrl}");
         }
         if (port == "5218" && storedGw?.Port > 0)
@@ -170,6 +176,19 @@ public static class GatewayCommands
 
     private static string? GetOpt(string[] args, string prefix) =>
         args.FirstOrDefault(a => a.StartsWith(prefix + "=", StringComparison.OrdinalIgnoreCase))?[(prefix.Length + 1)..];
+
+    /// <summary>
+    /// V7-W11: Normalizes a provider URL to prevent /v1/v1/chat/completions.
+    /// Trims trailing '/' and strips trailing '/v1' if present (Gateway appends /v1/chat/completions).
+    /// </summary>
+    private static string NormalizeProviderUrl(string url)
+    {
+        var normalized = url.TrimEnd('/');
+        // Strip trailing /v1 if user included it (Gateway will add /v1/chat/completions)
+        if (normalized.EndsWith("/v1", StringComparison.OrdinalIgnoreCase))
+            normalized = normalized[..^3];
+        return normalized;
+    }
 
     /// <summary>
     /// Loads fallback providers from the gateway provider config file.
