@@ -87,6 +87,45 @@ cachehub context expand --id=<context-id> --symbol="<符号名>"
 cachehub context feedback --id=<context-id> --file feedback.json
 ```
 
+## Stale 自动恢复协议
+
+V8-P0-01 引入了 Context Strict Version Gate。当 workspace 代码发生变化（git commit、文件修改等）
+但索引尚未更新时，`context build` 会默认**拒绝**构建并返回 `CONTEXT_STALE`。
+
+### 识别 CONTEXT_STALE
+
+- **CLI**: 退出码 `3`，stderr 输出 `✗ CONTEXT_STALE: ...`
+- **Desktop API**: HTTP `409`，响应体 `{"errorCode": 4005, "message": "..."}`
+
+### 自动恢复流程
+
+```bash
+# 1. 尝试构建上下文
+cachehub context build --workspace=<id> --task="..." --output=json
+
+# 2. 如果返回 CONTEXT_STALE（退出码 3），自动刷新索引
+cachehub index refresh --id=<workspace-id>
+
+# 3. 重试构建上下文
+cachehub context build --workspace=<id> --task="..." --output=json
+```
+
+Agent 应自动执行此三步循环，无需用户干预。这样可以确保：
+
+- 代码修改后自动同步本地知识库
+- 重新获取准确的上下文
+- 避免"旧索引 + 新磁盘内容"的不一致
+
+### 显式跳过 stale 检查
+
+如果 Agent 明确接受潜在过时的上下文（例如快速预览），可以使用 `--allow-stale`：
+
+```bash
+cachehub context build --workspace=<id> --task="..." --allow-stale --output=json
+```
+
+注意：`--allow-stale` 会跳过缓存查找，每次都重新执行完整的 Recall→Ranking→Selection 流程。
+
 ## 手动分步（仅在需要精细控制时使用）
 
 如果 Bootstrap 不可用或需要更细粒度的控制，可以手动分步执行：

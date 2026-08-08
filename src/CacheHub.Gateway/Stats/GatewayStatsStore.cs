@@ -128,6 +128,52 @@ public sealed class GatewayStatsStore : IDisposable
     {
         // SQLite connections are opened/closed per operation, nothing to dispose
     }
+
+    /// <summary>
+    /// V8-audit-42: Purges stats older than the specified retention period.
+    /// Should be called periodically (e.g., on Initialize or every Nth RecordRequest) to prevent
+    /// unbounded table growth.
+    /// </summary>
+    /// <param name="retention">How long to keep raw stats (e.g., TimeSpan.FromDays(30)).</param>
+    /// <returns>Number of rows deleted.</returns>
+    public int PurgeOlderThan(TimeSpan retention)
+    {
+        lock (_lock)
+        {
+            using var conn = new SqliteConnection(_connectionString);
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            var cutoff = DateTimeOffset.UtcNow.Subtract(retention).ToString("O");
+            cmd.CommandText = "DELETE FROM gateway_stats WHERE timestamp < $cutoff;";
+            cmd.Parameters.AddWithValue("$cutoff", cutoff);
+            var deleted = cmd.ExecuteNonQuery();
+
+            // VACUUM to reclaim disk space after large deletions
+            if (deleted > 1000)
+            {
+                using var vacuumCmd = conn.CreateCommand();
+                vacuumCmd.CommandText = "VACUUM;";
+                vacuumCmd.ExecuteNonQuery();
+            }
+
+            return deleted;
+        }
+    }
+
+    /// <summary>
+    /// V8-audit-42: Gets the current row count (for monitoring table growth).
+    /// </summary>
+    public long GetRowCount()
+    {
+        lock (_lock)
+        {
+            using var conn = new SqliteConnection(_connectionString);
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT COUNT(*) FROM gateway_stats;";
+            return (long)(cmd.ExecuteScalar() ?? 0);
+        }
+    }
 }
 
 /// <summary>

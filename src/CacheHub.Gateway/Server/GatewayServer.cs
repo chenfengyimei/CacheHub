@@ -63,6 +63,8 @@ public sealed class GatewayServer : IDisposable
         try
         {
             _statsStore = new GatewayStatsStore(statsDbPath);
+            // V8-audit-42: Purge old stats on startup (30-day retention)
+            _statsStore.PurgeOlderThan(TimeSpan.FromDays(30));
         }
         catch
         {
