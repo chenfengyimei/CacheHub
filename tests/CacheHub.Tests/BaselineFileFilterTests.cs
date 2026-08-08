@@ -53,6 +53,15 @@ public class BaselineFileFilterTests
     [InlineData("/repo/tests/TestUtil.go")]
     [InlineData("/repo/src/main.rs")]
     [InlineData("/repo/README.md")]
+    // V7-W07: Source code files with "token"/"secret"/"credential" in name must NOT be excluded
+    [InlineData("/repo/src/TokenService.cs")]
+    [InlineData("/repo/src/Tokenizer.cs")]
+    [InlineData("/repo/src/TokenBudget.cs")]
+    [InlineData("/repo/src/auth/AuthTokenManager.ts")]
+    [InlineData("/repo/src/auth/RefreshTokenService.py")]
+    [InlineData("/repo/src/SecretScanner.cs")]
+    [InlineData("/repo/src/CredentialManager.cs")]
+    [InlineData("/repo/src/ApiKeyMiddleware.cs")]
     public void Allows_RealSourceFiles(string path)
     {
         Assert.False(BaselineFileFilter.IsExcluded(path));

@@ -538,8 +538,7 @@ public static class BenchmarkCommands
             if (baselineCache is not null) return baselineCache;
 
             // V6 (review #18): Baseline should be a fair, safe "read whole repo" proxy.
-            // Exclude VCS/build/sensitive/binary payloads so it parallels CacheHub's own
-            // indexing filters (never feed .env/*.pem/node_modules/etc into a prompt).
+            // V7-W07: Use relative paths for context labels + stable sort for reproducibility.
             var baselinePaths = Directory.EnumerateFiles(workspace.RootPath, "*", SearchOption.AllDirectories)
                 .Where(p =>
                     !p.Contains("\\.git\\", StringComparison.OrdinalIgnoreCase) &&
@@ -552,15 +551,19 @@ public static class BenchmarkCommands
                     !p.Contains("\\vendor\\", StringComparison.OrdinalIgnoreCase) &&
                     !p.Contains("/vendor/", StringComparison.OrdinalIgnoreCase) &&
                     !BaselineFileFilter.IsExcluded(p))
-                .Take(500) // V5: increased from 200 to 500 for fairer baseline representation
+                .Select(p => Path.GetRelativePath(workspace.RootPath, p).Replace('\\', '/'))  // V7-W07: relative path
+                .OrderBy(p => p, StringComparer.Ordinal)  // V7-W07: stable sort for reproducibility
+                .Take(500)
                 .ToList();
 
             var snippets = new List<string>();
-            foreach (var fullPath in baselinePaths)
+            foreach (var relPath in baselinePaths)
             {
                 try
                 {
-                    snippets.Add($"// ---- {Path.GetFileName(fullPath)} ----\n{File.ReadAllText(fullPath)}");
+                    var fullPath = Path.Combine(workspace.RootPath, relPath.Replace('/', Path.DirectorySeparatorChar));
+                    // V7-W07: Use relative path as label (not just filename) so model can distinguish files
+                    snippets.Add($"// ---- {relPath} ----\n{File.ReadAllText(fullPath)}");
                 }
                 catch { }
             }
