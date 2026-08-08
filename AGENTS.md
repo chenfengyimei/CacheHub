@@ -138,10 +138,19 @@ cachehub benchmark agent --id=<workspace-id> --real-test --test-command="dotnet 
 
 # 4. Compare CacheHub vs Baseline (full-repo) side-by-side
 cachehub benchmark agent --id=<workspace-id> --compare --real-test
+
+# 5. Run Benchmark Matrix across all fixture repositories (V7-W18)
+#    Evaluates Recall@10 + TokenReduction + Phase Gate for 25 tasks × 13 repos
+cachehub benchmark matrix
+cachehub benchmark matrix --json          # JSON output
+cachehub benchmark matrix --lang=python   # Filter by language
 ```
 
 `--real-test` requires the workspace to be a git repository. It creates a temp worktree,
 applies the model's diff, runs the build/test command, and reports the real pass/fail.
+
+`benchmark matrix` runs retrieval-only (no model needed) against 13 fixture repos
+under `tests/fixtures/repos/`. Phase Gate: Recall@10 ≥ 90%, TokenReduction ≥ 20%.
 
 ## Commit Convention
 

@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "project": "CacheHub",
-  "currentPhase": "V7-Truth-Closure",
-  "currentTask": "V7 Truth Closure: 7/8 items complete. WorkspaceVersionFingerprint + stale detection + AgentBenchmark success fix + DNS rebinding + launch nonce + patch protocol + RecallWiringFactory + baseline fairness. 940 tests.",
+  "currentPhase": "V7-Benchmark-Matrix",
+  "currentTask": "V7 Benchmark Matrix: 25 tasks × 13 fixture repos. Matrix Runner + CLI command + Phase Gate. 965 tests.",
   "repository": {
     "branch": "main",
     "dirty": false,
@@ -10,7 +10,7 @@
   },
   "qualityGates": {
     "build": "pass (0 errors, 0 warnings, warnings-as-errors enabled)",
-    "unitTests": "pass (940/942, 2 skipped)",
+    "unitTests": "pass (965/967, 2 skipped)",
     "integrationTests": "pass (real SQLite + FTS5 + Context Engine pipeline + Snapshot Clone + Agent Benchmark + Cache Invalidate)",
     "securityTests": "pass (path traversal, auth, XSS, secret scan, symlink, offline mode, unified SecurityPolicyResolver, offline hard-block before gateway, Gateway Offline final defense V6-W04)",
     "format": "pass"
@@ -69,11 +69,11 @@
       "CacheHub.Gateway (server, provider, SSE, router, multi-provider config, Offline defense — separated from Core)",
       "CacheHub.Cli (CLI entry, 21 command groups)",
       "CacheHub.Desktop (Web UI, Minimal API, 17 routes, UsageStatsService)",
-      "CacheHub.Tests (940 tests)"
+      "CacheHub.Tests (965 tests)"
     ],
     "dependencyChain": "Core ← Storage, Indexing, Gateway; Context ← Core+Storage+Indexing; Cli/Desktop ← all",
     "databaseMigrations": 11
   },
-  "testCount": 940,
+  "testCount": 965,
   "lastUpdated": "2026-08-08T01:25:00Z"
 }
