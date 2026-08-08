@@ -237,6 +237,18 @@ public static class BenchmarkCommands
                     EndLine = r.EndLine,
                     ExactMatch = true,
                 }).ToList();
+            },
+            reverseRelationSearch: target =>
+            {
+                var results = querySvc.GetFilesByRelationTargetAsync(activeSnapshotId, target).GetAwaiter().GetResult();
+                return results.Select(r => new Context.Recall.RelationHit
+                {
+                    TargetName = r.TargetName,
+                    RelationType = r.RelationType,
+                    Relation = r.Relation,
+                    Confidence = r.Confidence,
+                    SourcePath = r.NormalizedPath,
+                }).ToList();
             });
 
         // Compute real metrics
@@ -508,6 +520,18 @@ public static class BenchmarkCommands
                         StartLine = r.StartLine,
                         EndLine = r.EndLine,
                         ExactMatch = true,
+                    }).ToList();
+                },
+                reverseRelationSearch: target =>
+                {
+                    var results = querySvc.GetFilesByRelationTargetAsync(activeSnapshotId, target).GetAwaiter().GetResult();
+                    return results.Select(r => new Context.Recall.RelationHit
+                    {
+                        TargetName = r.TargetName,
+                        RelationType = r.RelationType,
+                        Relation = r.Relation,
+                        Confidence = r.Confidence,
+                        SourcePath = r.NormalizedPath,
                     }).ToList();
                 });
 

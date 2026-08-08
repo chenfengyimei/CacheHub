@@ -192,6 +192,18 @@ public static class WorkflowCommands
                     EndLine = r.EndLine,
                     ExactMatch = true,
                 }).ToList();
+            },
+            reverseRelationSearch: target =>
+            {
+                var results = querySvc.GetFilesByRelationTargetAsync(activeSnapshotId, target).GetAwaiter().GetResult();
+                return results.Select(r => new Context.Recall.RelationHit
+                {
+                    TargetName = r.TargetName,
+                    RelationType = r.RelationType,
+                    Relation = r.Relation,
+                    Confidence = r.Confidence,
+                    SourcePath = r.NormalizedPath,
+                }).ToList();
             });
 
         var ctxRepo = new SqliteContextPackageRepository(factory);

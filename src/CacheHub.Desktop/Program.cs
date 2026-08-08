@@ -734,7 +734,20 @@ app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextE
                 Confidence = r.Confidence,
             }).ToList();
         },
-        semanticSearch: DesktopSemanticHelper.CreateSemanticSearch(ws.Id.Value));
+        semanticSearch: DesktopSemanticHelper.CreateSemanticSearch(ws.Id.Value),
+        reverseRelationSearch: target =>
+        {
+            var revQuerySvc = new CacheHub.Storage.Query.SqliteIndexQueryService(factory);
+            var revResults = revQuerySvc.GetFilesByRelationTargetAsync(activeSnapshotId, target).GetAwaiter().GetResult();
+            return revResults.Select(r => new CacheHub.Context.Recall.RelationHit
+            {
+                TargetName = r.TargetName,
+                RelationType = r.RelationType,
+                Relation = r.Relation,
+                Confidence = r.Confidence,
+                SourcePath = r.NormalizedPath,
+            }).ToList();
+        });
 
     await ctxRepo.SaveAsync(manifest);
 
@@ -1281,6 +1294,18 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
                 StartLine = r.StartLine,
                 EndLine = r.EndLine,
                 ExactMatch = true,
+            }).ToList();
+        },
+        reverseRelationSearch: target =>
+        {
+            var revResults = querySvc.GetFilesByRelationTargetAsync(activeSnapshotId, target).GetAwaiter().GetResult();
+            return revResults.Select(r => new CacheHub.Context.Recall.RelationHit
+            {
+                TargetName = r.TargetName,
+                RelationType = r.RelationType,
+                Relation = r.Relation,
+                Confidence = r.Confidence,
+                SourcePath = r.NormalizedPath,
             }).ToList();
         });
 
