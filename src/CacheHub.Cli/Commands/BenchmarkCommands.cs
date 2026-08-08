@@ -899,12 +899,13 @@ public static class BenchmarkCommands
 
         Console.Error.WriteLine($"  Tasks: {tasks.Count}" + (language is not null ? $" (lang={language})" : ""));
 
-        // For each task, read fixture files and compute retrieval metrics
+        // V8-P0-04: Use real ContextEngine for retrieval (blind to Ground Truth)
         var matrixRunner = new BenchmarkMatrixRunner();
         var result = matrixRunner.RunRetrievalMatrix(
             task => GetFixtureFiles(repoRoot, task),
             (task, path) => ReadFixtureFile(repoRoot, task, path),
             (task, path) => ReadFixtureHash(repoRoot, task, path),
+            task => BuildContextForMatrixTask(repoRoot, task),
             modelId: "retrieval-matrix",
             tasks: tasks);
 
@@ -932,7 +933,14 @@ public static class BenchmarkCommands
         }
         catch { }
 
-        return result.PhaseGate.Passed ? 0 : 1;
+        // V8-P0-05: Incomplete gate returns exit code 2 (distinct from Passed=0 and Failed=1)
+        return result.PhaseGate.Status switch
+        {
+            MatrixGateStatus.Passed => 0,
+            MatrixGateStatus.Failed => 1,
+            MatrixGateStatus.Incomplete => 2,
+            _ => 1,
+        };
     }
 
     private static string FindRepoRoot()
@@ -1034,7 +1042,8 @@ public static class BenchmarkCommands
         }
 
         lines.Add("");
-        lines.Add($"  Phase Gate: {(result.PhaseGate.Passed ? "PASSED" : "FAILED")}");
+        lines.Add($"  Phase Gate: {result.PhaseGate.Status.ToString().ToUpperInvariant()}" +
+            (result.PhaseGate.Status == MatrixGateStatus.Incomplete ? " (no Agent data)" : ""));
 
         if (result.PhaseGate.FailedGates.Count > 0)
             lines.AddRange(result.PhaseGate.FailedGates.Select(g => $"    - {g}"));
@@ -1050,6 +1059,46 @@ public static class BenchmarkCommands
         }
 
         return string.Join(Environment.NewLine, lines);
+    }
+
+    /// <summary>
+    /// V8-P0-04: Builds context for a matrix task using the real ContextEngine.
+    /// This callback is blind to Ground Truth — it only receives the task description and fixture files.
+    /// </summary>
+    private static Core.Context.ContextPackageManifest BuildContextForMatrixTask(string repoRoot, BenchmarkTask task)
+    {
+        var fixturePath = task.RepositoryPath ?? ".";
+        var fullPath = Path.IsPathRooted(fixturePath)
+            ? fixturePath
+            : Path.Combine(repoRoot, fixturePath);
+
+        var files = GetFixtureFiles(repoRoot, task);
+        var indexedFiles = files.Select(f => new Context.Recall.IndexedFileInfo
+        {
+            Path = f.NormalizedPath,
+            NormalizedPath = f.NormalizedPath,
+            Language = f.Language,
+            Size = f.Size,
+            ContentHash = "sha256:pending",
+        }).ToList();
+
+        var tokenizers = Core.Tokens.TokenizerRegistry.CreateWithDefaults();
+        var (secPolicy, _) = Core.Security.SecurityPolicyResolver.CreateEnforcer();
+        var engine = new ContextEngine(tokenizers, secPolicy, cache: null);
+
+        var snapshotId = Core.Identifiers.IndexSnapshotId.New();
+        var manifest = engine.Build(
+            new ContextBuildRequest
+            {
+                WorkspaceId = Core.Identifiers.WorkspaceId.New(),
+                IndexSnapshotId = snapshotId,
+                Task = task.TaskDescription,
+            },
+            () => indexedFiles,
+            path => ReadFixtureFile(repoRoot, task, path),
+            _ => "sha256:pending");
+
+        return manifest;
     }
 
     private static string ResolveFileContent(string rootPath, string relativePath)

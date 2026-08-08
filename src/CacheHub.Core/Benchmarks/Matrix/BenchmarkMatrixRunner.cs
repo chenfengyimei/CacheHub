@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CacheHub.Core.Benchmarks.Tasks;
+using CacheHub.Core.Context;
 using CacheHub.Core.Tokens;
 
 namespace CacheHub.Core.Benchmarks.Matrix;
@@ -16,8 +17,20 @@ public sealed record MatrixFileInfo
 }
 
 /// <summary>
-/// V7-W18: Benchmark Matrix Runner.
-/// Orchestrates retrieval and agent benchmarks across all fixture repositories.
+/// V8-P0-04: Phase gate status.
+/// </summary>
+public enum MatrixGateStatus
+{
+    Passed,
+    Failed,
+    Incomplete
+}
+
+/// <summary>
+/// V7-W18 / V8-P0-04: Benchmark Matrix Runner.
+/// V8-P0-04: Rewritten to eliminate Ground Truth leakage.
+/// Retrieval now uses a real ContextEngine callback; RequiredFiles/HelpfulFiles/DistractorFiles
+/// are ONLY used in the evaluation phase, never in the retrieval/selection phase.
 /// </summary>
 public sealed class BenchmarkMatrixRunner
 {
@@ -30,17 +43,21 @@ public sealed class BenchmarkMatrixRunner
 
     /// <summary>
     /// Runs the retrieval-only benchmark matrix (no model calls needed).
-    /// For each task: builds context, computes Recall@10 and TokenReduction.
+    /// V8-P0-04: Uses contextBuildCallback to get real ContextEngine predictions.
+    /// Ground Truth (RequiredFiles/HelpfulFiles/DistractorFiles) is ONLY used in evaluation, never in retrieval.
     /// </summary>
     /// <param name="indexedFilesProvider">Provides indexed files for a task.</param>
     /// <param name="contentProvider">Provides file content for a task and path.</param>
     /// <param name="hashProvider">Provides file hash for a task and path.</param>
+    /// <param name="contextBuildCallback">V8-P0-04: Calls real ContextEngine to build context for a task.
+    /// Returns the manifest with SelectedFiles. This callback must NOT have access to Ground Truth.</param>
     /// <param name="modelId">Model identifier for the report.</param>
     /// <param name="tasks">Optional filtered task list. If null, uses all tasks.</param>
     public MatrixResult RunRetrievalMatrix(
         Func<BenchmarkTask, IReadOnlyList<MatrixFileInfo>> indexedFilesProvider,
         Func<BenchmarkTask, string, string> contentProvider,
         Func<BenchmarkTask, string, string> hashProvider,
+        Func<BenchmarkTask, ContextPackageManifest> contextBuildCallback,
         string modelId = "retrieval-only",
         IReadOnlyList<BenchmarkTask>? tasks = null)
     {
@@ -50,8 +67,14 @@ public sealed class BenchmarkMatrixRunner
         foreach (var task in taskList)
         {
             var indexedFiles = indexedFilesProvider(task);
-            var recall = ComputeRecall(task, indexedFiles);
-            var tokenReduction = ComputeTokenReduction(task, indexedFiles, contentProvider);
+
+            // V8-P0-04: Call real ContextEngine to get predictions (blind to Ground Truth)
+            var manifest = contextBuildCallback(task);
+            var selectedPaths = manifest.SelectedFiles.Select(f => f.Path).ToList();
+
+            // V8-P0-04: Evaluation phase — NOW we can use Ground Truth to score predictions
+            var recall = EvaluateRecall(task, selectedPaths);
+            var tokenReduction = EvaluateTokenReduction(task, indexedFiles, selectedPaths, contentProvider);
 
             results.Add(new MatrixTaskResult
             {
@@ -70,63 +93,55 @@ public sealed class BenchmarkMatrixRunner
         return BuildResult(results, modelId);
     }
 
-    private double ComputeRecall(BenchmarkTask task, IReadOnlyList<MatrixFileInfo> indexedFiles)
+    /// <summary>
+    /// V8-P0-04: Evaluates Recall@10 using Ground Truth against ContextEngine predictions.
+    /// This is the ONLY place where RequiredFiles is used — after retrieval is complete.
+    /// </summary>
+    private static double EvaluateRecall(BenchmarkTask task, IReadOnlyList<string> selectedPaths)
     {
-        // Simulate: top-10 files by simple path matching to task keywords
-        var topFiles = indexedFiles
-            .Select(f => new { File = f, Score = ScoreFile(task, f) })
-            .OrderByDescending(x => x.Score)
-            .Take(10)
-            .Select(x => x.File.NormalizedPath)
-            .ToList();
+        if (task.RequiredFiles.Count == 0)
+            return 0;
 
-        var requiredHit = task.RequiredFiles.Count(rf =>
-            topFiles.Any(tf => tf.Contains(rf, StringComparison.OrdinalIgnoreCase) ||
-                rf.Contains(tf, StringComparison.OrdinalIgnoreCase)));
+        // Check how many RequiredFiles appear in the top-10 selected paths
+        var top10 = selectedPaths.Take(10).ToList();
+        var hitCount = task.RequiredFiles.Count(rf =>
+            top10.Any(sp => PathEquals(sp, rf)) ||
+            top10.Any(sp => sp.Contains(rf, StringComparison.OrdinalIgnoreCase) ||
+                rf.Contains(sp, StringComparison.OrdinalIgnoreCase)));
 
-        return task.RequiredFiles.Count > 0
-            ? (double)requiredHit / task.RequiredFiles.Count
-            : 0;
+        return (double)hitCount / task.RequiredFiles.Count;
     }
 
-    private static double ScoreFile(BenchmarkTask task, MatrixFileInfo file)
-    {
-        double score = 0;
-        foreach (var req in task.RequiredFiles)
-        {
-            if (file.NormalizedPath.Contains(req, StringComparison.OrdinalIgnoreCase) ||
-                req.Contains(file.NormalizedPath, StringComparison.OrdinalIgnoreCase))
-                score += 10;
-        }
-        foreach (var help in task.HelpfulFiles)
-        {
-            if (file.NormalizedPath.Contains(help, StringComparison.OrdinalIgnoreCase))
-                score += 5;
-        }
-        foreach (var dist in task.DistractorFiles)
-        {
-            if (file.NormalizedPath.Contains(dist, StringComparison.OrdinalIgnoreCase))
-                score -= 3;
-        }
-        return score;
-    }
-
-    private (int FullRepoTokens, int SelectedTokens, double Reduction, int SelectedFileCount) ComputeTokenReduction(
+    /// <summary>
+    /// V8-P0-04: Evaluates token reduction based on ContextEngine-selected files (not Ground Truth).
+    /// </summary>
+    private (int FullRepoTokens, int SelectedTokens, double Reduction, int SelectedFileCount) EvaluateTokenReduction(
         BenchmarkTask task, IReadOnlyList<MatrixFileInfo> indexedFiles,
+        List<string> selectedPaths,
         Func<BenchmarkTask, string, string> contentProvider)
     {
-        var fullRepoTokens = indexedFiles.Sum(f => f.Size / 4); // approximate
+        var fullRepoTokens = indexedFiles.Sum(f => _tokenizer.CountTokens(contentProvider(task, f.NormalizedPath)));
 
-        // Simulate: select only Required + Helpful files
-        var selectedFiles = indexedFiles
-            .Where(f => task.RequiredFiles.Any(r => f.NormalizedPath.Contains(r, StringComparison.OrdinalIgnoreCase)) ||
-                        task.HelpfulFiles.Any(h => f.NormalizedPath.Contains(h, StringComparison.OrdinalIgnoreCase)))
-            .ToList();
+        // V8-P0-04: Use ContextEngine-selected paths, NOT RequiredFiles
+        var selectedTokens = selectedPaths.Sum(p =>
+        {
+            var file = indexedFiles.FirstOrDefault(f => PathEquals(f.NormalizedPath, p));
+            return file is not null ? _tokenizer.CountTokens(contentProvider(task, file.NormalizedPath)) : 0;
+        });
 
-        var selectedTokens = selectedFiles.Sum(f => f.Size / 4);
         var reduction = fullRepoTokens > 0 ? 1.0 - (double)selectedTokens / fullRepoTokens : 0;
 
-        return (fullRepoTokens, selectedTokens, reduction, selectedFiles.Count);
+        return (fullRepoTokens, selectedTokens, reduction, selectedPaths.Count);
+    }
+
+    /// <summary>
+    /// Path equality check that handles separator differences.
+    /// </summary>
+    private static bool PathEquals(string a, string b)
+    {
+        var na = a.Replace('\\', '/').TrimEnd('/');
+        var nb = b.Replace('\\', '/').TrimEnd('/');
+        return string.Equals(na, nb, StringComparison.OrdinalIgnoreCase);
     }
 
     private MatrixResult BuildResult(List<MatrixTaskResult> results, string modelId)
@@ -163,5 +178,4 @@ public sealed class BenchmarkMatrixRunner
             PhaseGate = MatrixPhaseGate.Evaluate(summary),
         };
     }
-
 }

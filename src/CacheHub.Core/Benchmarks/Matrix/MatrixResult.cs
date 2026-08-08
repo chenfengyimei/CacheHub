@@ -68,11 +68,16 @@ public sealed record MatrixSummary
 }
 
 /// <summary>
-/// V7-W18: Phase gate evaluation for the Benchmark Matrix.
+/// V7-W18 / V8-P0-05: Phase gate evaluation for the Benchmark Matrix.
+/// V8-P0-05: When no Agent results exist, gate status = Incomplete (not Passed).
 /// </summary>
 public sealed record MatrixPhaseGate
 {
     public required bool Passed { get; init; }
+
+    /// <summary>V8-P0-05: Gate status — Passed, Failed, or Incomplete (no Agent data).</summary>
+    public required MatrixGateStatus Status { get; init; }
+
     public required double ActualFileRecallAt10 { get; init; }
     public required double ActualTokenReduction { get; init; }
     public required double? ActualCacheHubSuccessRate { get; init; }
@@ -85,13 +90,18 @@ public sealed record MatrixPhaseGate
     {
         var gates = new List<string>();
 
+        // V8-P0-05: If no Agent results, gate is Incomplete — not Passed.
+        // Retrieval-only metrics (Recall@10, TokenReduction) are still evaluated for information,
+        // but the gate cannot Pass without Agent data.
+        var hasAgentResults = summary.TasksWithAgentResults is > 0;
+
         if (summary.MeanFileRecallAt10 < 0.90)
             gates.Add($"FileRecall@10 {summary.MeanFileRecallAt10:F2} < 0.90");
 
         if (summary.MeanTokenReduction < 0.20)
             gates.Add($"TokenReduction {summary.MeanTokenReduction:F2} < 0.20");
 
-        if (summary.CacheHubSuccessRate.HasValue && summary.BaselineSuccessRate.HasValue)
+        if (hasAgentResults && summary.CacheHubSuccessRate.HasValue && summary.BaselineSuccessRate.HasValue)
         {
             if (summary.CacheHubSuccessRate < summary.BaselineSuccessRate * 0.95)
                 gates.Add($"CacheHub Success {summary.CacheHubSuccessRate:F2} < Baseline×95% {summary.BaselineSuccessRate * 0.95:F2}");
@@ -102,10 +112,23 @@ public sealed record MatrixPhaseGate
             if (summary.PositiveTokenTaskRatio < 0.60)
                 gates.Add($"PositiveTokenTaskRatio {summary.PositiveTokenTaskRatio:F2} < 0.60");
         }
+        else if (!hasAgentResults)
+        {
+            // V8-P0-05: No agent results = gate is incomplete
+            gates.Add("No Agent results — Agent Product Gate not evaluated");
+        }
+
+        // V8-P0-05: Determine status
+        var status = !hasAgentResults
+            ? MatrixGateStatus.Incomplete
+            : gates.Count == 0
+                ? MatrixGateStatus.Passed
+                : MatrixGateStatus.Failed;
 
         return new MatrixPhaseGate
         {
-            Passed = gates.Count == 0,
+            Passed = status == MatrixGateStatus.Passed,
+            Status = status,
             ActualFileRecallAt10 = summary.MeanFileRecallAt10,
             ActualTokenReduction = summary.MeanTokenReduction,
             ActualCacheHubSuccessRate = summary.CacheHubSuccessRate,

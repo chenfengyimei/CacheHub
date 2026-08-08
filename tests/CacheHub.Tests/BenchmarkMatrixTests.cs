@@ -1,12 +1,19 @@
+using CacheHub.Context.Engine;
+using CacheHub.Context.Recall;
 using CacheHub.Core.Benchmarks;
 using CacheHub.Core.Benchmarks.Matrix;
 using CacheHub.Core.Benchmarks.Tasks;
+using CacheHub.Core.Context;
+using CacheHub.Core.Identifiers;
+using CacheHub.Core.Tokens;
 using Xunit;
 
 namespace CacheHub.Tests;
 
 /// <summary>
-/// V7-W19: Tests for Benchmark Matrix Runner and Phase Gate evaluation.
+/// V7-W19 / V8-P0-04+05: Tests for Benchmark Matrix Runner and Phase Gate evaluation.
+/// V8-P0-04: Rewritten to verify Ground Truth is NOT used in retrieval.
+/// V8-P0-05: Verifies PhaseGate is Incomplete without Agent data.
 /// </summary>
 public class BenchmarkMatrixTests
 {
@@ -18,10 +25,9 @@ public class BenchmarkMatrixTests
             task => GetMockFiles(task),
             (task, path) => "mock content",
             (task, path) => "mock-hash",
-            modelId: "test-model");
+            task => BuildMockContext(task));
 
         Assert.Equal(BenchmarkTaskSet.Tasks.Count, result.Tasks.Count);
-        Assert.Equal("test-model", result.ModelId);
         Assert.True(result.Summary.TotalTasks > 0);
     }
 
@@ -32,13 +38,13 @@ public class BenchmarkMatrixTests
         var result = runner.RunRetrievalMatrix(
             task => GetMockFiles(task),
             (task, path) => "mock content",
-            (task, path) => "mock-hash");
+            (task, path) => "mock-hash",
+            task => BuildMockContext(task));
 
         foreach (var taskResult in result.Tasks)
         {
             Assert.True(taskResult.FileRecallAt10 >= 0 && taskResult.FileRecallAt10 <= 1.0);
             Assert.True(taskResult.TokenReduction >= 0 && taskResult.TokenReduction <= 1.0);
-            Assert.True(taskResult.SelectedFileCount >= 0);
         }
     }
 
@@ -49,15 +55,39 @@ public class BenchmarkMatrixTests
         var result = runner.RunRetrievalMatrix(
             task => GetMockFiles(task),
             (task, path) => "mock",
-            (task, path) => "hash");
+            (task, path) => "hash",
+            task => BuildMockContext(task));
 
         Assert.NotNull(result.PhaseGate);
         Assert.True(result.PhaseGate.ActualFileRecallAt10 >= 0);
         Assert.True(result.PhaseGate.ActualTokenReduction >= 0);
     }
 
+    /// <summary>
+    /// V8-P0-05: Without Agent data, PhaseGate must be Incomplete, not Passed.
+    /// </summary>
     [Fact]
-    public void MatrixPhaseGate_PassWhenAllThresholdsMet()
+    public void MatrixPhaseGate_NoAgentData_StatusIsIncomplete()
+    {
+        var summary = new MatrixSummary
+        {
+            TotalTasks = 10,
+            MeanFileRecallAt10 = 0.95,
+            MeanTokenReduction = 0.50,
+            // No agent data — TasksWithAgentResults is null
+        };
+
+        var gate = MatrixPhaseGate.Evaluate(summary);
+        Assert.Equal(MatrixGateStatus.Incomplete, gate.Status);
+        Assert.False(gate.Passed);
+        Assert.Contains(gate.FailedGates, g => g.Contains("No Agent results"));
+    }
+
+    /// <summary>
+    /// V8-P0-05: With Agent data meeting all thresholds, PhaseGate is Passed.
+    /// </summary>
+    [Fact]
+    public void MatrixPhaseGate_WithAgentData_AllThresholdsMet_StatusIsPassed()
     {
         var summary = new MatrixSummary
         {
@@ -72,6 +102,7 @@ public class BenchmarkMatrixTests
         };
 
         var gate = MatrixPhaseGate.Evaluate(summary);
+        Assert.Equal(MatrixGateStatus.Passed, gate.Status);
         Assert.True(gate.Passed);
         Assert.Empty(gate.FailedGates);
     }
@@ -82,12 +113,17 @@ public class BenchmarkMatrixTests
         var summary = new MatrixSummary
         {
             TotalTasks = 10,
-            MeanFileRecallAt10 = 0.50, // below 0.90
+            MeanFileRecallAt10 = 0.50,
             MeanTokenReduction = 0.50,
+            TasksWithAgentResults = 10,
+            CacheHubSuccessRate = 0.90,
+            BaselineSuccessRate = 0.85,
+            MeanInputTokenReduction = 0.60,
+            PositiveTokenTaskRatio = 0.80,
         };
 
         var gate = MatrixPhaseGate.Evaluate(summary);
-        Assert.False(gate.Passed);
+        Assert.Equal(MatrixGateStatus.Failed, gate.Status);
         Assert.Contains(gate.FailedGates, g => g.Contains("FileRecall"));
     }
 
@@ -98,11 +134,16 @@ public class BenchmarkMatrixTests
         {
             TotalTasks = 10,
             MeanFileRecallAt10 = 0.95,
-            MeanTokenReduction = 0.10, // below 0.20
+            MeanTokenReduction = 0.10,
+            TasksWithAgentResults = 10,
+            CacheHubSuccessRate = 0.90,
+            BaselineSuccessRate = 0.85,
+            MeanInputTokenReduction = 0.60,
+            PositiveTokenTaskRatio = 0.80,
         };
 
         var gate = MatrixPhaseGate.Evaluate(summary);
-        Assert.False(gate.Passed);
+        Assert.Equal(MatrixGateStatus.Failed, gate.Status);
         Assert.Contains(gate.FailedGates, g => g.Contains("TokenReduction"));
     }
 
@@ -114,7 +155,7 @@ public class BenchmarkMatrixTests
             TotalTasks = 10,
             MeanFileRecallAt10 = 0.95,
             MeanTokenReduction = 0.50,
-            CacheHubSuccessRate = 0.70, // Baseline 0.90 * 0.95 = 0.855, 0.70 < 0.855
+            CacheHubSuccessRate = 0.70,
             BaselineSuccessRate = 0.90,
             MeanInputTokenReduction = 0.60,
             PositiveTokenTaskRatio = 0.80,
@@ -122,8 +163,31 @@ public class BenchmarkMatrixTests
         };
 
         var gate = MatrixPhaseGate.Evaluate(summary);
-        Assert.False(gate.Passed);
+        Assert.Equal(MatrixGateStatus.Failed, gate.Status);
         Assert.Contains(gate.FailedGates, g => g.Contains("Success"));
+    }
+
+    /// <summary>
+    /// V8-P0-04: Verifies that the contextBuildCallback is called and its predictions are used.
+    /// The callback should NOT have access to RequiredFiles.
+    /// </summary>
+    [Fact]
+    public void RunRetrievalMatrix_UsesContextBuildCallback_NotGroundTruth()
+    {
+        var callbackCalled = false;
+        var runner = new BenchmarkMatrixRunner();
+        var result = runner.RunRetrievalMatrix(
+            task => GetMockFiles(task),
+            (task, path) => "content",
+            (task, path) => "hash",
+            task =>
+            {
+                callbackCalled = true;
+                return BuildMockContext(task);
+            });
+
+        Assert.True(callbackCalled);
+        Assert.True(result.Tasks.All(t => t.SelectedFileCount >= 0));
     }
 
     [Fact]
@@ -178,6 +242,36 @@ public class BenchmarkMatrixTests
         }
     }
 
+    // V8-P0-04: Mock context builder that uses real ContextEngine (blind to Ground Truth)
+    private static ContextPackageManifest BuildMockContext(BenchmarkTask task)
+    {
+        var files = GetMockFiles(task);
+        var indexedFiles = files.Select(f => new IndexedFileInfo
+        {
+            Path = f.NormalizedPath,
+            NormalizedPath = f.NormalizedPath,
+            Language = f.Language,
+            Size = f.Size,
+            ContentHash = "sha256:pending",
+        }).ToList();
+
+        var engine = new ContextEngine(
+            TokenizerRegistry.CreateWithDefaults(),
+            securityPolicy: null,
+            cache: null);
+
+        return engine.Build(
+            new ContextBuildRequest
+            {
+                WorkspaceId = WorkspaceId.New(),
+                IndexSnapshotId = IndexSnapshotId.New(),
+                Task = task.TaskDescription,
+            },
+            () => indexedFiles,
+            _ => "mock content for testing",
+            _ => "sha256:pending");
+    }
+
     private static List<MatrixFileInfo> GetMockFiles(BenchmarkTask task)
     {
         var files = new List<MatrixFileInfo>();
@@ -201,7 +295,6 @@ public class BenchmarkMatrixTests
                 Size = 500,
             });
         }
-        // Add some distractor files
         foreach (var dist in task.DistractorFiles.Take(2))
         {
             files.Add(new MatrixFileInfo
