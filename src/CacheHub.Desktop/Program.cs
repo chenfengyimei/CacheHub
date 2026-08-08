@@ -175,16 +175,12 @@ app.Use(async (context, next) =>
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
-// Security: resolve a relative path within a workspace root, rejecting traversal attempts.
-static string? SafeResolvePath(string rootPath, string relativePath)
+// V8-P0-03: Replaced weak SafeResolvePath with shared SafePathResolver.
+// This helper creates a resolver and resolves the path in one call.
+// SafePathResolver handles traversal, prefix-boundary, symlink (including parent dirs), and absolute path rejection.
+static string? ResolvePathSafe(string rootPath, string relativePath)
 {
-    if (string.IsNullOrEmpty(rootPath)) return null;
-    if (string.IsNullOrEmpty(relativePath)) return null;
-    var cleaned = relativePath.Replace('/', Path.DirectorySeparatorChar);
-    if (cleaned.Contains("..")) return null;
-    var fullPath = Path.GetFullPath(Path.Combine(rootPath, cleaned));
-    var normalizedRoot = Path.GetFullPath(rootPath);
-    return fullPath.StartsWith(normalizedRoot, CacheHub.Core.Paths.PathComparer.PhysicalPathComparison) ? fullPath : null;
+    return new SafePathResolver(rootPath).Resolve(relativePath);
 }
 
 static async Task<List<IndexedFileInfo>> GetIndexedFilesAsync(SqliteConnectionFactory factory, string workspaceId)
@@ -240,7 +236,7 @@ static string ResolveFileHashFromDb(SqliteConnectionFactory factory, IndexSnapsh
     // preventing "old Hash + new Content" inconsistency in Context Package.
     if (rootPath is not null)
     {
-        var fullPath = SafeResolvePath(rootPath, path);
+        var fullPath = ResolvePathSafe(rootPath, path);
         if (fullPath is not null && File.Exists(fullPath))
         {
             try
@@ -689,7 +685,7 @@ app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextE
         () => indexedFiles,
         path =>
         {
-            var fullPath = SafeResolvePath(ws.RootPath, path);
+            var fullPath = ResolvePathSafe(ws.RootPath, path);
             return fullPath is not null && File.Exists(fullPath) ? File.ReadAllTextAsync(fullPath).GetAwaiter().GetResult() : "";
         },
         path => ResolveFileHashFromDb(factory, activeSnapshotId, path, ws.RootPath),
@@ -773,7 +769,7 @@ app.MapPost("/api/v1/context/{id}/expand", async (string id, ExpandApiRequest re
     if (ws is null) return Results.NotFound(ErrorEnvelope.From(ErrorCode.WorkspaceNotFound, "Workspace not found"));
 
     var targetPath = req.File ?? req.Symbol ?? "";
-    var fullPath = SafeResolvePath(ws.RootPath, targetPath);
+    var fullPath = ResolvePathSafe(ws.RootPath, targetPath);
 
     if (fullPath is null)
         return Results.BadRequest(ErrorEnvelope.From(ErrorCode.InvalidArgument, "Invalid file path"));
@@ -1092,7 +1088,7 @@ app.MapGet("/api/v1/context/{id}/payload", async (string id, IContextPackageRepo
     var blockedFiles = new List<object>();
     foreach (var file in manifest.SelectedFiles)
     {
-        var fullPath = SafeResolvePath(ws.RootPath, file.Path);
+        var fullPath = ResolvePathSafe(ws.RootPath, file.Path);
         if (fullPath is null || !File.Exists(fullPath)) continue;
         var content = await File.ReadAllTextAsync(fullPath);
         var decision = payloadEnforcer.EvaluateFile(file.Path, content);
@@ -1109,7 +1105,7 @@ app.MapGet("/api/v1/context/{id}/payload", async (string id, IContextPackageRepo
 
     var payload = generator.Generate(manifest, path =>
     {
-        var fullPath = SafeResolvePath(ws.RootPath, path);
+        var fullPath = ResolvePathSafe(ws.RootPath, path);
         return fullPath is not null && File.Exists(fullPath) ? File.ReadAllTextAsync(fullPath).GetAwaiter().GetResult() : "";
     }, payloadEnforcer);
 
@@ -1293,7 +1289,7 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
         () => indexedFileInfos,
         path =>
         {
-            var fullPath = SafeResolvePath(workspace.RootPath, path);
+            var fullPath = ResolvePathSafe(workspace.RootPath, path);
             return fullPath is not null && File.Exists(fullPath) ? File.ReadAllTextAsync(fullPath).GetAwaiter().GetResult() : "";
         },
         path => ResolveFileHashFromDb(factory, activeSnapshotId, path, workspace.RootPath),
@@ -1370,7 +1366,7 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
     var payloadGenerator = new PayloadGenerator();
     var payloadContent = payloadGenerator.GenerateMarkdown(manifest, path =>
     {
-        var fullPath = SafeResolvePath(workspace.RootPath, path);
+        var fullPath = ResolvePathSafe(workspace.RootPath, path);
         return fullPath is not null && File.Exists(fullPath) ? File.ReadAllTextAsync(fullPath).GetAwaiter().GetResult() : "";
     }, secEnforcer);
     var (systemPrompt, userContent) = promptAssembly.Assemble(manifest, payloadContent);
