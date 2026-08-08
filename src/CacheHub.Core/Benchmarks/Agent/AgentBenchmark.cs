@@ -119,8 +119,9 @@ public sealed class AgentBenchmarkRunner
         var totalCompletion = 0;
         var totalLocalEstimated = 0;
         var totalCost = 0.0;
-        var testsPassed = 0;
-        var testsTotal = 0;
+        var lastTestsPassed = 0;
+        var lastTestsTotal = 0;
+        var taskCompleted = false;  // V7-W03: track per-round success, not cumulative
         var applyPatches = new List<string>();
         var errorMsg = (string?)null;
 
@@ -153,10 +154,15 @@ public sealed class AgentBenchmarkRunner
             applyPatches.Add(patch);
 
             var result = await testRunner(patch);
-            testsPassed += result.Passed;
-            testsTotal += result.Total;
+            // V7-W03: Track last round's test results (not cumulative) for reporting
+            lastTestsPassed = result.Passed;
+            lastTestsTotal = result.Total;
+
             if (result.Success)
+            {
+                taskCompleted = true;  // V7-W03: any round success = task completed
                 break;
+            }
         }
 
         sw.Stop();
@@ -164,14 +170,14 @@ public sealed class AgentBenchmarkRunner
         {
             TaskId = task.Id,
             RunNumber = 0,
-            TaskCompleted = testsTotal > 0 && testsPassed == testsTotal,
+            TaskCompleted = taskCompleted,  // V7-W03: based on per-round success, not cumulative
             Rounds = rounds,
             PromptTokens = totalPrompt,
             CompletionTokens = totalCompletion,
             LocalEstimatedContextTokens = totalLocalEstimated,
             TotalCost = totalCost,
-            TestsPassed = testsPassed,
-            TestsTotal = testsTotal,
+            TestsPassed = lastTestsPassed,   // V7-W03: last round's results
+            TestsTotal = lastTestsTotal,     // V7-W03: last round's results
             ExtraFilesRead = 0,
             PatchApplied = applyPatches,
             ErrorMessage = errorMsg,

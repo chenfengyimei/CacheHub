@@ -130,6 +130,76 @@ public class AgentBenchmarkTests
         Assert.NotEqual(result.PromptTokens, result.LocalEstimatedContextTokens);
     }
 
+    // V7-W03: Multi-round success rate bug — first round fail, second round pass should = TaskCompleted
+    [Fact]
+    public async Task Runner_FirstRoundFail_SecondRoundPass_TaskCompleted()
+    {
+        var model = new MockAgentModel(roundsToSucceed: int.MaxValue); // model always "succeeds" from its perspective
+        var runner = new AgentBenchmarkRunner(model, new CodeTokenizer(), maxRounds: 3);
+
+        var callCount = 0;
+        var result = await runner.RunTaskAsync(
+            TestTask,
+            BenchmarkConfig(),
+            desc => new AgentContextPackage
+            {
+                TaskDescription = desc,
+                SelectedFilePaths = ["src/Config.cs"],
+                FileSnippets = ["code"],
+                EstimatedTokens = 10,
+            },
+            patch =>
+            {
+                callCount++;
+                // Round 1: 90/100 pass (fail), Round 2: 100/100 pass (success)
+                if (callCount == 1)
+                    return Task.FromResult(new AgentTestResult { Success = false, Passed = 90, Total = 100 });
+                return Task.FromResult(new AgentTestResult { Success = true, Passed = 100, Total = 100 });
+            });
+
+        // V7-W03: Bug was — cumulative 190/200 → TaskCompleted=false (WRONG)
+        // Fix: per-round success tracking → TaskCompleted=true (CORRECT)
+        Assert.True(result.TaskCompleted);  // Second round succeeded
+        Assert.Equal(2, result.Rounds);
+        Assert.Equal(100, result.TestsPassed);  // Last round's results, not cumulative
+        Assert.Equal(100, result.TestsTotal);
+    }
+
+    // V7-W03: Three rounds, first two fail, third passes
+    [Fact]
+    public async Task Runner_ThreeRounds_LastSucceeds_TaskCompleted()
+    {
+        var model = new MockAgentModel(roundsToSucceed: int.MaxValue);
+        var runner = new AgentBenchmarkRunner(model, new CodeTokenizer(), maxRounds: 3);
+
+        var callCount = 0;
+        var result = await runner.RunTaskAsync(
+            TestTask,
+            BenchmarkConfig(),
+            desc => new AgentContextPackage
+            {
+                TaskDescription = desc,
+                SelectedFilePaths = ["src/Config.cs"],
+                FileSnippets = ["code"],
+                EstimatedTokens = 10,
+            },
+            patch =>
+            {
+                callCount++;
+                return callCount switch
+                {
+                    1 => Task.FromResult(new AgentTestResult { Success = false, Passed = 50, Total = 100 }),
+                    2 => Task.FromResult(new AgentTestResult { Success = false, Passed = 80, Total = 100 }),
+                    _ => Task.FromResult(new AgentTestResult { Success = true, Passed = 100, Total = 100 }),
+                };
+            });
+
+        Assert.True(result.TaskCompleted);
+        Assert.Equal(3, result.Rounds);
+        Assert.Equal(100, result.TestsPassed);
+        Assert.Equal(100, result.TestsTotal);
+    }
+
     private static BenchmarkConfig BenchmarkConfig() => new()
     {
         ModelId = "test-model",
