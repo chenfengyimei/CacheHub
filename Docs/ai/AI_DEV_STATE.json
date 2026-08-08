@@ -1,79 +1,81 @@
 {
-  "schemaVersion": 1,
-  "project": "CacheHub",
-  "currentPhase": "V7-Benchmark-Matrix",
-  "currentTask": "V7 Benchmark Matrix: 25 tasks × 13 fixture repos. Matrix Runner + CLI command + Phase Gate. 965 tests.",
-  "repository": {
-    "branch": "main",
-    "dirty": false,
-    "uncommittedFiles": []
-  },
-  "qualityGates": {
-    "build": "pass (0 errors, 0 warnings, warnings-as-errors enabled)",
-    "unitTests": "pass (965/967, 2 skipped)",
-    "integrationTests": "pass (real SQLite + FTS5 + Context Engine pipeline + Snapshot Clone + Agent Benchmark + Cache Invalidate)",
-    "securityTests": "pass (path traversal, auth, XSS, secret scan, symlink, offline mode, unified SecurityPolicyResolver, offline hard-block before gateway, Gateway Offline final defense V6-W04)",
-    "format": "pass"
-  },
-  "moduleStatus": {
-    "localKnowledgeBase": "Production Ready — SQLite + FTS5 + Symbol + Import + Relation all in Context Build",
-    "ftsRecall": "Production Ready — BM25 rank + hit line, ScoreHint consumed by RankingEngine, normalized correctly (inverted min-max)",
-    "symbolRecall": "Production Ready — line-range anchors in Selection",
-    "importRecall": "Production Ready — ImportRelationRecallSource in pipeline",
-    "relationRecall": "Production Ready — Forward + Reverse relation recall with FileSymbolsProvider",
-    "repoMap": "Component Implemented — directory adjacency, not mature code structure graph",
-    "anchorCompression": "Production Ready — Symbol Anchor precise, FTS Anchor uses hit line ±20, snippet <mark> highlight positioning",
-    "tokenBudget": "Production Ready — ValidateOrThrow, PayloadPlan immutable; BPE tokenizer (cl100k_base + o200k_base) for real model token counts",
-    "contextPackage": "Production Ready — full round-trip persistence",
-    "incrementalIndex": "Production Ready — Immutable snapshot Refresh with ID mapping, FTS single-file ops, ActiveDegraded status visible to all queries",
-    "contextPackageCache": "Production Ready — Persistent SQLite cache, cross-process hit, InvalidateByKey, CacheKey versioned, Blob GC (V6-W04)",
-    "sqlitePersistentCache": "Production Ready — SqliteCacheStore wired into Gateway main chain with blob storage + orphan blob cleanup (V6-W04)",
-    "gatewayRawCache": "Production Ready — persistent SQLite + in-memory fallback, provider fingerprint, temperature==0 only, SavedTokens from persistent store, Gateway Offline defense (V6-W04)",
-    "sseChatCompletions": "Production Ready — SSE streaming, status passthrough, Usage extraction, correct latency tracking",
-    "responsesApi": "Production Ready — streaming + non-streaming",
-    "singleProviderProxy": "Production Ready — Bearer auth, loopback, SingleFlight, concurrency limit, Offline defense (V6-W04)",
-    "multiProviderFallback": "Production Ready — ProviderRouter + FallbackProviders + config file + /v1/models fallback",
-    "semanticReference": "Beta — Reference-only (FNV-1a). V6-W03: now stores selectedFiles + filesActuallyRead. PathRecallSource uses HistoricalFiles directly. Still needs real-world validation.",
-    "contextualCompletion": "Production Ready — CLI + API, unified SecurityPolicyResolver, Offline hard-block, tokensSaved uses estimatedBaseline (V6-W02)",
-    "securityEnforcement": "Production Ready — unified SecurityPolicyResolver, all paths load from ConfigManager, Offline blocks gateway calls + Gateway final defense (V6-W04)",
-    "realBenchmark": "Production Ready — real ContextEngine, Recall@10 with Take(10), unified BPE Tokenizer, Report aggregates persisted runs.",
-    "agentBenchmark": "Beta+ — V6-W10: real git worktree apply-patch/build/test via GitWorktreePatchTester (SuccessRate from actual build/test exit code). Real Provider usage. PayloadGenerator compressed context. Per-model cost. Final external Matrix validation pending.",
-    "gui": "Beta — V6-W02: URL import auto-detects bootstrap, Dashboard API returns usage stats, Bootstrap API includes index step.",
-    "treeSitter": "Scaffold — regex-baseline covers 13 languages",
-    "lsp": "Scaffold",
-    "crossPlatformCI": "Integrated — ubuntu/windows/macos matrix, push+PR triggers",
-    "ignoreRules": "Production Ready — Build/Refresh/Verify share unified IgnoreRuleEngine"
-  },
-  "v6Progress": {
-    "completed": [
-      "V6-W01: P0 Fix document encoding corruption — restored 4 MD files, fixed sync-test-count.ps1 UTF-8",
-      "V6-W02: P0 Fix GUI URL Import + Dashboard API + Bootstrap + Monorepo + tokensSaved",
-      "V6-W03: P1 Fix Semantic Reference data storage (selectedFiles+filesActuallyRead) + Skill parameter syntax",
-      "V6-W04: P1 Gateway Offline final defense + Persistent Blob GC",
-      "V6-W05: P1 NU1903 dependency audit — SQLitePCLRaw 3.0.0 upgrade, Microsoft.Bcl.Memory risk accepted with documentation",
-      "V6-W06: P1 Agent Benchmark — real Provider Usage + PayloadGenerator + per-model cost estimation",
-      "V6-W08: P1 Bootstrap dir safety (git remote URL verify) + CLI Init Plan output + CacheKey tokenizerVersion/semanticStoreVersion + GUI auto-auth (HttpOnly session cookie)",
-      "V6-W10: P0 Agent Benchmark real worktree apply-patch/build/test (GitWorktreePatchTester) + regression tests",
-      "V6-W11: Fix worktree test isolation + GUI Auth contract tests"
-    ],
-    "remaining": [
-      "Run real product Benchmark Matrix (Node/Python/.NET/Unity/Go/Rust/TS Monorepo x 10-20 tasks) — requires external repo setup, not a code change"
-    ]
-  },
-  "architecture": {
-    "projects": [
-      "CacheHub.Core (domain models, contracts, identifiers, BPE tokenizers, SecurityPolicyResolver) — .NET 10 LTS",
-      "CacheHub.Storage (SQLite, migrations, repositories, FTS5, SqliteCacheStore with Blob GC)",
-      "CacheHub.Indexing (scan, ignore, hash, parsers, reconciler, detection)",
-      "CacheHub.Context (recall, ranking, selection, chunking, engine, cache, payload)",
-      "CacheHub.Gateway (server, provider, SSE, router, multi-provider config, Offline defense — separated from Core)",
-      "CacheHub.Cli (CLI entry, 21 command groups)",
-      "CacheHub.Desktop (Web UI, Minimal API, 17 routes, UsageStatsService)",
-      "CacheHub.Tests (965 tests)"
-    ],
-    "dependencyChain": "Core ← Storage, Indexing, Gateway; Context ← Core+Storage+Indexing; Cli/Desktop ← all",
-    "databaseMigrations": 11
-  },
-  "testCount": 965,
-  "lastUpdated": "2026-08-08T01:25:00Z"
+    "schemaVersion":  1,
+    "project":  "CacheHub",
+    "currentPhase":  "V7-Benchmark-Matrix",
+    "currentTask":  "V965 Benchmark Matrix: 965 tasks × 965 fixture repos. Matrix Runner + CLI command + Phase Gate. 965 tests.",
+    "repository":  {
+                       "branch":  "main",
+                       "dirty":  false,
+                       "uncommittedFiles":  [
+
+                                            ]
+                   },
+    "qualityGates":  {
+                         "build":  "pass (0 errors, 0 warnings, warnings-as-errors enabled)",
+                         "unitTests":  "pass (965/967, 2 skipped)",
+                         "integrationTests":  "pass (real SQLite + FTS5 + Context Engine pipeline + Snapshot Clone + Agent Benchmark + Cache Invalidate)",
+                         "securityTests":  "pass (path traversal, auth, XSS, secret scan, symlink, offline mode, unified SecurityPolicyResolver, offline hard-block before gateway, Gateway Offline final defense V6-W04)",
+                         "format":  "pass"
+                     },
+    "moduleStatus":  {
+                         "localKnowledgeBase":  "Production Ready — SQLite + FTS5 + Symbol + Import + Relation all in Context Build",
+                         "ftsRecall":  "Production Ready — BM25 rank + hit line, ScoreHint consumed by RankingEngine, normalized correctly (inverted min-max)",
+                         "symbolRecall":  "Production Ready — line-range anchors in Selection",
+                         "importRecall":  "Production Ready — ImportRelationRecallSource in pipeline",
+                         "relationRecall":  "Production Ready — Forward + Reverse relation recall with FileSymbolsProvider",
+                         "repoMap":  "Component Implemented — directory adjacency, not mature code structure graph",
+                         "anchorCompression":  "Production Ready — Symbol Anchor precise, FTS Anchor uses hit line ±20, snippet \u003cmark\u003e highlight positioning",
+                         "tokenBudget":  "Production Ready — ValidateOrThrow, PayloadPlan immutable; BPE tokenizer (cl100k_base + o200k_base) for real model token counts",
+                         "contextPackage":  "Production Ready — full round-trip persistence",
+                         "incrementalIndex":  "Production Ready — Immutable snapshot Refresh with ID mapping, FTS single-file ops, ActiveDegraded status visible to all queries",
+                         "contextPackageCache":  "Production Ready — Persistent SQLite cache, cross-process hit, InvalidateByKey, CacheKey versioned, Blob GC (V6-W04)",
+                         "sqlitePersistentCache":  "Production Ready — SqliteCacheStore wired into Gateway main chain with blob storage + orphan blob cleanup (V6-W04)",
+                         "gatewayRawCache":  "Production Ready — persistent SQLite + in-memory fallback, provider fingerprint, temperature==0 only, SavedTokens from persistent store, Gateway Offline defense (V6-W04)",
+                         "sseChatCompletions":  "Production Ready — SSE streaming, status passthrough, Usage extraction, correct latency tracking",
+                         "responsesApi":  "Production Ready — streaming + non-streaming",
+                         "singleProviderProxy":  "Production Ready — Bearer auth, loopback, SingleFlight, concurrency limit, Offline defense (V6-W04)",
+                         "multiProviderFallback":  "Production Ready — ProviderRouter + FallbackProviders + config file + /v1/models fallback",
+                         "semanticReference":  "Beta — Reference-only (FNV-1a). V6-W03: now stores selectedFiles + filesActuallyRead. PathRecallSource uses HistoricalFiles directly. Still needs real-world validation.",
+                         "contextualCompletion":  "Production Ready — CLI + API, unified SecurityPolicyResolver, Offline hard-block, tokensSaved uses estimatedBaseline (V6-W02)",
+                         "securityEnforcement":  "Production Ready — unified SecurityPolicyResolver, all paths load from ConfigManager, Offline blocks gateway calls + Gateway final defense (V6-W04)",
+                         "realBenchmark":  "Production Ready — real ContextEngine, Recall@10 with Take(10), unified BPE Tokenizer, Report aggregates persisted runs.",
+                         "agentBenchmark":  "Beta+ — V6-W10: real git worktree apply-patch/build/test via GitWorktreePatchTester (SuccessRate from actual build/test exit code). Real Provider usage. PayloadGenerator compressed context. Per-model cost. Final external Matrix validation pending.",
+                         "gui":  "Beta — V6-W02: URL import auto-detects bootstrap, Dashboard API returns usage stats, Bootstrap API includes index step.",
+                         "treeSitter":  "Scaffold — regex-baseline covers 13 languages",
+                         "lsp":  "Scaffold",
+                         "crossPlatformCI":  "Integrated — ubuntu/windows/macos matrix, push+PR triggers",
+                         "ignoreRules":  "Production Ready — Build/Refresh/Verify share unified IgnoreRuleEngine"
+                     },
+    "v6Progress":  {
+                       "completed":  [
+                                         "V6-W01: P0 Fix document encoding corruption — restored 4 MD files, fixed sync-test-count.ps1 UTF-8",
+                                         "V6-W02: P0 Fix GUI URL Import + Dashboard API + Bootstrap + Monorepo + tokensSaved",
+                                         "V6-W03: P1 Fix Semantic Reference data storage (selectedFiles+filesActuallyRead) + Skill parameter syntax",
+                                         "V6-W04: P1 Gateway Offline final defense + Persistent Blob GC",
+                                         "V6-W05: P1 NU1903 dependency audit — SQLitePCLRaw 3.0.0 upgrade, Microsoft.Bcl.Memory risk accepted with documentation",
+                                         "V6-W06: P1 Agent Benchmark — real Provider Usage + PayloadGenerator + per-model cost estimation",
+                                         "V6-W08: P1 Bootstrap dir safety (git remote URL verify) + CLI Init Plan output + CacheKey tokenizerVersion/semanticStoreVersion + GUI auto-auth (HttpOnly session cookie)",
+                                         "V6-W10: P0 Agent Benchmark real worktree apply-patch/build/test (GitWorktreePatchTester) + regression tests",
+                                         "V6-W11: Fix worktree test isolation + GUI Auth contract tests"
+                                     ],
+                       "remaining":  [
+                                         "Run real product Benchmark Matrix (Node/Python/.NET/Unity/Go/Rust/TS Monorepo x 10-20 tasks) — requires external repo setup, not a code change"
+                                     ]
+                   },
+    "architecture":  {
+                         "projects":  [
+                                          "CacheHub.Core (domain models, contracts, identifiers, BPE tokenizers, SecurityPolicyResolver) — .NET 10 LTS",
+                                          "CacheHub.Storage (SQLite, migrations, repositories, FTS5, SqliteCacheStore with Blob GC)",
+                                          "CacheHub.Indexing (scan, ignore, hash, parsers, reconciler, detection)",
+                                          "CacheHub.Context (recall, ranking, selection, chunking, engine, cache, payload)",
+                                          "CacheHub.Gateway (server, provider, SSE, router, multi-provider config, Offline defense — separated from Core)",
+                                          "CacheHub.Cli (CLI entry, 21 command groups)",
+                                          "CacheHub.Desktop (Web UI, Minimal API, 17 routes, UsageStatsService)",
+                                          "CacheHub.Tests (965 tests)"
+                                      ],
+                         "dependencyChain":  "Core ← Storage, Indexing, Gateway; Context ← Core+Storage+Indexing; Cli/Desktop ← all",
+                         "databaseMigrations":  11
+                     },
+    "testCount":  965,
+    "lastUpdated":  "2026-08-08T01:25:00Z"
 }

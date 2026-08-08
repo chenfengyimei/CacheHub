@@ -32,7 +32,7 @@ src/
   CacheHub.Cli/          CLI 入口（23 个命令组，含 workflow/doctor/benchmark）
   CacheHub.Desktop/      Web UI + Local API（18 路由 + Bearer 认证 + contextual-completion）
 tests/
-  CacheHub.Tests/        918 测试
+  CacheHub.Tests/        965 测试
 ```
 
 **依赖链**：Core ← Storage, Indexing, Gateway；Context ← Core + Storage + Indexing；CLI/Desktop ← 全部。不要引入循环依赖。
