@@ -37,9 +37,27 @@ jobs:
 
   # V6: Publish + binary smoke — proves the shipped executable actually builds & runs,
   # not just that source compiles (review #29: "source tests pass" ≠ "binary runs").
+  # V7-W15: Multi-platform matrix — win-x64, linux-x64, osx-arm64
   publish-smoke:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     needs: build-and-test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rid: linux-x64
+            binary: ./publish/cachehub
+            desktop_binary: publish-desktop/CacheHub.Desktop
+          - os: windows-latest
+            rid: win-x64
+            binary: ./publish/cachehub.exe
+            desktop_binary: publish-desktop/CacheHub.Desktop.exe
+          - os: macos-latest
+            rid: osx-arm64
+            binary: ./publish/cachehub
+            desktop_binary: publish-desktop/CacheHub.Desktop
+
     steps:
       - uses: actions/checkout@v5
 
@@ -48,33 +66,36 @@ jobs:
         with:
           global-json-file: global.json
 
-      - name: Publish single-file CLI (self-contained)
+      - name: Publish single-file CLI (self-contained, ${{ matrix.rid }})
         run: |
           mkdir -p publish
           dotnet publish src/CacheHub.Cli/CacheHub.Cli.csproj -c Release -o publish --nologo \
             -p:PublishSingleFile=true \
-            -p:SelfContained=true
+            -p:SelfContained=true \
+            -p:RuntimeIdentifier=${{ matrix.rid }}
 
       - name: Publish Desktop (Web UI)
         run: dotnet publish src/CacheHub.Desktop/CacheHub.Desktop.csproj -c Release -o publish-desktop --nologo
 
       - name: Smoke — CLI version
-        run: ./publish/cachehub version
+        run: ${{ matrix.binary }} version
 
       - name: Smoke — CLI capabilities
-        run: ./publish/cachehub capabilities --output=json
+        run: ${{ matrix.binary }} capabilities --output=json
 
       - name: Smoke — CLI doctor (diagnose env, tolerate env-dependent exit)
         run: |
-          ./publish/cachehub doctor > /tmp/doctor.out 2>&1 || true
+          ${{ matrix.binary }} doctor > /tmp/doctor.out 2>&1 || true
           grep -qi "cachehub" /tmp/doctor.out || { echo "doctor produced no output"; exit 1; }
+        shell: bash
 
       - name: Smoke — Desktop binary present
         run: |
-          if [ -f publish-desktop/CacheHub.Desktop ]; then
+          if [ -f "${{ matrix.desktop_binary }}" ]; then
             echo "Desktop binary present"
           else
             ls publish-desktop
             echo "ERROR: Desktop binary missing"
             exit 1
           fi
+        shell: bash
