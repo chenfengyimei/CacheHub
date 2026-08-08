@@ -186,6 +186,7 @@ public static class ContextCommands
                 Task = task,
                 GitDiffFiles = gitDiffFiles,
                 ModelId = effectiveModel,
+                SecurityPolicyVersion = secPolicy.Version,  // V7-W06: pass resolved policy version
                 RepositoryCommit = activeSnapshot.Value.RepositoryCommit,
                 Branch = activeSnapshot.Value.Branch,
                 IsDirty = activeSnapshot.Value.IsDirty,
@@ -427,12 +428,13 @@ public static class ContextCommands
 
             var exportAppData = new AppDataDirectory();
             var exporter = new FileExporter(exportAppData);
-            var enforcer = new SecurityPolicyEnforcer();
+            // V7-W06: Use SecurityPolicyResolver.CreateEnforcer instead of new SecurityPolicyEnforcer()
+            var (_, exportEnforcer) = SecurityPolicyResolver.CreateEnforcer();
             var exportDir = await exporter.ExportAsync(
                 manifest,
                 path => ResolveFileContent(ws.RootPath, path),
                 manifest.WorkspaceId.Value,
-                enforcer);
+                exportEnforcer);
 
             Console.Error.WriteLine($"Exported to: {exportDir}");
             Console.WriteLine($"{{ \"exportDir\": \"{exportDir.Replace('\\', '/')}\", \"files\": [\"workspace.json\", \"latest-context.manifest.json\", \"latest-context.md\", \"repomap.md\"] }}");
@@ -446,8 +448,9 @@ public static class ContextCommands
                 return 1;
             }
             var generator = new PayloadGenerator();
-            var enforcer = new SecurityPolicyEnforcer();
-            var markdown = generator.GenerateMarkdown(manifest, path => ResolveFileContent(ws.RootPath, path), enforcer);
+            // V7-W06: Use SecurityPolicyResolver.CreateEnforcer instead of new SecurityPolicyEnforcer()
+            var (_, mdEnforcer) = SecurityPolicyResolver.CreateEnforcer();
+            var markdown = generator.GenerateMarkdown(manifest, path => ResolveFileContent(ws.RootPath, path), mdEnforcer);
             Console.WriteLine(markdown);
         }
 
