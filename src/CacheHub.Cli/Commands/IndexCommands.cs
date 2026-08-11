@@ -92,58 +92,22 @@ public static class IndexCommands
         var snapshotId = IndexSnapshotId.New();
         await InsertSnapshotAsync(factory, snapshotId, workspace.Id, gitState);
 
-        // Build ignore rules
-        var ignoreEngine = new IgnoreRuleEngine()
-            .WithDefaults()
-            .WithGitIgnore(Path.Combine(workspace.RootPath, ".gitignore"))
-            .WithCacheHubIgnore(Path.Combine(workspace.RootPath, ".cachehubignore"));
+        // Collect through the shared pipeline so CLI and Desktop apply identical
+        // ignore, detection, hash, and file-read behavior.
+        var collection = await new CacheHub.Indexing.Pipeline.IndexSourceCollector().CollectAsync(workspace.RootPath);
+        Console.WriteLine($"  Ignore rules hash: {collection.IgnoreRulesHash}");
 
-        Console.WriteLine($"  Ignore rules hash: {ignoreEngine.GetRulesHash()}");
-
-        // Enumerate files first (in memory) so we can batch-write in a single transaction
-        var enumerator = new DirectoryEnumerator();
+        // Batch-write the shared collection in a single transaction.
         var fts = new Fts5Index(factory);
-        var fileCount = 0;
-        var failedCount = 0;
-        var ignoredCount = 0;
-        var filesToIndex = new List<(string relativePath, string fullPath, long size, string language, bool isBinary, string hash, string content)>();
-
-        await foreach (var file in enumerator.EnumerateAsync(workspace.RootPath))
-        {
-            if (file.IsDirectory) continue;
-
-            var relativePath = PathNormalizer.GetRelativePath(workspace.RootPath, file.Path);
-            if (ignoreEngine.IsIgnored(relativePath))
-            {
-                ignoredCount++;
-                continue;
-            }
-
-            try
-            {
-                var typeInfo = FileTypeDetector.Detect(file.Path, file.Size);
-                if (!typeInfo.ShouldIndex)
-                {
-                    ignoredCount++;
-                    continue;
-                }
-
-                var hash = await FileHasher.HashAsync(file.Path, file.Size);
-                var content = await File.ReadAllTextAsync(file.Path);
-
-                filesToIndex.Add((relativePath, file.Path, file.Size, typeInfo.Language, typeInfo.IsBinary,
-                    hash.Hash, content));
-
-                fileCount++;
-                if (fileCount % 1000 == 0)
-                    Console.WriteLine($"  Scanned {fileCount} files...");
-            }
-            catch (Exception ex)
-            {
-                failedCount++;
-                Console.Error.WriteLine($"  Failed: {relativePath} - {ex.Message}");
-            }
-        }
+        var fileCount = collection.Documents.Count;
+        var failedCount = collection.FailedCount;
+        var ignoredCount = collection.IgnoredCount;
+        foreach (var failure in collection.Failures)
+            Console.Error.WriteLine($"  Failed: {failure}");
+        var filesToIndex = collection.Documents
+            .Select(file => (file.RelativePath, file.FullPath, file.Size, file.Language,
+                file.IsBinary, file.ContentHash, file.Content))
+            .ToList();
 
         // Batch write: single connection, single transaction for atomicity
         await using var batchConn = factory.CreateOpenConnection();

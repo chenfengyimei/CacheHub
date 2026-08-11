@@ -301,29 +301,11 @@ static async Task IndexWorkspaceAsync(
     CacheHub.Core.Repository.GitState startGitState,
     Func<string, bool> fingerprintFilter)
 {
-    var ignoreEngine = new CacheHub.Indexing.IgnoreRules.IgnoreRuleEngine()
-        .WithDefaults()
-        .WithGitIgnore(System.IO.Path.Combine(ws.RootPath, ".gitignore"))
-        .WithCacheHubIgnore(System.IO.Path.Combine(ws.RootPath, ".cachehubignore"));
-
-    var enumerator = new CacheHub.Indexing.Scanning.DirectoryEnumerator();
-
-    var filesToIndex = new List<(string relativePath, string fullPath, long size, string language, bool isBinary, string hash, string content)>();
-
-    await foreach (var file in enumerator.EnumerateAsync(ws.RootPath))
-    {
-        if (file.IsDirectory) continue;
-        var relativePath = CacheHub.Core.Paths.PathNormalizer.GetRelativePath(ws.RootPath, file.Path);
-        if (ignoreEngine.IsIgnored(relativePath)) continue;
-
-        var typeInfo = CacheHub.Indexing.Detection.FileTypeDetector.Detect(file.Path, file.Size);
-        if (!typeInfo.ShouldIndex) continue;
-
-        var hash = await CacheHub.Indexing.Hashing.FileHasher.HashAsync(file.Path, file.Size);
-        var content = await System.IO.File.ReadAllTextAsync(file.Path);
-
-        filesToIndex.Add((relativePath, file.Path, file.Size, typeInfo.Language, typeInfo.IsBinary, hash.Hash, content));
-    }
+    var collection = await new CacheHub.Indexing.Pipeline.IndexSourceCollector().CollectAsync(ws.RootPath);
+    var filesToIndex = collection.Documents
+        .Select(file => (file.RelativePath, file.FullPath, file.Size, file.Language,
+            file.IsBinary, file.ContentHash, file.Content))
+        .ToList();
 
     // Batch write: single connection, single transaction for atomicity
     await using var batchConn = factory.CreateOpenConnection();
