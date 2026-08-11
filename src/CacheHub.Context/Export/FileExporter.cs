@@ -42,12 +42,13 @@ public sealed class FileExporter
         ContextPackageManifest manifest,
         Func<string, string> contentProvider,
         string? workspaceId = null,
-        SecurityPolicyEnforcer? securityEnforcer = null)
+        SecurityPolicyEnforcer? securityEnforcer = null,
+        Func<string, byte[]>? rawContentProvider = null)
     {
         var exportDir = GetExportDir(workspaceId ?? manifest.WorkspaceId.Value);
         Directory.CreateDirectory(exportDir);
 
-        await WriteContextFilesAsync(exportDir, manifest, contentProvider, securityEnforcer);
+        await WriteContextFilesAsync(exportDir, manifest, contentProvider, securityEnforcer, rawContentProvider);
         return exportDir;
     }
 
@@ -154,7 +155,12 @@ public sealed class FileExporter
         return System.Text.Json.JsonSerializer.Deserialize<ContextPackageManifest>(json, _jsonOpts);
     }
 
-    private async Task WriteContextFilesAsync(string dir, ContextPackageManifest manifest, Func<string, string> contentProvider, SecurityPolicyEnforcer? securityEnforcer = null)
+    private async Task WriteContextFilesAsync(
+        string dir,
+        ContextPackageManifest manifest,
+        Func<string, string> contentProvider,
+        SecurityPolicyEnforcer? securityEnforcer = null,
+        Func<string, byte[]>? rawContentProvider = null)
     {
         // 1. workspace.json
         var workspaceJson = new
@@ -175,7 +181,7 @@ public sealed class FileExporter
 
         // 3. latest-context.md — security enforcer ensures blocked files are filtered
         var generator = new PayloadGenerator();
-        var markdown = generator.GenerateMarkdown(manifest, contentProvider, securityEnforcer);
+        var markdown = generator.GenerateMarkdown(manifest, contentProvider, securityEnforcer, rawContentProvider);
         await File.WriteAllTextAsync(
             Path.Combine(dir, "latest-context.md"), markdown);
 

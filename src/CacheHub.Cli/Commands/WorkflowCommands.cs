@@ -224,7 +224,8 @@ public static class WorkflowCommands
         var promptAssembly = new PromptAssemblyService();
         var payloadGenerator = new PayloadGenerator();
         var enforcer = secEnforcer;
-        var payloadContent = payloadGenerator.GenerateMarkdown(manifest, path => ResolveFileContent(workspace.RootPath, path), enforcer);
+        var payloadContent = payloadGenerator.GenerateMarkdown(manifest, path => ResolveFileContent(workspace.RootPath, path), enforcer,
+            path => ResolveFileBytes(workspace.RootPath, path));
         var (systemPrompt, userContent) = promptAssembly.Assemble(manifest, payloadContent);
 
         if (callGateway && !string.IsNullOrEmpty(model))
@@ -313,6 +314,12 @@ public static class WorkflowCommands
         // V8-P0-03: Use SafePathResolver for consistent path security
         var fullPath = new CacheHub.Core.Paths.SafePathResolver(rootPath).ResolveFile(relativePath);
         return fullPath is not null ? File.ReadAllText(fullPath) : "";
+    }
+
+    private static byte[] ResolveFileBytes(string rootPath, string relativePath)
+    {
+        var fullPath = new CacheHub.Core.Paths.SafePathResolver(rootPath).ResolveFile(relativePath);
+        return fullPath is not null && File.Exists(fullPath) ? File.ReadAllBytes(fullPath) : [];
     }
 
     /// <summary>

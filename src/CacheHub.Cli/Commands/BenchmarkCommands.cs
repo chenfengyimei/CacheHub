@@ -546,7 +546,8 @@ public static class BenchmarkCommands
             var payloadGenerator = new CacheHub.Context.Payload.PayloadGenerator();
             var (_, payloadEnforcer) = CacheHub.Core.Security.SecurityPolicyResolver.CreateEnforcer();
             var payloadContent = payloadGenerator.GenerateMarkdown(manifest,
-                path => ResolveFileContent(workspace.RootPath, path), payloadEnforcer);
+                path => ResolveFileContent(workspace.RootPath, path), payloadEnforcer,
+                path => ResolveFileBytes(workspace.RootPath, path));
 
             return new Core.Benchmarks.Agent.AgentContextPackage
             {
@@ -1107,6 +1108,12 @@ public static class BenchmarkCommands
         // V8-P0-03: Use SafePathResolver for consistent path security
         var fullPath = new CacheHub.Core.Paths.SafePathResolver(rootPath).ResolveFile(relativePath);
         return fullPath is not null ? File.ReadAllText(fullPath) : "";
+    }
+
+    private static byte[] ResolveFileBytes(string rootPath, string relativePath)
+    {
+        var fullPath = new CacheHub.Core.Paths.SafePathResolver(rootPath).ResolveFile(relativePath);
+        return fullPath is not null && File.Exists(fullPath) ? File.ReadAllBytes(fullPath) : [];
     }
 
     private static void PersistRunResult(BenchmarkRunRecord run)

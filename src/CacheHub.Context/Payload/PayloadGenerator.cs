@@ -27,7 +27,8 @@ public sealed class PayloadGenerator
     public ContextPackagePayload Generate(
         ContextPackageManifest manifest,
         Func<string, string> contentProvider,
-        SecurityPolicyEnforcer? securityEnforcer = null)
+        SecurityPolicyEnforcer? securityEnforcer = null,
+        Func<string, byte[]>? rawContentProvider = null)
     {
         var items = new List<PayloadItem>();
         var totalTokens = 0;
@@ -40,7 +41,7 @@ public sealed class PayloadGenerator
 
             // V8-P0-02: Verify content hash to ensure payload immutability.
             // Skip verification for fingerprint hashes (fp:) and expanded files (sha256:expanded).
-            VerifyContentHash(file.Path, file.ContentHash, content);
+            VerifyContentHash(file.Path, file.ContentHash, content, rawContentProvider?.Invoke(file.Path));
 
             // Security: evaluate file before including in payload
             if (securityEnforcer is not null)
@@ -113,7 +114,8 @@ public sealed class PayloadGenerator
     public string GenerateMarkdown(
         ContextPackageManifest manifest,
         Func<string, string> contentProvider,
-        SecurityPolicyEnforcer? securityEnforcer = null)
+        SecurityPolicyEnforcer? securityEnforcer = null,
+        Func<string, byte[]>? rawContentProvider = null)
     {
         var sb = new StringBuilder();
 
@@ -130,7 +132,7 @@ public sealed class PayloadGenerator
             if (string.IsNullOrEmpty(content)) continue;
 
             // V8-P0-02: Verify content hash to ensure payload immutability
-            VerifyContentHash(file.Path, file.ContentHash, content);
+            VerifyContentHash(file.Path, file.ContentHash, content, rawContentProvider?.Invoke(file.Path));
 
             // Security: evaluate file before including in payload
             if (securityEnforcer is not null)
@@ -208,10 +210,12 @@ public sealed class PayloadGenerator
     /// V8-P0-02: Verifies that the content matches the manifest's ContentHash.
     /// Throws ContextVersionMismatchException if the file has been modified since the Context Package was built.
     /// Only verifies full SHA-256 hashes (sha256:hexstring format).
+    /// When available, rawContent is hashed so the verification contract matches
+    /// FileHasher.ComputeFullHashAsync (raw on-disk bytes, not re-encoded text).
     /// Skips: fingerprint hashes (fp:), placeholder hashes (sha256:expanded, sha256:pending),
     /// empty/null hashes, and non-standard hash formats.
     /// </summary>
-    private static void VerifyContentHash(string filePath, string? expectedHash, string content)
+    private static void VerifyContentHash(string filePath, string? expectedHash, string content, byte[]? rawContent)
     {
         if (string.IsNullOrEmpty(expectedHash))
             return;
@@ -224,9 +228,10 @@ public sealed class PayloadGenerator
         if (expectedHash == "sha256:expanded" || expectedHash == "sha256:pending")
             return;
 
-        // Compute SHA-256 of the content
-        var contentBytes = Encoding.UTF8.GetBytes(content);
-        var actualHashBytes = SHA256.HashData(contentBytes);
+        // Legacy callers without a raw-byte provider retain canonical UTF-8 text
+        // verification. Production filesystem callers pass raw bytes to maintain
+        // the indexer's raw-file-byte ContentHash contract across BOM/UTF-16 files.
+        var actualHashBytes = SHA256.HashData(rawContent ?? Encoding.UTF8.GetBytes(content));
         var actualHash = "sha256:" + Convert.ToHexString(actualHashBytes).ToLowerInvariant();
 
         if (!string.Equals(expectedHash, actualHash, StringComparison.Ordinal))

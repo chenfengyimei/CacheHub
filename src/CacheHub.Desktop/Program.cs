@@ -1184,7 +1184,11 @@ app.MapGet("/api/v1/context/{id}/payload", async (string id, IContextPackageRepo
         {
             var fullPath = ResolvePathSafe(ws.RootPath, path);
             return fullPath is not null && File.Exists(fullPath) ? File.ReadAllTextAsync(fullPath).GetAwaiter().GetResult() : "";
-        }, payloadEnforcer);
+        }, payloadEnforcer, path =>
+        {
+            var fullPath = ResolvePathSafe(ws.RootPath, path);
+            return fullPath is not null && File.Exists(fullPath) ? File.ReadAllBytes(fullPath) : [];
+        });
     }
     catch (ContextVersionMismatchException ex)
     {
@@ -1463,7 +1467,11 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
         {
             var fullPath = ResolvePathSafe(workspace.RootPath, path);
             return fullPath is not null && File.Exists(fullPath) ? File.ReadAllTextAsync(fullPath).GetAwaiter().GetResult() : "";
-        }, secEnforcer);
+        }, secEnforcer, path =>
+        {
+            var fullPath = ResolvePathSafe(workspace.RootPath, path);
+            return fullPath is not null && File.Exists(fullPath) ? File.ReadAllBytes(fullPath) : [];
+        });
     }
     catch (ContextVersionMismatchException ex)
     {

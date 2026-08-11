@@ -387,7 +387,8 @@ public static class ContextCommands
                 manifest,
                 path => ResolveFileContent(ws.RootPath, path),
                 manifest.WorkspaceId.Value,
-                exportEnforcer);
+                exportEnforcer,
+                path => ResolveFileBytes(ws.RootPath, path));
 
             Console.Error.WriteLine($"Exported to: {exportDir}");
             Console.WriteLine($"{{ \"exportDir\": \"{exportDir.Replace('\\', '/')}\", \"files\": [\"workspace.json\", \"latest-context.manifest.json\", \"latest-context.md\", \"repomap.md\"] }}");
@@ -403,7 +404,8 @@ public static class ContextCommands
             var generator = new PayloadGenerator();
             // V7-W06: Use SecurityPolicyResolver.CreateEnforcer instead of new SecurityPolicyEnforcer()
             var (_, mdEnforcer) = SecurityPolicyResolver.CreateEnforcer();
-            var markdown = generator.GenerateMarkdown(manifest, path => ResolveFileContent(ws.RootPath, path), mdEnforcer);
+            var markdown = generator.GenerateMarkdown(manifest, path => ResolveFileContent(ws.RootPath, path), mdEnforcer,
+                path => ResolveFileBytes(ws.RootPath, path));
             Console.WriteLine(markdown);
         }
 
@@ -784,6 +786,12 @@ public static class ContextCommands
         // V8-P0-03: Use SafePathResolver for consistent path security (traversal, symlink, boundary)
         var fullPath = new CacheHub.Core.Paths.SafePathResolver(rootPath).ResolveFile(relativePath);
         return fullPath is not null ? File.ReadAllText(fullPath) : "";
+    }
+
+    private static byte[] ResolveFileBytes(string rootPath, string relativePath)
+    {
+        var fullPath = new CacheHub.Core.Paths.SafePathResolver(rootPath).ResolveFile(relativePath);
+        return fullPath is not null && File.Exists(fullPath) ? File.ReadAllBytes(fullPath) : [];
     }
 
     private static string? GetOpt(string[] args, string prefix) =>

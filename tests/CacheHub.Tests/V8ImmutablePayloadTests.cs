@@ -22,6 +22,12 @@ public class V8ImmutablePayloadTests
         return "sha256:" + Convert.ToHexString(hash).ToLowerInvariant();
     }
 
+    private static string ComputeSha256(byte[] content)
+    {
+        var hash = SHA256.HashData(content);
+        return "sha256:" + Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
     [Fact]
     public void Generate_MatchingHash_Succeeds()
     {
@@ -51,6 +57,37 @@ public class V8ImmutablePayloadTests
         Assert.Equal("src/auth.cs", ex.FilePath);
         Assert.Equal(hash, ex.ExpectedHash);
         Assert.Equal(ComputeSha256(modifiedContent), ex.ActualHash);
+    }
+
+    [Fact]
+    public void Generate_RawByteProvider_AcceptsUnmodifiedUtf8BomFile()
+    {
+        var content = "public class Auth { }";
+        var rawBytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true)
+            .GetPreamble()
+            .Concat(Encoding.UTF8.GetBytes(content))
+            .ToArray();
+        var manifest = CreateManifest("src/auth.cs", ComputeSha256(rawBytes));
+
+        var payload = new PayloadGenerator().Generate(
+            manifest,
+            _ => content,
+            rawContentProvider: _ => rawBytes);
+
+        Assert.Single(payload.Items);
+    }
+
+    [Fact]
+    public void Generate_RawByteProvider_DetectsSingleByteChange()
+    {
+        var content = "public class Auth { }";
+        var originalBytes = Encoding.Unicode.GetBytes(content);
+        var modifiedBytes = originalBytes.ToArray();
+        modifiedBytes[^1] ^= 0x01;
+        var manifest = CreateManifest("src/auth.cs", ComputeSha256(originalBytes));
+
+        Assert.Throws<ContextVersionMismatchException>(() =>
+            new PayloadGenerator().Generate(manifest, _ => content, rawContentProvider: _ => modifiedBytes));
     }
 
     [Fact]
