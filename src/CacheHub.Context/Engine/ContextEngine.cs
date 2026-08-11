@@ -103,12 +103,19 @@ public sealed class ContextEngine
         // When stale (Current != Snapshot), the cache key changes, preventing stale cache hits.
         var effectiveFingerprint = request.CurrentWorkspaceFingerprint ?? request.WorkspaceFingerprint;
 
-        // V8-P0-01: Skip cache lookup when stale and not explicitly allowed.
-        // This prevents returning a cached context that was built with old index data.
-        var skipCache = !request.AllowStale
-            && request.CurrentWorkspaceFingerprint is not null
+        var isStale = request.CurrentWorkspaceFingerprint is not null
             && request.WorkspaceFingerprint is not null
             && !string.Equals(request.CurrentWorkspaceFingerprint, request.WorkspaceFingerprint, StringComparison.Ordinal);
+
+        // Version integrity is an engine invariant, not merely an API/CLI
+        // convention. New SDK or plugin callers cannot accidentally build a
+        // manifest from a stale index unless they explicitly opt in.
+        if (isStale && !request.AllowStale)
+            throw new ContextStaleException(request.WorkspaceFingerprint!, request.CurrentWorkspaceFingerprint!);
+
+        // Explicitly allowed stale builds use the current fingerprint and may
+        // reuse only cache entries produced for that exact current state.
+        var skipCache = false;
 
         // Cache: check if we already built this exact combination
         if (_cache is not null && !skipCache)

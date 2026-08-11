@@ -63,15 +63,11 @@ public class V8StaleContextGateTests
 
     /// <summary>
     /// V8-P0-01: When stale (CurrentWorkspaceFingerprint != WorkspaceFingerprint) and AllowStale=false,
-    /// the ContextEngine must skip cache lookup to prevent returning stale cached context.
+    /// the ContextEngine must reject the request before recall or cache lookup.
     /// </summary>
     [Fact]
-    public void ContextEngine_StaleWithoutAllowStale_SkipsCache()
+    public void ContextEngine_StaleWithoutAllowStale_Throws()
     {
-        // This test verifies the logic through the CacheKey path.
-        // We test the skipCache logic indirectly by verifying that a stale request
-        // with a previously cached result does NOT return the cached result.
-
         var wsId = WorkspaceId.New();
         var snapshotId = IndexSnapshotId.New();
         var snapshotFingerprint = "snap-fp-v1";
@@ -97,8 +93,7 @@ public class V8StaleContextGateTests
         var manifest1 = engine.Build(request1, ProvideFiles, ProvideContent, ProvideHash);
         Assert.NotNull(manifest1);
 
-        // Second build: stale state (current != snapshot), AllowStale = false
-        // This should NOT return the cached manifest from request1
+        // Second build: stale state (current != snapshot), AllowStale = false.
         var request2 = new ContextBuildRequest
         {
             WorkspaceId = wsId,
@@ -109,12 +104,10 @@ public class V8StaleContextGateTests
             AllowStale = false, // Default: do not allow stale
         };
 
-        var manifest2 = engine.Build(request2, ProvideFiles, ProvideContent, ProvideHash);
-        Assert.NotNull(manifest2);
-        // The manifests should be different objects (cache was skipped)
-        Assert.NotSame(manifest1, manifest2);
-        // But they should have different IDs (new build, not cached)
-        Assert.NotEqual(manifest1.Id.Value, manifest2.Id.Value);
+        var ex = Assert.Throws<ContextStaleException>(() =>
+            engine.Build(request2, ProvideFiles, ProvideContent, ProvideHash));
+        Assert.Equal(snapshotFingerprint, ex.SnapshotFingerprint);
+        Assert.Equal(currentFingerprint, ex.CurrentFingerprint);
     }
 
     /// <summary>
