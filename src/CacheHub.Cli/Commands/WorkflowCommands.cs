@@ -146,77 +146,21 @@ public static class WorkflowCommands
             CurrentWorkspaceFingerprint = staleResult.CurrentFingerprint, // V8-P0-01
             AllowStale = allowStale, // V8-P0-01
         };
+        var recallCallbacks = new Context.Recall.RecallWiringFactory(factory).Create(activeSnapshotId);
 
         var manifest = engine.Build(
             request,
             () => indexedFileInfos,
             path => ResolveFileContent(workspace.RootPath, path),
             path => ResolveFileHash(factory, activeSnapshotId, path, workspace.RootPath),
-            ftsSearch: keyword =>
-            {
-                var results = querySvc.SearchFtsAsync(activeSnapshotId, keyword, 50).GetAwaiter().GetResult();
-                return results.Select(r => new Context.Recall.FtsMatch(r.Path, r.Language, r.Snippet, r.RankScore, r.HitLine)).ToList();
-            },
-            symbolSearch: symbol =>
-            {
-                var results = querySvc.SearchSymbolsAsync(activeSnapshotId, symbol).GetAwaiter().GetResult();
-                return results.Select(r => r.NormalizedPath).ToList();
-            },
-            importSearch: symbol =>
-            {
-                var results = querySvc.GetFilesByImportedSymbolAsync(activeSnapshotId, symbol).GetAwaiter().GetResult();
-                return results.ToList();
-            },
-            symbolSearchDetailed: symbol =>
-            {
-                var results = querySvc.SearchSymbolsAsync(activeSnapshotId, symbol).GetAwaiter().GetResult();
-                return results.Select(r => new Context.Recall.SymbolHit
-                {
-                    NormalizedPath = r.NormalizedPath,
-                    Name = r.Name,
-                    Kind = r.Kind,
-                    StartLine = r.StartLine,
-                    EndLine = r.EndLine,
-                    ExactMatch = r.ExactMatch,
-                }).ToList();
-            },
-            relationSearch: filePath =>
-            {
-                var results = querySvc.GetFileRelationsAsync(activeSnapshotId, filePath).GetAwaiter().GetResult();
-                return results.Select(r => new Context.Recall.RelationHit
-                {
-                    TargetName = r.TargetName,
-                    RelationType = r.RelationType,
-                    Relation = r.Relation,
-                    Confidence = r.Confidence,
-                }).ToList();
-            },
+            ftsSearch: recallCallbacks.FtsSearch,
+            symbolSearch: recallCallbacks.SymbolSearch,
+            importSearch: recallCallbacks.ImportSearch,
+            symbolSearchDetailed: recallCallbacks.SymbolSearchDetailed,
+            relationSearch: recallCallbacks.RelationSearch,
             semanticSearch: SemanticReferenceHelper.CreateSemanticSearch(appData.Root, workspace.Id.Value),
-            fileSymbolsProvider: path =>
-            {
-                var results = querySvc.GetFileSymbolsAsync(activeSnapshotId, path).GetAwaiter().GetResult();
-                return results.Select(r => new Context.Recall.SymbolHit
-                {
-                    NormalizedPath = path,
-                    Name = r.Name,
-                    Kind = r.Kind,
-                    StartLine = r.StartLine,
-                    EndLine = r.EndLine,
-                    ExactMatch = true,
-                }).ToList();
-            },
-            reverseRelationSearch: target =>
-            {
-                var results = querySvc.GetFilesByRelationTargetAsync(activeSnapshotId, target).GetAwaiter().GetResult();
-                return results.Select(r => new Context.Recall.RelationHit
-                {
-                    TargetName = r.TargetName,
-                    RelationType = r.RelationType,
-                    Relation = r.Relation,
-                    Confidence = r.Confidence,
-                    SourcePath = r.NormalizedPath,
-                }).ToList();
-            });
+            fileSymbolsProvider: recallCallbacks.FileSymbolsProvider,
+            reverseRelationSearch: recallCallbacks.ReverseRelationSearch);
 
         var ctxRepo = new SqliteContextPackageRepository(factory);
         await ctxRepo.SaveAsync(manifest);

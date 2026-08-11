@@ -101,7 +101,13 @@ builder.Services.AddSingleton<ContextPackageCache>(_ =>
         return new ContextPackageCache();
     }
 });
-builder.Services.AddSingleton<ContextEngine>();
+// Context manifests must carry the same configured security policy as every
+// other entry point.  The persistent cache is also intentionally shared with
+// the engine rather than falling back to an in-memory cache in Desktop.
+builder.Services.AddSingleton<ContextEngine>(sp => new ContextEngine(
+    CacheHub.Core.Tokens.TokenizerRegistry.CreateWithDefaults(),
+    CacheHub.Core.Security.SecurityPolicyResolver.Resolve(),
+    sp.GetRequiredService<ContextPackageCache>()));
 builder.Services.AddSingleton<UsageStatsService>();
 
 // Security: force loopback binding only
@@ -709,6 +715,8 @@ app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextE
 
     var activeSnapshotId = activeSnapshot.Value.SnapshotId;
     var indexedFiles = await GetIndexedFilesAsync(factory, req.WorkspaceId);
+    var secPolicy = CacheHub.Core.Security.SecurityPolicyResolver.Resolve();
+    var recallCallbacks = new RecallWiringFactory(factory).Create(activeSnapshotId);
 
     // V7-W02 / V8-P0-01: Stale detection — default: reject build when stale
     var staleResult = await CacheHub.Core.Indexing.StaleDetector.CheckAsync(
@@ -728,6 +736,7 @@ app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextE
             WorkspaceId = ws.Id,
             IndexSnapshotId = activeSnapshotId,
             Task = req.Task,
+            SecurityPolicyVersion = secPolicy.Version,
             RepositoryCommit = activeSnapshot.Value.RepositoryCommit,
             Branch = activeSnapshot.Value.Branch,
             IsDirty = activeSnapshot.Value.IsDirty,
@@ -741,64 +750,14 @@ app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextE
             return fullPath is not null && File.Exists(fullPath) ? File.ReadAllTextAsync(fullPath).GetAwaiter().GetResult() : "";
         },
         path => ResolveFileHashFromDb(factory, activeSnapshotId, path, ws.RootPath),
-        ftsSearch: keyword =>
-        {
-            var querySvc = new CacheHub.Storage.Query.SqliteIndexQueryService(factory);
-            var results = querySvc.SearchFtsAsync(activeSnapshotId, keyword, 50).GetAwaiter().GetResult();
-            return results.Select(r => new CacheHub.Context.Recall.FtsMatch(r.Path, r.Language, r.Snippet, r.RankScore, r.HitLine)).ToList();
-        },
-        symbolSearch: symbol =>
-        {
-            var querySvc = new CacheHub.Storage.Query.SqliteIndexQueryService(factory);
-            var results = querySvc.SearchSymbolsAsync(activeSnapshotId, symbol).GetAwaiter().GetResult();
-            return results.Select(r => r.NormalizedPath).ToList();
-        },
-        importSearch: symbol =>
-        {
-            var querySvc = new CacheHub.Storage.Query.SqliteIndexQueryService(factory);
-            var results = querySvc.GetFilesByImportedSymbolAsync(activeSnapshotId, symbol).GetAwaiter().GetResult();
-            return results.ToList();
-        },
-        symbolSearchDetailed: symbol =>
-        {
-            var querySvc = new CacheHub.Storage.Query.SqliteIndexQueryService(factory);
-            var results = querySvc.SearchSymbolsAsync(activeSnapshotId, symbol).GetAwaiter().GetResult();
-            return results.Select(r => new CacheHub.Context.Recall.SymbolHit
-            {
-                NormalizedPath = r.NormalizedPath,
-                Name = r.Name,
-                Kind = r.Kind,
-                StartLine = r.StartLine,
-                EndLine = r.EndLine,
-                ExactMatch = r.ExactMatch,
-            }).ToList();
-        },
-        relationSearch: filePath =>
-        {
-            var querySvc = new CacheHub.Storage.Query.SqliteIndexQueryService(factory);
-            var results = querySvc.GetFileRelationsAsync(activeSnapshotId, filePath).GetAwaiter().GetResult();
-            return results.Select(r => new CacheHub.Context.Recall.RelationHit
-            {
-                TargetName = r.TargetName,
-                RelationType = r.RelationType,
-                Relation = r.Relation,
-                Confidence = r.Confidence,
-            }).ToList();
-        },
+        ftsSearch: recallCallbacks.FtsSearch,
+        symbolSearch: recallCallbacks.SymbolSearch,
+        importSearch: recallCallbacks.ImportSearch,
+        symbolSearchDetailed: recallCallbacks.SymbolSearchDetailed,
+        relationSearch: recallCallbacks.RelationSearch,
         semanticSearch: DesktopSemanticHelper.CreateSemanticSearch(ws.Id.Value),
-        reverseRelationSearch: target =>
-        {
-            var revQuerySvc = new CacheHub.Storage.Query.SqliteIndexQueryService(factory);
-            var revResults = revQuerySvc.GetFilesByRelationTargetAsync(activeSnapshotId, target).GetAwaiter().GetResult();
-            return revResults.Select(r => new CacheHub.Context.Recall.RelationHit
-            {
-                TargetName = r.TargetName,
-                RelationType = r.RelationType,
-                Relation = r.Relation,
-                Confidence = r.Confidence,
-                SourcePath = r.NormalizedPath,
-            }).ToList();
-        });
+        reverseRelationSearch: recallCallbacks.ReverseRelationSearch,
+        fileSymbolsProvider: recallCallbacks.FileSymbolsProvider);
 
     await ctxRepo.SaveAsync(manifest);
 
@@ -1375,6 +1334,7 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
         WorkspaceFingerprint = activeSnapshot.WorkspaceFingerprint,
         CurrentWorkspaceFingerprint = staleResult.CurrentFingerprint, // V8-P0-01
     };
+    var recallCallbacks = new RecallWiringFactory(factory).Create(activeSnapshotId);
 
     var manifest = engine.Build(
         buildRequest,
@@ -1385,71 +1345,14 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
             return fullPath is not null && File.Exists(fullPath) ? File.ReadAllTextAsync(fullPath).GetAwaiter().GetResult() : "";
         },
         path => ResolveFileHashFromDb(factory, activeSnapshotId, path, workspace.RootPath),
-        ftsSearch: keyword =>
-        {
-            var results = querySvc.SearchFtsAsync(activeSnapshotId, keyword, 50).GetAwaiter().GetResult();
-            return results.Select(r => new CacheHub.Context.Recall.FtsMatch(r.Path, r.Language, r.Snippet, r.RankScore, r.HitLine)).ToList();
-        },
-        symbolSearch: symbol =>
-        {
-            var results = querySvc.SearchSymbolsAsync(activeSnapshotId, symbol).GetAwaiter().GetResult();
-            return results.Select(r => r.NormalizedPath).ToList();
-        },
-        importSearch: symbol =>
-        {
-            var results = querySvc.GetFilesByImportedSymbolAsync(activeSnapshotId, symbol).GetAwaiter().GetResult();
-            return results.ToList();
-        },
-        symbolSearchDetailed: symbol =>
-        {
-            var results = querySvc.SearchSymbolsAsync(activeSnapshotId, symbol).GetAwaiter().GetResult();
-            return results.Select(r => new CacheHub.Context.Recall.SymbolHit
-            {
-                NormalizedPath = r.NormalizedPath,
-                Name = r.Name,
-                Kind = r.Kind,
-                StartLine = r.StartLine,
-                EndLine = r.EndLine,
-                ExactMatch = r.ExactMatch,
-            }).ToList();
-        },
-        relationSearch: filePath =>
-        {
-            var results = querySvc.GetFileRelationsAsync(activeSnapshotId, filePath).GetAwaiter().GetResult();
-            return results.Select(r => new CacheHub.Context.Recall.RelationHit
-            {
-                TargetName = r.TargetName,
-                RelationType = r.RelationType,
-                Relation = r.Relation,
-                Confidence = r.Confidence,
-            }).ToList();
-        },
+        ftsSearch: recallCallbacks.FtsSearch,
+        symbolSearch: recallCallbacks.SymbolSearch,
+        importSearch: recallCallbacks.ImportSearch,
+        symbolSearchDetailed: recallCallbacks.SymbolSearchDetailed,
+        relationSearch: recallCallbacks.RelationSearch,
         semanticSearch: DesktopSemanticHelper.CreateSemanticSearch(workspace.Id.Value),
-        fileSymbolsProvider: path =>
-        {
-            var results = querySvc.GetFileSymbolsAsync(activeSnapshotId, path).GetAwaiter().GetResult();
-            return results.Select(r => new CacheHub.Context.Recall.SymbolHit
-            {
-                NormalizedPath = path,
-                Name = r.Name,
-                Kind = r.Kind,
-                StartLine = r.StartLine,
-                EndLine = r.EndLine,
-                ExactMatch = true,
-            }).ToList();
-        },
-        reverseRelationSearch: target =>
-        {
-            var revResults = querySvc.GetFilesByRelationTargetAsync(activeSnapshotId, target).GetAwaiter().GetResult();
-            return revResults.Select(r => new CacheHub.Context.Recall.RelationHit
-            {
-                TargetName = r.TargetName,
-                RelationType = r.RelationType,
-                Relation = r.Relation,
-                Confidence = r.Confidence,
-                SourcePath = r.NormalizedPath,
-            }).ToList();
-        });
+        fileSymbolsProvider: recallCallbacks.FileSymbolsProvider,
+        reverseRelationSearch: recallCallbacks.ReverseRelationSearch);
 
     await ctxRepo.SaveAsync(manifest);
 
