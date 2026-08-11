@@ -169,7 +169,7 @@ public static class ContextCommands
         // V8-P1-01: Pass fileFilter so fingerprint scope = index scope (excludes node_modules/bin/obj)
         var staleResult = await CacheHub.Core.Indexing.StaleDetector.CheckAsync(
             workspace.RootPath, activeSnapshot.Value.WorkspaceFingerprint,
-            fileFilter: CreateFingerprintFilter(workspace.RootPath));
+            fileFilter: CreateFingerprintFilter(workspace.RootPath, indexedFiles.Select(f => f.Path)));
         if (!staleResult.IsFresh)
         {
             if (!allowStale)
@@ -450,6 +450,24 @@ public static class ContextCommands
             return 1;
         }
 
+        // A revision must be based on the same workspace state as its parent.
+        // Without this gate, an expansion could persist current disk content under
+        // the parent's old fingerprint and break the immutable context contract.
+        if (!string.IsNullOrEmpty(manifest.DirtyStateHash))
+        {
+            var parentIndexedFiles = await GetIndexedFilesAsync(factory, ws.Id.Value, manifest.IndexSnapshotId);
+            var expandStaleResult = await CacheHub.Core.Indexing.StaleDetector.CheckAsync(
+                ws.RootPath,
+                manifest.DirtyStateHash,
+                fileFilter: CreateFingerprintFilter(ws.RootPath, parentIndexedFiles.Select(f => f.Path)));
+            if (!expandStaleResult.IsFresh)
+            {
+                Console.Error.WriteLine($"  ✗ CONTEXT_STALE: {expandStaleResult.Message}");
+                Console.Error.WriteLine("  Run 'cachehub index refresh --id=<workspace-id>' and build a new context before expanding.");
+                return 3;
+            }
+        }
+
         var expander = new Context.Expand.ContextExpander();
 
         // Handle --symbol: search file_symbols table, NOT treat as file path
@@ -469,9 +487,20 @@ public static class ContextCommands
                 path => ResolveFileContent(ws.RootPath, path),
                 reason ?? $"Symbol: {symbol}");
 
+            var symbolRevision = expander.CreateRevision(
+                manifest,
+                symbolResult,
+                path => ResolveFileContent(ws.RootPath, path));
+            await ctxRepo.SaveAsync(symbolRevision);
+
             if (outputJson)
             {
-                Console.WriteLine(JsonSerializer.Serialize(symbolResult, _jsonOpts));
+                Console.WriteLine(JsonSerializer.Serialize(new
+                {
+                    contextId = symbolRevision.Id.Value,
+                    parentContextId = manifest.Id.Value,
+                    expansion = symbolResult,
+                }, _jsonOpts));
             }
             else
             {
@@ -482,6 +511,7 @@ public static class ContextCommands
                 Console.WriteLine($"  Tokens: {symbolResult.AdditionalTokens}");
                 Console.WriteLine($"  Reason: {symbolResult.Reason}");
                 Console.WriteLine($"  Items: {symbolResult.AddedItems.Count}");
+                Console.WriteLine($"  Context revision: {symbolRevision.Id.Value}");
             }
             return 0;
         }
@@ -489,17 +519,11 @@ public static class ContextCommands
         // Handle --file (existing behavior)
         var targetFile = file!;
 
-        // Resolve path safely without reading file content
-        if (targetFile.Contains(".."))
+        // Resolve with the shared path boundary and symlink protections.
+        var fullPath = new CacheHub.Core.Paths.SafePathResolver(ws.RootPath).ResolveFile(targetFile);
+        if (fullPath is null)
         {
             Console.Error.WriteLine($"Error: Invalid file path: {targetFile}");
-            return 1;
-        }
-        var fullPath = Path.GetFullPath(Path.Combine(ws.RootPath, targetFile.Replace('/', Path.DirectorySeparatorChar)));
-        var normalizedRoot = Path.GetFullPath(ws.RootPath);
-        if (!fullPath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase))
-        {
-            Console.Error.WriteLine($"Error: Path outside workspace root: {targetFile}");
             return 1;
         }
 
@@ -511,10 +535,20 @@ public static class ContextCommands
 
         var content = await File.ReadAllTextAsync(fullPath);
         var result = expander.ExpandByFile(ctxId, targetFile, content, reason ?? $"Expanded: {symbol ?? file}");
+        var revision = expander.CreateRevision(
+            manifest,
+            result,
+            path => ResolveFileContent(ws.RootPath, path));
+        await ctxRepo.SaveAsync(revision);
 
         if (outputJson)
         {
-            Console.WriteLine(JsonSerializer.Serialize(result, _jsonOpts));
+            Console.WriteLine(JsonSerializer.Serialize(new
+            {
+                contextId = revision.Id.Value,
+                parentContextId = manifest.Id.Value,
+                expansion = result,
+            }, _jsonOpts));
         }
         else
         {
@@ -523,6 +557,7 @@ public static class ContextCommands
             Console.WriteLine($"  Tokens: {result.AdditionalTokens}");
             Console.WriteLine($"  Reason: {result.Reason}");
             Console.WriteLine($"  Items: {result.AddedItems.Count}");
+            Console.WriteLine($"  Context revision: {revision.Id.Value}");
         }
 
         return 0;
@@ -762,21 +797,37 @@ public static class ContextCommands
     /// Only indexed files (not ignored, not binary) participate in the workspace fingerprint.
     /// This prevents node_modules/bin/obj changes from causing unnecessary stale detection.
     /// </summary>
-    internal static Func<string, bool> CreateFingerprintFilter(string workspaceRoot)
+    internal static Func<string, bool> CreateFingerprintFilter(
+        string workspaceRoot,
+        IEnumerable<string>? previouslyIndexedPaths = null)
     {
         var ignoreEngine = new CacheHub.Indexing.IgnoreRules.IgnoreRuleEngine()
             .WithDefaults()
             .WithGitIgnore(Path.Combine(workspaceRoot, ".gitignore"))
             .WithCacheHubIgnore(Path.Combine(workspaceRoot, ".cachehubignore"));
 
+        var knownIndexedPaths = previouslyIndexedPaths is null
+            ? null
+            : new HashSet<string>(previouslyIndexedPaths.Select(NormalizePath), StringComparer.OrdinalIgnoreCase);
+
         return relativePath =>
         {
             if (ignoreEngine.IsIgnored(relativePath)) return false;
-            // Check if the file type should be indexed
+            var normalizedPath = NormalizePath(relativePath);
             var fullPath = Path.Combine(workspaceRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
+            if (!File.Exists(fullPath))
+            {
+                // A deleted path must remain in scope when it existed in the active
+                // snapshot. GitState.ComputeFingerprint will then contribute its
+                // stable "missing" marker instead of silently treating the index as fresh.
+                return knownIndexedPaths?.Contains(normalizedPath) == true;
+            }
+
             var typeInfo = CacheHub.Indexing.Detection.FileTypeDetector.Detect(fullPath, new FileInfo(fullPath).Length);
             return typeInfo.ShouldIndex;
         };
+
+        static string NormalizePath(string path) => path.Replace('\\', '/').TrimStart('/');
     }
 
     /// <summary>

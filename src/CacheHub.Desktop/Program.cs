@@ -185,21 +185,30 @@ static string? ResolvePathSafe(string rootPath, string relativePath)
 
 // V8-P1-01: Creates a file filter for fingerprint scope.
 // Only indexed files (not ignored, not binary) participate in the workspace fingerprint.
-static Func<string, bool> CreateDesktopFingerprintFilter(string workspaceRoot)
+static Func<string, bool> CreateDesktopFingerprintFilter(
+    string workspaceRoot,
+    IEnumerable<string>? previouslyIndexedPaths = null)
 {
     var ignoreEngine = new CacheHub.Indexing.IgnoreRules.IgnoreRuleEngine()
         .WithDefaults()
         .WithGitIgnore(System.IO.Path.Combine(workspaceRoot, ".gitignore"))
         .WithCacheHubIgnore(System.IO.Path.Combine(workspaceRoot, ".cachehubignore"));
 
+    var knownIndexedPaths = previouslyIndexedPaths is null
+        ? null
+        : new HashSet<string>(previouslyIndexedPaths.Select(NormalizePath), StringComparer.OrdinalIgnoreCase);
+
     return relativePath =>
     {
         if (ignoreEngine.IsIgnored(relativePath)) return false;
         var fullPath = System.IO.Path.Combine(workspaceRoot, relativePath.Replace('/', System.IO.Path.DirectorySeparatorChar));
-        if (!System.IO.File.Exists(fullPath)) return false;
+        if (!System.IO.File.Exists(fullPath))
+            return knownIndexedPaths?.Contains(NormalizePath(relativePath)) == true;
         var typeInfo = CacheHub.Indexing.Detection.FileTypeDetector.Detect(fullPath, new FileInfo(fullPath).Length);
         return typeInfo.ShouldIndex;
     };
+
+    static string NormalizePath(string path) => path.Replace('\\', '/').TrimStart('/');
 }
 
 static async Task<List<IndexedFileInfo>> GetIndexedFilesAsync(SqliteConnectionFactory factory, string workspaceId)
@@ -689,7 +698,7 @@ app.MapPost("/api/v1/context/build", async (ContextBuildApiRequest req, ContextE
     // V7-W02 / V8-P0-01: Stale detection — default: reject build when stale
     var staleResult = await CacheHub.Core.Indexing.StaleDetector.CheckAsync(
         ws.RootPath, activeSnapshot.Value.WorkspaceFingerprint,
-        fileFilter: CreateDesktopFingerprintFilter(ws.RootPath));
+        fileFilter: CreateDesktopFingerprintFilter(ws.RootPath, indexedFiles.Select(f => f.Path)));
     if (!staleResult.IsFresh)
     {
         // V8-P0-01: Desktop API returns 409 Conflict with CONTEXT_STALE error code
@@ -802,7 +811,8 @@ app.MapPost("/api/v1/context/{id}/expand", async (string id, ExpandApiRequest re
     {
         var expandStaleResult = await CacheHub.Core.Indexing.StaleDetector.CheckAsync(
             ws.RootPath, manifest.DirtyStateHash,
-            fileFilter: CreateDesktopFingerprintFilter(ws.RootPath));
+            fileFilter: CreateDesktopFingerprintFilter(ws.RootPath,
+                (await GetIndexedFilesAsync(factory, ws.Id.Value)).Select(f => f.Path)));
         if (!expandStaleResult.IsFresh)
         {
             return Results.Json(ErrorEnvelope.From(ErrorCode.ContextStale,
@@ -825,7 +835,13 @@ app.MapPost("/api/v1/context/{id}/expand", async (string id, ExpandApiRequest re
     var result = expander.ExpandByFile(id, targetPath, content, req.Reason ?? "API expand");
 
     // Create and persist child revision package
-    var revision = expander.CreateRevision(manifest, result);
+    var revision = expander.CreateRevision(manifest, result, path =>
+    {
+        var revisionPath = ResolvePathSafe(ws.RootPath, path);
+        return revisionPath is not null && File.Exists(revisionPath)
+            ? File.ReadAllText(revisionPath)
+            : "";
+    });
     await ctxRepo.SaveAsync(revision);
 
     return Results.Ok(new
@@ -1310,7 +1326,7 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
     // V7-W02 / V8-P0-01: Stale detection — default: reject build when stale
     var staleResult = await CacheHub.Core.Indexing.StaleDetector.CheckAsync(
         workspace.RootPath, activeSnapshot.WorkspaceFingerprint,
-        fileFilter: CreateDesktopFingerprintFilter(workspace.RootPath));
+        fileFilter: CreateDesktopFingerprintFilter(workspace.RootPath, indexedFiles.Select(f => f.Path)));
     if (!staleResult.IsFresh)
     {
         return Results.Json(ErrorEnvelope.From(ErrorCode.ContextStale,

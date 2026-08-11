@@ -82,7 +82,10 @@ public static class IndexCommands
 
         // V7-W01: Capture Git state for version-aware snapshots
         var gitStateProvider = new GitStateProvider();
-        var gitState = await gitStateProvider.CaptureAsync(workspace.RootPath);
+        // The initial and final captures must use the same fingerprint scope;
+        // otherwise a non-indexed file alone can make a successful build degraded.
+        var fingerprintFilter = ContextCommands.CreateFingerprintFilter(workspace.RootPath);
+        var gitState = await gitStateProvider.CaptureAsync(workspace.RootPath, fingerprintFilter);
         Console.WriteLine($"  Git: {(gitState.Commit?[..8] ?? "non-git")} | Branch: {gitState.Branch ?? "detached"} | Dirty: {gitState.IsDirty}");
 
         // Create snapshot with git state
@@ -271,7 +274,7 @@ public static class IndexCommands
         // Activate snapshot — use Degraded status if FTS failed (FTS is a core recall source)
         // V8-audit-35: Two-pass fingerprint — re-capture git state after indexing to detect
         // workspace changes during the (potentially long) indexing process.
-        var endGitState = await gitStateProvider.CaptureAsync(workspace.RootPath, ContextCommands.CreateFingerprintFilter(workspace.RootPath));
+        var endGitState = await gitStateProvider.CaptureAsync(workspace.RootPath, fingerprintFilter);
         var workspaceChangedDuringBuild = !string.Equals(
             gitState.Fingerprint, endGitState.Fingerprint, StringComparison.Ordinal);
 
@@ -339,18 +342,20 @@ public static class IndexCommands
         Console.WriteLine($"Refreshing index for: {workspace.Name}");
         Console.WriteLine($"  Snapshot: {snapshotId.Value}");
 
-        // V8-P1-01: Capture fresh git state with fileFilter (fingerprint scope = index scope)
-        var fingerprintFilter = ContextCommands.CreateFingerprintFilter(workspace.RootPath);
-        var refreshGitState = await new GitStateProvider().CaptureAsync(workspace.RootPath, fingerprintFilter);
-
         // Build ignore rules
         var ignoreEngine = new IgnoreRuleEngine()
             .WithDefaults()
             .WithGitIgnore(Path.Combine(workspace.RootPath, ".gitignore"))
             .WithCacheHubIgnore(Path.Combine(workspace.RootPath, ".cachehubignore"));
 
-        // Get current indexed files
+        // Get current indexed files before calculating the fingerprint. Deleted
+        // paths remain in the prior index scope and therefore contribute their
+        // "missing" marker instead of being silently filtered out.
         var indexedFiles = await GetIndexedFileEntriesAsync(factory, workspace.Id);
+
+        // V8-P1-01: Capture fresh git state with fileFilter (fingerprint scope = index scope)
+        var fingerprintFilter = ContextCommands.CreateFingerprintFilter(workspace.RootPath, indexedFiles.Keys);
+        var refreshGitState = await new GitStateProvider().CaptureAsync(workspace.RootPath, fingerprintFilter);
 
         // Reconcile against disk — pass ignore engine for consistent filtering
         var result = ConsistencyReconciler.Reconcile(workspace.RootPath, indexedFiles, ignoreEngine: ignoreEngine);

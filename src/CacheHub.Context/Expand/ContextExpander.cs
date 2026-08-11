@@ -1,5 +1,7 @@
 using CacheHub.Context.Chunking;
 using CacheHub.Core.Context;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace CacheHub.Context.Expand;
 
@@ -172,7 +174,8 @@ public sealed class ContextExpander
     /// </summary>
     public ContextPackageManifest CreateRevision(
         ContextPackageManifest parentManifest,
-        ExpansionResult expansion)
+        ExpansionResult expansion,
+        Func<string, string>? fullContentProvider = null)
     {
         var newSelected = parentManifest.SelectedFiles.ToList();
         foreach (var item in expansion.AddedItems)
@@ -181,7 +184,8 @@ public sealed class ContextExpander
             {
                 Path = item.Path,
                 ContentHash = parentManifest.SelectedFiles
-                    .FirstOrDefault(f => f.Path == item.Path)?.ContentHash ?? "sha256:expanded",
+                    .FirstOrDefault(f => f.Path == item.Path)?.ContentHash
+                    ?? ComputeContentHash(fullContentProvider?.Invoke(item.Path) ?? item.Content),
                 Mode = item.Mode,
                 Score = 0.0, // Expanded files have no ranking score
                 Reasons = [$"扩展: {expansion.Reason}"],
@@ -225,5 +229,11 @@ public sealed class ContextExpander
             CreatedAt = DateTimeOffset.UtcNow,
             ParentPackageId = parentManifest.Id,
         };
+    }
+
+    private static string ComputeContentHash(string content)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(content));
+        return "sha256:" + Convert.ToHexString(hash).ToLowerInvariant();
     }
 }

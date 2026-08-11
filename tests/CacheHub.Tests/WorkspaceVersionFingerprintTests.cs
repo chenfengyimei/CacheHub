@@ -65,6 +65,28 @@ public class WorkspaceVersionFingerprintTests
     }
 
     [Fact]
+    public void GitState_ComputeFingerprint_ChangesWhenIndexedFileIsDeleted()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"cachehub_test_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        var filePath = Path.Combine(tempDir, "tracked.cs");
+        try
+        {
+            File.WriteAllText(filePath, "public class Tracked { }");
+            var before = GitState.ComputeFingerprint("commit", "main", tempDir, ["tracked.cs"]);
+
+            File.Delete(filePath);
+            var after = GitState.ComputeFingerprint("commit", "main", tempDir, ["tracked.cs"]);
+
+            Assert.NotEqual(before, after);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
     public async Task Migration0011_AddsGitStateColumns()
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"cachehub_test_{Guid.NewGuid():N}.db");

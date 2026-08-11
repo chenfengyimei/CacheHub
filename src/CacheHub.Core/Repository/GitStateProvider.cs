@@ -146,7 +146,10 @@ public sealed class GitStateProvider
         {
             // Not a git repo — use file-based fingerprint
             // V8-P1-01: Filter files to only include indexed files (exclude node_modules, bin, obj, etc.)
-            var allFiles = Directory.EnumerateFiles(workspaceRoot, "*.*", SearchOption.AllDirectories)
+            // Use "*" rather than "*.*": indexed source files may not have an
+            // extension (for example Makefile or Dockerfile), so the non-git
+            // fingerprint scope must not be narrower than the index scope.
+            var allFiles = Directory.EnumerateFiles(workspaceRoot, "*", SearchOption.AllDirectories)
                 .Select(f => Path.GetRelativePath(workspaceRoot, f).Replace('\\', '/'));
             // Always exclude .git/
             allFiles = allFiles.Where(p => !p.StartsWith(".git/", StringComparison.OrdinalIgnoreCase));

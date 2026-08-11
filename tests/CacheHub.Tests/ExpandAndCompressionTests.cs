@@ -5,6 +5,8 @@ using CacheHub.Context.Ranking;
 using CacheHub.Context.Recall;
 using CacheHub.Core.Context;
 using CacheHub.Core.Identifiers;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace CacheHub.Tests;
 
@@ -76,6 +78,24 @@ public class ExpandAndCompressionTests
         Assert.Equal(parentManifest.IndexSnapshotId, revision.IndexSnapshotId);
         Assert.Equal(parentManifest.Task.OriginalText, revision.Task.OriginalText);
         Assert.Equal(parentManifest.ContextEngineVersion, revision.ContextEngineVersion);
+    }
+
+    [Fact]
+    public void CreateRevision_ExpandedFileUsesFullContentHash()
+    {
+        var parentManifest = BuildTestManifest();
+        var expander = new ContextExpander();
+        var fullContent = "export class NewService {\n  run() {}\n}";
+        var expansion = expander.ExpandByFile(
+            parentManifest.Id.Value, "src/new.ts", fullContent, "add new file");
+
+        var revision = expander.CreateRevision(parentManifest, expansion, _ => fullContent);
+        var selectedFile = Assert.Single(revision.SelectedFiles.Where(f => f.Path == "src/new.ts"));
+        var expectedHash = "sha256:" + Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes(fullContent))).ToLowerInvariant();
+
+        Assert.Equal(expectedHash, selectedFile.ContentHash);
+        Assert.NotEqual("sha256:expanded", selectedFile.ContentHash);
     }
 
     // === R5-W008: Compression Quality Regression ===

@@ -99,10 +99,21 @@ public static class WorkflowCommands
         }
         var activeSnapshotId = activeSnapshot.SnapshotId;
 
-        // V7-W02 / V8-P0-01: Stale detection — default: reject build when stale
+        var indexedFiles = await querySvc.GetIndexedFilesBySnapshotAsync(activeSnapshotId);
+        var indexedFileInfos = indexedFiles.Select(f => new Context.Recall.IndexedFileInfo
+        {
+            Path = f.NormalizedPath,
+            NormalizedPath = f.NormalizedPath,
+            Language = f.Language,
+            Size = f.Size,
+            ContentHash = f.ContentHash,
+        }).ToList();
+
+        // V7-W02 / V8-P0-01: Stale detection — default: reject build when stale.
+        // Include paths from the active snapshot so deleted indexed files remain in scope.
         var staleResult = await CacheHub.Core.Indexing.StaleDetector.CheckAsync(
             workspace.RootPath, activeSnapshot.WorkspaceFingerprint,
-            fileFilter: ContextCommands.CreateFingerprintFilter(workspace.RootPath));
+            fileFilter: ContextCommands.CreateFingerprintFilter(workspace.RootPath, indexedFileInfos.Select(f => f.Path)));
         if (!staleResult.IsFresh)
         {
             if (!allowStale)
@@ -119,16 +130,6 @@ public static class WorkflowCommands
         var cache = ContextCommands.CreateContextCache(factory);
         var (secPolicy, secEnforcer) = SecurityPolicyResolver.CreateEnforcer();
         var engine = new ContextEngine(tokenizers, secPolicy, cache);
-
-        var indexedFiles = await querySvc.GetIndexedFilesBySnapshotAsync(activeSnapshotId);
-        var indexedFileInfos = indexedFiles.Select(f => new Context.Recall.IndexedFileInfo
-        {
-            Path = f.NormalizedPath,
-            NormalizedPath = f.NormalizedPath,
-            Language = f.Language,
-            Size = f.Size,
-            ContentHash = f.ContentHash,
-        }).ToList();
 
         var request = new ContextBuildRequest
         {
