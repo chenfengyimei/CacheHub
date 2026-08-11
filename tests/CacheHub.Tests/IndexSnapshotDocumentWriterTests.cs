@@ -57,6 +57,15 @@ public sealed class IndexSnapshotDocumentWriterTests
             Assert.Equal(1L, await CountAsync(verify, "file_symbols", snapshotId));
             Assert.Equal(1L, await CountAsync(verify, "file_imports", snapshotId));
             Assert.Equal(1L, await CountAsync(verify, "file_relations", snapshotId));
+
+            var replacement = document with { ContentHash = "sha256:replacement", Mtime = "2026-08-11T00:00:00.0000000Z" };
+            await new IndexSnapshotDocumentWriter(factory)
+                .ApplyChangesAsync(snapshotId, [document.Path], [replacement]);
+
+            Assert.Equal(1L, await CountAsync(verify, "files", snapshotId));
+            Assert.Equal(1L, await CountAsync(verify, "file_symbols", snapshotId));
+            Assert.Equal("sha256:replacement", await ScalarAsync(verify, "SELECT content_hash FROM files WHERE snapshot_id = $snapshotId;", snapshotId));
+            Assert.Equal("2026-08-11T00:00:00.0000000Z", await ScalarAsync(verify, "SELECT mtime FROM files WHERE snapshot_id = $snapshotId;", snapshotId));
         }
         finally
         {
@@ -74,5 +83,13 @@ public sealed class IndexSnapshotDocumentWriterTests
         command.CommandText = $"SELECT COUNT(*) FROM {table} WHERE snapshot_id = $snapshotId;";
         command.Parameters.AddWithValue("$snapshotId", snapshotId.Value);
         return (long)(await command.ExecuteScalarAsync())!;
+    }
+
+    private static async Task<string?> ScalarAsync(SqliteConnection connection, string sql, IndexSnapshotId snapshotId)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        command.Parameters.AddWithValue("$snapshotId", snapshotId.Value);
+        return (string?)await command.ExecuteScalarAsync();
     }
 }

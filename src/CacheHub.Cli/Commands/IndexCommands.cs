@@ -376,113 +376,23 @@ public static class IndexCommands
         }
 
         // Phase 2: Batch DB writes — single connection, single transaction
-        await using var batchConn = factory.CreateOpenConnection();
-        await using var batchTx = await batchConn.BeginTransactionAsync();
+        var refreshDocuments = filesToAdd.Select(file =>
+            new CacheHub.Storage.Indexing.IndexSnapshotDocument(
+                file.path, file.size, file.hash, file.language, file.isBinary,
+                file.parserId, file.parserVersion, file.parseResult, file.mtime))
+            .ToList();
 
         try
         {
-            // Delete all removed/modified files
-            foreach (var path in filesToDelete)
-            {
-                using var delCmd = batchConn.CreateCommand();
-                delCmd.Transaction = (SqliteTransaction)batchTx;
-                delCmd.CommandText = "DELETE FROM files WHERE snapshot_id = $snap AND normalized_path = $path;";
-                delCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
-                delCmd.Parameters.AddWithValue("$path", path);
-                await delCmd.ExecuteNonQueryAsync();
-            }
+            await new CacheHub.Storage.Indexing.IndexSnapshotDocumentWriter(factory)
+                .ApplyChangesAsync(snapshotId, filesToDelete, refreshDocuments);
             deletedCount = result.DeletedPaths.Count;
-
-            // Insert all new/modified files
-            foreach (var (path, _, size, language, isBinary, mtime, hash, content, parserId, parserVersion, parseResult) in filesToAdd)
-            {
-                var fileId = Guid.NewGuid().ToString("N");
-                using var fileCmd = batchConn.CreateCommand();
-                fileCmd.Transaction = (SqliteTransaction)batchTx;
-                fileCmd.CommandText = """
-                    INSERT INTO files (id, snapshot_id, path, normalized_path, size, content_hash, language, is_binary, status, hash_kind, mtime, parser_id, parser_version)
-                    VALUES ($id, $snap, $path, $norm, $size, $hash, $lang, $bin, 'Indexed', $hashKind, $mtime, $parserId, $parserVer);
-                    """;
-                fileCmd.Parameters.AddWithValue("$id", fileId);
-                fileCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
-                fileCmd.Parameters.AddWithValue("$path", path);
-                fileCmd.Parameters.AddWithValue("$norm", path);
-                fileCmd.Parameters.AddWithValue("$size", size);
-                fileCmd.Parameters.AddWithValue("$hash", hash);
-                fileCmd.Parameters.AddWithValue("$lang", language);
-                fileCmd.Parameters.AddWithValue("$bin", isBinary ? 1 : 0);
-                fileCmd.Parameters.AddWithValue("$hashKind", hash.StartsWith("fp:", StringComparison.Ordinal) ? "fingerprint" : "full");
-                fileCmd.Parameters.AddWithValue("$mtime", mtime);
-                fileCmd.Parameters.AddWithValue("$parserId", parserId);
-                fileCmd.Parameters.AddWithValue("$parserVer", parserVersion);
-                await fileCmd.ExecuteNonQueryAsync();
-
-                foreach (var symbol in parseResult.Symbols)
-                {
-                    using var symCmd = batchConn.CreateCommand();
-                    symCmd.Transaction = (SqliteTransaction)batchTx;
-                    symCmd.CommandText = """
-                        INSERT INTO file_symbols (id, file_id, snapshot_id, name, kind, start_line, end_line, modifier, confidence)
-                        VALUES ($id, $fid, $snap, $name, $kind, $sl, $el, $mod, $conf);
-                        """;
-                    symCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
-                    symCmd.Parameters.AddWithValue("$fid", fileId);
-                    symCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
-                    symCmd.Parameters.AddWithValue("$name", symbol.Name);
-                    symCmd.Parameters.AddWithValue("$kind", symbol.Kind.ToString());
-                    symCmd.Parameters.AddWithValue("$sl", symbol.StartLine);
-                    symCmd.Parameters.AddWithValue("$el", symbol.EndLine);
-                    symCmd.Parameters.AddWithValue("$mod", (object?)symbol.Modifier ?? DBNull.Value);
-                    symCmd.Parameters.AddWithValue("$conf", "syntactic");
-                    await symCmd.ExecuteNonQueryAsync();
-                }
-
-                foreach (var import in parseResult.Imports)
-                {
-                    using var impCmd = batchConn.CreateCommand();
-                    impCmd.Transaction = (SqliteTransaction)batchTx;
-                    impCmd.CommandText = """
-                        INSERT INTO file_imports (id, file_id, snapshot_id, module, imported_name, line)
-                        VALUES ($id, $fid, $snap, $mod, $name, $line);
-                        """;
-                    impCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
-                    impCmd.Parameters.AddWithValue("$fid", fileId);
-                    impCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
-                    impCmd.Parameters.AddWithValue("$mod", import.Module);
-                    impCmd.Parameters.AddWithValue("$name", (object?)import.ImportedName ?? DBNull.Value);
-                    impCmd.Parameters.AddWithValue("$line", import.Line);
-                    await impCmd.ExecuteNonQueryAsync();
-                }
-
-                foreach (var relation in parseResult.Relations)
-                {
-                    using var relCmd = batchConn.CreateCommand();
-                    relCmd.Transaction = (SqliteTransaction)batchTx;
-                    relCmd.CommandText = """
-                        INSERT INTO file_relations (id, file_id, snapshot_id, source_symbol, target_symbol, relation_type, confidence, line, source)
-                        VALUES ($id, $fid, $snap, $src, $tgt, $rt, $conf, $line, $source);
-                        """;
-                    relCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
-                    relCmd.Parameters.AddWithValue("$fid", fileId);
-                    relCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
-                    relCmd.Parameters.AddWithValue("$src", string.IsNullOrEmpty(relation.SourceSymbol) ? relation.Relation : relation.SourceSymbol);
-                    relCmd.Parameters.AddWithValue("$tgt", relation.TargetName);
-                    relCmd.Parameters.AddWithValue("$rt", relation.RelationType.ToString());
-                    relCmd.Parameters.AddWithValue("$conf", relation.Confidence.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                    relCmd.Parameters.AddWithValue("$line", relation.Line > 0 ? relation.Line : DBNull.Value);
-                    relCmd.Parameters.AddWithValue("$source", relation.Source);
-                    await relCmd.ExecuteNonQueryAsync();
-                }
-            }
-
-            await batchTx.CommitAsync();
         }
         catch (Exception ex)
         {
-            await batchTx.RollbackAsync();
             // Immutable snapshot: clean up the failed Building snapshot, Active remains untouched
             await DeleteSnapshotAsync(factory, buildingSnapshotId);
-            Console.Error.WriteLine($"Error: Batch refresh failed, Building snapshot cleaned up: {ex.Message}");
+            Console.Error.WriteLine($"Error: Snapshot refresh persistence failed, Building snapshot cleaned up: {ex.Message}");
             Console.Error.WriteLine($"  Active snapshot {oldSnapshotId.Value} remains unchanged.");
             return 1;
         }
@@ -662,90 +572,6 @@ public static class IndexCommands
     private static string? GetOption(string[] args, string prefix)
         => args.FirstOrDefault(a => a.StartsWith(prefix + "=", StringComparison.OrdinalIgnoreCase))?[(prefix.Length + 1)..];
 
-    private static async Task InsertFileWithParserAsync(
-        SqliteConnectionFactory factory, IndexSnapshotId snapshotId,
-        string path, string normalizedPath, long size, string contentHash,
-        string language, bool isBinary, string mtime,
-        string parserId, string parserVersion, Core.Parsing.ParseResult parseResult)
-    {
-        await using var conn = factory.CreateOpenConnection();
-        await using var tx = await conn.BeginTransactionAsync();
-
-        var fileId = Guid.NewGuid().ToString("N");
-
-        using var fileCmd = conn.CreateCommand();
-        fileCmd.Transaction = (SqliteTransaction)tx;
-        fileCmd.CommandText =
-            """
-            INSERT INTO files (id, snapshot_id, path, normalized_path, size, content_hash, language, is_binary, status, hash_kind, mtime, parser_id, parser_version)
-            VALUES ($id, $snap, $path, $norm, $size, $hash, $lang, $bin, 'Indexed', $hashKind, $mtime, $parserId, $parserVer);
-            """;
-        fileCmd.Parameters.AddWithValue("$id", fileId);
-        fileCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
-        fileCmd.Parameters.AddWithValue("$path", path);
-        fileCmd.Parameters.AddWithValue("$norm", normalizedPath);
-        fileCmd.Parameters.AddWithValue("$size", size);
-        fileCmd.Parameters.AddWithValue("$hash", contentHash);
-        fileCmd.Parameters.AddWithValue("$lang", language);
-        fileCmd.Parameters.AddWithValue("$bin", isBinary ? 1 : 0);
-        fileCmd.Parameters.AddWithValue("$hashKind", contentHash.StartsWith("fp:", StringComparison.Ordinal) ? "fingerprint" : "full");
-        fileCmd.Parameters.AddWithValue("$mtime", mtime);
-        fileCmd.Parameters.AddWithValue("$parserId", parserId);
-        fileCmd.Parameters.AddWithValue("$parserVer", parserVersion);
-        await fileCmd.ExecuteNonQueryAsync();
-
-        foreach (var symbol in parseResult.Symbols)
-        {
-            using var symCmd = conn.CreateCommand();
-            symCmd.Transaction = (SqliteTransaction)tx;
-            symCmd.CommandText =
-                """
-                INSERT INTO file_symbols (id, file_id, snapshot_id, name, kind, start_line, end_line, modifier, confidence)
-                VALUES ($id, $fid, $snap, $name, $kind, $sl, $el, $mod, $conf);
-                """;
-            symCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
-            symCmd.Parameters.AddWithValue("$fid", fileId);
-            symCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
-            symCmd.Parameters.AddWithValue("$name", symbol.Name);
-            symCmd.Parameters.AddWithValue("$kind", symbol.Kind.ToString());
-            symCmd.Parameters.AddWithValue("$sl", symbol.StartLine);
-            symCmd.Parameters.AddWithValue("$el", symbol.EndLine);
-            symCmd.Parameters.AddWithValue("$mod", (object?)symbol.Modifier ?? DBNull.Value);
-            symCmd.Parameters.AddWithValue("$conf", "syntactic");
-            await symCmd.ExecuteNonQueryAsync();
-        }
-
-        foreach (var import in parseResult.Imports)
-        {
-            using var impCmd = conn.CreateCommand();
-            impCmd.Transaction = (SqliteTransaction)tx;
-            impCmd.CommandText =
-                """
-                INSERT INTO file_imports (id, file_id, snapshot_id, module, imported_name, line)
-                VALUES ($id, $fid, $snap, $mod, $name, $line);
-                """;
-            impCmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
-            impCmd.Parameters.AddWithValue("$fid", fileId);
-            impCmd.Parameters.AddWithValue("$snap", snapshotId.Value);
-            impCmd.Parameters.AddWithValue("$mod", import.Module);
-            impCmd.Parameters.AddWithValue("$name", (object?)import.ImportedName ?? DBNull.Value);
-            impCmd.Parameters.AddWithValue("$line", import.Line);
-            await impCmd.ExecuteNonQueryAsync();
-        }
-
-        await tx.CommitAsync();
-    }
-
-    private static async Task DeleteFileFromSnapshotAsync(SqliteConnectionFactory factory, IndexSnapshotId snapshotId, string normalizedPath)
-    {
-        await using var conn = factory.CreateOpenConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "DELETE FROM files WHERE snapshot_id = $snap AND normalized_path = $path;";
-        cmd.Parameters.AddWithValue("$snap", snapshotId.Value);
-        cmd.Parameters.AddWithValue("$path", normalizedPath);
-        await cmd.ExecuteNonQueryAsync();
-    }
-
     private static async Task UpdateSnapshotFileCountAsync(SqliteConnectionFactory factory, IndexSnapshotId snapshotId, int fileCount)
     {
         await using var conn = factory.CreateOpenConnection();
@@ -771,35 +597,6 @@ public static class IndexCommands
         cmd.Parameters.AddWithValue("$branch", (object?)gitState?.Branch ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$dirty", gitState?.IsDirty ?? false);
         cmd.Parameters.AddWithValue("$fp", (object?)gitState?.Fingerprint ?? DBNull.Value);
-        await cmd.ExecuteNonQueryAsync();
-    }
-
-    private static async Task InsertFileAsync(
-        SqliteConnectionFactory factory,
-        IndexSnapshotId snapshotId,
-        string path,
-        string normalizedPath,
-        long size,
-        string contentHash,
-        string language,
-        bool isBinary)
-    {
-        await using var conn = factory.CreateOpenConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText =
-            """
-            INSERT INTO files (id, snapshot_id, path, normalized_path, size, content_hash, language, is_binary, status, hash_kind)
-            VALUES ($id, $snap, $path, $norm, $size, $hash, $lang, $bin, 'Indexed', $hashKind);
-            """;
-        cmd.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
-        cmd.Parameters.AddWithValue("$snap", snapshotId.Value);
-        cmd.Parameters.AddWithValue("$path", path);
-        cmd.Parameters.AddWithValue("$norm", normalizedPath);
-        cmd.Parameters.AddWithValue("$size", size);
-        cmd.Parameters.AddWithValue("$hash", contentHash);
-        cmd.Parameters.AddWithValue("$lang", language);
-        cmd.Parameters.AddWithValue("$bin", isBinary ? 1 : 0);
-        cmd.Parameters.AddWithValue("$hashKind", contentHash.StartsWith("fp:", StringComparison.Ordinal) ? "fingerprint" : "full");
         await cmd.ExecuteNonQueryAsync();
     }
 

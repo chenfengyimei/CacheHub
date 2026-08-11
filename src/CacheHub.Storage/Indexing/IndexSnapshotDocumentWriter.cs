@@ -16,7 +16,8 @@ public sealed record IndexSnapshotDocument(
     bool IsBinary,
     string ParserId,
     string ParserVersion,
-    ParseResult ParseResult);
+    ParseResult ParseResult,
+    string? Mtime = null);
 
 /// <summary>
 /// Shared persistence stage for CLI and Desktop index builds. Files and all
@@ -26,11 +27,30 @@ public sealed record IndexSnapshotDocument(
 public sealed class IndexSnapshotDocumentWriter(SqliteConnectionFactory factory)
 {
     public async Task PersistAsync(IndexSnapshotId snapshotId, IReadOnlyList<IndexSnapshotDocument> documents, CancellationToken ct = default)
+        => await ApplyChangesAsync(snapshotId, [], documents, ct);
+
+    /// <summary>
+    /// Atomically removes stale paths and persists their replacements. This is
+    /// used by immutable snapshot refreshes, where a failed mutation must not
+    /// leave the Building snapshot internally inconsistent.
+    /// </summary>
+    public async Task ApplyChangesAsync(IndexSnapshotId snapshotId, IReadOnlyList<string> pathsToDelete,
+        IReadOnlyList<IndexSnapshotDocument> documents, CancellationToken ct = default)
     {
         await using var connection = factory.CreateOpenConnection();
         await using var transaction = await connection.BeginTransactionAsync(ct);
         try
         {
+            foreach (var path in pathsToDelete)
+            {
+                using var delete = connection.CreateCommand();
+                delete.Transaction = (SqliteTransaction)transaction;
+                delete.CommandText = "DELETE FROM files WHERE snapshot_id = $snapshotId AND normalized_path = $path;";
+                delete.Parameters.AddWithValue("$snapshotId", snapshotId.Value);
+                delete.Parameters.AddWithValue("$path", path);
+                await delete.ExecuteNonQueryAsync(ct);
+            }
+
             foreach (var document in documents)
                 await PersistDocumentAsync(connection, (SqliteTransaction)transaction, snapshotId, document, ct);
             await transaction.CommitAsync(ct);
@@ -50,8 +70,8 @@ public sealed class IndexSnapshotDocumentWriter(SqliteConnectionFactory factory)
         {
             command.Transaction = transaction;
             command.CommandText = """
-                INSERT INTO files (id, snapshot_id, path, normalized_path, size, content_hash, language, is_binary, status, hash_kind, parser_id, parser_version)
-                VALUES ($id, $snap, $path, $norm, $size, $hash, $lang, $bin, 'Indexed', $hashKind, $parserId, $parserVer);
+                INSERT INTO files (id, snapshot_id, path, normalized_path, size, content_hash, language, is_binary, status, hash_kind, mtime, parser_id, parser_version)
+                VALUES ($id, $snap, $path, $norm, $size, $hash, $lang, $bin, 'Indexed', $hashKind, $mtime, $parserId, $parserVer);
                 """;
             command.Parameters.AddWithValue("$id", fileId);
             command.Parameters.AddWithValue("$snap", snapshotId.Value);
@@ -62,6 +82,7 @@ public sealed class IndexSnapshotDocumentWriter(SqliteConnectionFactory factory)
             command.Parameters.AddWithValue("$lang", document.Language);
             command.Parameters.AddWithValue("$bin", document.IsBinary ? 1 : 0);
             command.Parameters.AddWithValue("$hashKind", document.ContentHash.StartsWith("fp:", StringComparison.Ordinal) ? "fingerprint" : "full");
+            command.Parameters.AddWithValue("$mtime", (object?)document.Mtime ?? DBNull.Value);
             command.Parameters.AddWithValue("$parserId", document.ParserId);
             command.Parameters.AddWithValue("$parserVer", document.ParserVersion);
             await command.ExecuteNonQueryAsync(ct);

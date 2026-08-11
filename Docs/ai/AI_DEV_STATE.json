@@ -2,7 +2,7 @@
     "schemaVersion":  1,
     "project":  "CacheHub",
     "currentPhase":  "V8-Product-Proof-Context-Integrity",
-    "currentTask":  "V8 release proof follow-up in progress: two-pass index integrity, shared CLI/Desktop source collection and snapshot persistence, strict stale-context gate, immutable raw-byte payload verification, unified recall wiring, production SQLite/FTS Matrix, and Agent Matrix orchestration are complete. Real Gateway evidence remains active. 997 tests.",
+    "currentTask":  "V8 release proof follow-up in progress: two-pass index integrity, shared CLI/Desktop source collection plus build and incremental-refresh snapshot persistence, strict stale-context gate, immutable raw-byte payload verification, unified recall wiring, production SQLite/FTS Matrix, and Agent Matrix orchestration are complete. Real Gateway evidence remains active. 997 tests.",
     "repository":  {
                        "branch":  "main",
                        "dirty":  false,
