@@ -1,0 +1,21 @@
+schema_version: 1
+global_release_blockers:
+  - P0 security issue open
+  - database migration failure
+  - stale context can be reused after workspace change
+  - tool-call response can be replayed from cache
+  - Gateway rewrites upstream error to success
+  - Benchmark still uses simulated success for phase approval
+quality:
+  build: Release build passes with warnings treated as errors
+  tests: All required unit/integration/security tests pass; skips documented
+  protocol: CLI and HTTP schema compatibility tests pass
+  migration: fresh install and upgrade from previous supported schema pass
+  security: path, symlink, local API auth, XSS and secret exfiltration tests pass
+benchmark_targets:
+  relevant_file_recall_at_10: >= 0.90
+  missing_context_failure_rate: <= 0.10
+  test_pass_rate_vs_baseline: >= 0.95x
+  mean_input_token_reduction: >= 0.20
+  positive_token_benefit_task_ratio: >= 0.60
+  stale_context_error_rate: approximately 0 before beta

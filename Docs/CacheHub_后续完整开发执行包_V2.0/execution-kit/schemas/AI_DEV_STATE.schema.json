@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CacheHub AI Development State",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "project",
+    "baselineCommit",
+    "currentPhase",
+    "currentTask",
+    "taskStatus",
+    "qualityGates"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 2
+    },
+    "project": {
+      "type": "string"
+    },
+    "baselineCommit": {
+      "type": "string"
+    },
+    "currentPhase": {
+      "type": "string"
+    },
+    "currentTask": {
+      "type": "string"
+    },
+    "taskStatus": {
+      "enum": [
+        "planned",
+        "in_progress",
+        "blocked",
+        "completed",
+        "rolled_back"
+      ]
+    },
+    "startedAt": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "completedAt": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "changedFiles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "qualityGates": {
+      "type": "object",
+      "properties": {
+        "build": {
+          "type": "string"
+        },
+        "unitTests": {
+          "type": "string"
+        },
+        "integrationTests": {
+          "type": "string"
+        },
+        "securityTests": {
+          "type": "string"
+        },
+        "protocolTests": {
+          "type": "string"
+        },
+        "benchmark": {
+          "type": "string"
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "properties": {
+        "commands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "testOutputFiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "commitSha": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "nextTask": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

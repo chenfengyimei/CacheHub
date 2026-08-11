@@ -1,0 +1,23 @@
+{
+  "package": "CacheHub_后续完整开发执行包_V2.0",
+  "baseline_commit": "ca0896ec5e39acaf670af614fc9e3328d5fbe524",
+  "date": "2026-08-07",
+  "phase_count": 12,
+  "task_count": 88,
+  "files": [
+    "00_README_使用说明.md",
+    "01_CacheHub_后续完整开发总纲_V2.0.docx",
+    "01_CacheHub_后续完整开发总纲_V2.0.md",
+    "execution-kit/ACCEPTANCE_GATES.yaml",
+    "execution-kit/ROADMAP.yaml",
+    "execution-kit/WORK_ITEMS.yaml",
+    "execution-kit/prompts/主执行提示词.md",
+    "execution-kit/prompts/单阶段执行提示词.md",
+    "execution-kit/schemas/AI_DEV_STATE.schema.json",
+    "execution-kit/templates/ADR.md",
+    "execution-kit/templates/BUG_REPORT.md",
+    "execution-kit/templates/RELEASE_CHECKLIST.md",
+    "execution-kit/templates/TASK_CARD.md",
+    "execution-kit/templates/TEST_EVIDENCE.md"
+  ]
+}

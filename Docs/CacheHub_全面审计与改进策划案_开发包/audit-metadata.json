@@ -1,0 +1,14 @@
+{
+  "audited_repository": "https://github.com/chenfengyimei/CacheHub",
+  "branch": "main",
+  "commit": "7fd5a4a7e9d05ce0b4b86bf44d0a39262aa370aa",
+  "audit_date": "2026-08-07",
+  "finding_count": 62,
+  "severity_counts": {
+    "P0": 11,
+    "P1": 31,
+    "P2": 20
+  },
+  "dynamic_execution_performed": false,
+  "limitation": "GitHub source/static audit; local build and runtime execution were not available in the audit environment."
+}

@@ -1,0 +1,3066 @@
+schema_version: 2
+items:
+  -
+    id: R4-W001
+    phase: R4
+    title: 建立可组合召回源接口
+    objective: 将路径、FTS、符号、Git Diff、关系、Repo Map 拆成可测试的 IRecallSource；统一输出 RecallHit、ScoreHint、LineAnchor 和 Evidence。
+    depends_on:
+
+    status: planned
+    execution_order: 1
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - CLI 和 Local API 对同一输入返回相同的候选集合、排序和 Manifest。
+      - 模糊任务不依赖显式文件路径，也能通过 FTS 或符号命中目标文件。
+      - SelectedFile.Reasons 可追踪到实际数据库证据。
+      - FTS、符号、关系任一模块关闭时能够明确降级，不得静默伪装为成功。
+  -
+    id: R4-W002
+    phase: R4
+    title: 建立索引查询应用服务
+    objective: 新增 IIndexQueryService，集中查询 Active Snapshot、Files、Symbols、Imports、Relations、FTS；CLI 与 Desktop 不再各写一套 SQL。
+    depends_on:
+      - R4-W001
+    status: planned
+    execution_order: 2
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - CLI 和 Local API 对同一输入返回相同的候选集合、排序和 Manifest。
+      - 模糊任务不依赖显式文件路径，也能通过 FTS 或符号命中目标文件。
+      - SelectedFile.Reasons 可追踪到实际数据库证据。
+      - FTS、符号、关系任一模块关闭时能够明确降级，不得静默伪装为成功。
+  -
+    id: R4-W003
+    phase: R4
+    title: 接入 FTS5 正文召回
+    objective: Context Build 对任务关键词执行快照绑定的 FTS 查询；保存 BM25、snippet、命中行和查询词，禁止退化成只查路径。
+    depends_on:
+      - R4-W002
+    status: planned
+    execution_order: 3
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - CLI 和 Local API 对同一输入返回相同的候选集合、排序和 Manifest。
+      - 模糊任务不依赖显式文件路径，也能通过 FTS 或符号命中目标文件。
+      - SelectedFile.Reasons 可追踪到实际数据库证据。
+      - FTS、符号、关系任一模块关闭时能够明确降级，不得静默伪装为成功。
+  -
+    id: R4-W004
+    phase: R4
+    title: 接入符号召回
+    objective: 对 ExtractedSymbols 查询 file_symbols；精确匹配优先于 LIKE；把定义行范围写入 Anchor。
+    depends_on:
+      - R4-W003
+    status: planned
+    execution_order: 4
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - CLI 和 Local API 对同一输入返回相同的候选集合、排序和 Manifest。
+      - 模糊任务不依赖显式文件路径，也能通过 FTS 或符号命中目标文件。
+      - SelectedFile.Reasons 可追踪到实际数据库证据。
+      - FTS、符号、关系任一模块关闭时能够明确降级，不得静默伪装为成功。
+  -
+    id: R4-W005
+    phase: R4
+    title: 接入 Import/Relation 扩展
+    objective: 从直接命中文件向导入者、被调用对象和相邻模块扩展一层；所有启发式关系必须携带置信度和来源。
+    depends_on:
+      - R4-W004
+    status: planned
+    execution_order: 5
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - CLI 和 Local API 对同一输入返回相同的候选集合、排序和 Manifest。
+      - 模糊任务不依赖显式文件路径，也能通过 FTS 或符号命中目标文件。
+      - SelectedFile.Reasons 可追踪到实际数据库证据。
+      - FTS、符号、关系任一模块关闭时能够明确降级，不得静默伪装为成功。
+  -
+    id: R4-W006
+    phase: R4
+    title: 实现测试与配置关系召回
+    objective: 建立源文件↔测试文件、组件↔配置文件的确定性规则；只作为辅助信号，不得覆盖显式路径与符号。
+    depends_on:
+      - R4-W005
+    status: planned
+    execution_order: 6
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - CLI 和 Local API 对同一输入返回相同的候选集合、排序和 Manifest。
+      - 模糊任务不依赖显式文件路径，也能通过 FTS 或符号命中目标文件。
+      - SelectedFile.Reasons 可追踪到实际数据库证据。
+      - FTS、符号、关系任一模块关闭时能够明确降级，不得静默伪装为成功。
+  -
+    id: R4-W007
+    phase: R4
+    title: 接入 Repo Map 候选
+    objective: Repo Map 作为低成本结构上下文和邻接召回源；记录 repo_map_version，缓存与索引快照绑定。
+    depends_on:
+      - R4-W006
+    status: planned
+    execution_order: 7
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - CLI 和 Local API 对同一输入返回相同的候选集合、排序和 Manifest。
+      - 模糊任务不依赖显式文件路径，也能通过 FTS 或符号命中目标文件。
+      - SelectedFile.Reasons 可追踪到实际数据库证据。
+      - FTS、符号、关系任一模块关闭时能够明确降级，不得静默伪装为成功。
+  -
+    id: R4-W008
+    phase: R4
+    title: 统一 CLI、Local API 与测试
+    objective: CLI/Desktop/API 调用相同 ContextApplicationService；Capability 声明只发布真实可用能力；增加契约与真实 SQLite 测试。
+    depends_on:
+      - R4-W007
+    status: planned
+    execution_order: 8
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - CLI 和 Local API 对同一输入返回相同的候选集合、排序和 Manifest。
+      - 模糊任务不依赖显式文件路径，也能通过 FTS 或符号命中目标文件。
+      - SelectedFile.Reasons 可追踪到实际数据库证据。
+      - FTS、符号、关系任一模块关闭时能够明确降级，不得静默伪装为成功。
+  -
+    id: R5-W001
+    phase: R5
+    title: 统一 LineAnchor 数据模型
+    objective: 定义 Symbol、FTS、ErrorStack、GitDiff、UserRange 等 Anchor 类型，记录行号、来源、置信度和证据。
+    depends_on:
+
+    status: planned
+    execution_order: 1
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - Chunks 模式必须优先围绕 Anchor，不得无理由从第 1 行开始。
+      - Payload 实际估算不得超过 ContextHardLimit。
+      - Manifest 记录的范围与导出的代码逐行一致。
+      - 同一快照、任务和策略版本重复构建结果稳定。
+  -
+    id: R5-W002
+    phase: R5
+    title: Anchor 贯穿召回到分块
+    objective: CandidateFile、RankedCandidate、PayloadPlan 全程携带 Anchors；SelectionEngine 必须把 Anchors 传给 ChunkingStrategy。
+    depends_on:
+      - R5-W001
+    status: planned
+    execution_order: 2
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - Chunks 模式必须优先围绕 Anchor，不得无理由从第 1 行开始。
+      - Payload 实际估算不得超过 ContextHardLimit。
+      - Manifest 记录的范围与导出的代码逐行一致。
+      - 同一快照、任务和策略版本重复构建结果稳定。
+  -
+    id: R5-W003
+    phase: R5
+    title: 实现语法范围合并与裁剪
+    objective: 优先使用符号起止行；FTS 命中使用上下文窗口；相邻/重叠范围稳定合并；禁止默认从文件头截取。
+    depends_on:
+      - R5-W002
+    status: planned
+    execution_order: 3
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - Chunks 模式必须优先围绕 Anchor，不得无理由从第 1 行开始。
+      - Payload 实际估算不得超过 ContextHardLimit。
+      - Manifest 记录的范围与导出的代码逐行一致。
+      - 同一快照、任务和策略版本重复构建结果稳定。
+  -
+    id: R5-W004
+    phase: R5
+    title: 建立真实 Tokenizer 抽象
+    objective: 新增 IModelTokenizer、TokenizerRegistry 和模型映射；粗估仅作为显式 fallback，并在 Manifest 标记 estimated=true。
+    depends_on:
+      - R5-W003
+    status: planned
+    execution_order: 4
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - Chunks 模式必须优先围绕 Anchor，不得无理由从第 1 行开始。
+      - Payload 实际估算不得超过 ContextHardLimit。
+      - Manifest 记录的范围与导出的代码逐行一致。
+      - 同一快照、任务和策略版本重复构建结果稳定。
+  -
+    id: R5-W005
+    phase: R5
+    title: 重写预算分配器
+    objective: 严格计算模型窗口、系统提示、工具定义、历史、输出预留和安全余量；ContextTarget 与 HardLimit 必须在构建前验证。
+    depends_on:
+      - R5-W004
+    status: planned
+    execution_order: 5
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - Chunks 模式必须优先围绕 Anchor，不得无理由从第 1 行开始。
+      - Payload 实际估算不得超过 ContextHardLimit。
+      - Manifest 记录的范围与导出的代码逐行一致。
+      - 同一快照、任务和策略版本重复构建结果稳定。
+  -
+    id: R5-W006
+    phase: R5
+    title: Manifest/Payload 共用 PayloadPlan
+    objective: 选择完成后生成不可变 PayloadPlan；Manifest 和 Payload 都从同一计划投影，防止二次分块产生差异。
+    depends_on:
+      - R5-W005
+    status: planned
+    execution_order: 6
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - Chunks 模式必须优先围绕 Anchor，不得无理由从第 1 行开始。
+      - Payload 实际估算不得超过 ContextHardLimit。
+      - Manifest 记录的范围与导出的代码逐行一致。
+      - 同一快照、任务和策略版本重复构建结果稳定。
+  -
+    id: R5-W007
+    phase: R5
+    title: Context Expand 形成 Revision
+    objective: 按文件/符号扩展生成新的 Context Package，保存 ParentPackageId、Revision、增量 Token、追加原因和新哈希。
+    depends_on:
+      - R5-W006
+    status: planned
+    execution_order: 7
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - Chunks 模式必须优先围绕 Anchor，不得无理由从第 1 行开始。
+      - Payload 实际估算不得超过 ContextHardLimit。
+      - Manifest 记录的范围与导出的代码逐行一致。
+      - 同一快照、任务和策略版本重复构建结果稳定。
+  -
+    id: R5-W008
+    phase: R5
+    title: 压缩质量回归测试
+    objective: 加入大文件、多个同名符号、中文任务、错误栈和跨文件任务；验证范围、Token 和 Payload 一致性。
+    depends_on:
+      - R5-W007
+    status: planned
+    execution_order: 8
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - Chunks 模式必须优先围绕 Anchor，不得无理由从第 1 行开始。
+      - Payload 实际估算不得超过 ContextHardLimit。
+      - Manifest 记录的范围与导出的代码逐行一致。
+      - 同一快照、任务和策略版本重复构建结果稳定。
+  -
+    id: R6-W001
+    phase: R6
+    title: 实现 FTS 单文件删除与 Upsert
+    objective: 禁止修改一个文件时 ClearSnapshot；为 FTS 建立 rowid/path 映射，支持按 snapshot+path 删除和重建。
+    depends_on:
+
+    status: planned
+    execution_order: 1
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 修改任意单文件后，未变化文件仍可被 FTS 搜索。
+      - Building Snapshot 失败时旧 Active Snapshot 保持完整可用。
+      - Verify 与 Build 使用完全一致的忽略范围。
+      - 工作区内容变化后，不允许复用旧 Context Package 或模型响应缓存。
+  -
+    id: R6-W002
+    phase: R6
+    title: 采用不可变增量快照
+    objective: Active Snapshot 不原地修改；创建 Building Snapshot，复制未变化行、重建变化行，全部成功后原子激活。
+    depends_on:
+      - R6-W001
+    status: planned
+    execution_order: 2
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 修改任意单文件后，未变化文件仍可被 FTS 搜索。
+      - Building Snapshot 失败时旧 Active Snapshot 保持完整可用。
+      - Verify 与 Build 使用完全一致的忽略范围。
+      - 工作区内容变化后，不允许复用旧 Context Package 或模型响应缓存。
+  -
+    id: R6-W003
+    phase: R6
+    title: 统一忽略规则
+    objective: Build、Refresh、Verify、Watcher 使用同一个 IgnoreRuleSet；实现必要的 gitignore 语义并版本化规则哈希。
+    depends_on:
+      - R6-W002
+    status: planned
+    execution_order: 3
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 修改任意单文件后，未变化文件仍可被 FTS 搜索。
+      - Building Snapshot 失败时旧 Active Snapshot 保持完整可用。
+      - Verify 与 Build 使用完全一致的忽略范围。
+      - 工作区内容变化后，不允许复用旧 Context Package 或模型响应缓存。
+  -
+    id: R6-W004
+    phase: R6
+    title: 强化路径与符号链接边界
+    objective: 平台感知大小写；解析最终真实路径；拒绝工作区外 symlink；防止循环、路径前缀碰撞和 UNC 逃逸。
+    depends_on:
+      - R6-W003
+    status: planned
+    execution_order: 4
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 修改任意单文件后，未变化文件仍可被 FTS 搜索。
+      - Building Snapshot 失败时旧 Active Snapshot 保持完整可用。
+      - Verify 与 Build 使用完全一致的忽略范围。
+      - 工作区内容变化后，不允许复用旧 Context Package 或模型响应缓存。
+  -
+    id: R6-W005
+    phase: R6
+    title: Watcher 转后台任务
+    objective: FileSystemWatcher 只负责入队；防抖、合并、溢出后触发全量对账；任务可取消、恢复并记录状态。
+    depends_on:
+      - R6-W004
+    status: planned
+    execution_order: 5
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 修改任意单文件后，未变化文件仍可被 FTS 搜索。
+      - Building Snapshot 失败时旧 Active Snapshot 保持完整可用。
+      - Verify 与 Build 使用完全一致的忽略范围。
+      - 工作区内容变化后，不允许复用旧 Context Package 或模型响应缓存。
+  -
+    id: R6-W006
+    phase: R6
+    title: 分支切换与 Dirty State
+    objective: 记录 commit、branch、dirty_state_hash；检测 checkout/reset/rebase 等大变化并强制构建新快照。
+    depends_on:
+      - R6-W005
+    status: planned
+    execution_order: 6
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 修改任意单文件后，未变化文件仍可被 FTS 搜索。
+      - Building Snapshot 失败时旧 Active Snapshot 保持完整可用。
+      - Verify 与 Build 使用完全一致的忽略范围。
+      - 工作区内容变化后，不允许复用旧 Context Package 或模型响应缓存。
+  -
+    id: R6-W007
+    phase: R6
+    title: 建立精确失效图
+    objective: 文件变化只失效依赖该文件的 Parse/Search/RepoMap/Context 缓存；策略版本变化触发对应层级失效。
+    depends_on:
+      - R6-W006
+    status: planned
+    execution_order: 7
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 修改任意单文件后，未变化文件仍可被 FTS 搜索。
+      - Building Snapshot 失败时旧 Active Snapshot 保持完整可用。
+      - Verify 与 Build 使用完全一致的忽略范围。
+      - 工作区内容变化后，不允许复用旧 Context Package 或模型响应缓存。
+  -
+    id: R6-W008
+    phase: R6
+    title: 大仓库与故障注入测试
+    objective: 覆盖 1k/10k/100k 文件、进程中断、磁盘满、数据库锁、监听丢事件和同大小内容变化。
+    depends_on:
+      - R6-W007
+    status: planned
+    execution_order: 8
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 修改任意单文件后，未变化文件仍可被 FTS 搜索。
+      - Building Snapshot 失败时旧 Active Snapshot 保持完整可用。
+      - Verify 与 Build 使用完全一致的忽略范围。
+      - 工作区内容变化后，不允许复用旧 Context Package 或模型响应缓存。
+  -
+    id: R7-W001
+    phase: R7
+    title: 缓存数据库与内容寻址存储
+    objective: 新增 cache_entries、cache_dependencies、cache_stats；大响应按内容哈希保存到文件仓库，SQLite 保存元数据。
+    depends_on:
+
+    status: planned
+    execution_order: 1
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 进程重启后安全缓存仍可命中。
+      - 文件或策略变化后依赖缓存准确失效。
+      - 任何失败、部分流式或含工具调用的响应不得进入可重放缓存。
+      - 缓存损坏可自动隔离并回源，不影响主流程。
+  -
+    id: R7-W002
+    phase: R7
+    title: 持久化 Context Package Cache
+    objective: 缓存键包含任务、快照、Ranking、Chunking、Budget、Tokenizer、Security、RepoMap 和显式文件。
+    depends_on:
+      - R7-W001
+    status: planned
+    execution_order: 2
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 进程重启后安全缓存仍可命中。
+      - 文件或策略变化后依赖缓存准确失效。
+      - 任何失败、部分流式或含工具调用的响应不得进入可重放缓存。
+      - 缓存损坏可自动隔离并回源，不影响主流程。
+  -
+    id: R7-W003
+    phase: R7
+    title: Parse/Search/RepoMap Cache
+    objective: 解析缓存绑定 content_hash+parser；搜索缓存绑定 snapshot+query+source versions；RepoMap 绑定快照和预算。
+    depends_on:
+      - R7-W002
+    status: planned
+    execution_order: 3
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 进程重启后安全缓存仍可命中。
+      - 文件或策略变化后依赖缓存准确失效。
+      - 任何失败、部分流式或含工具调用的响应不得进入可重放缓存。
+      - 缓存损坏可自动隔离并回源，不影响主流程。
+  -
+    id: R7-W004
+    phase: R7
+    title: Raw Exact Model Cache
+    objective: 保存真实 status、必要 headers、body、usage、provider、model、TTL；只缓存完整成功响应。
+    depends_on:
+      - R7-W003
+    status: planned
+    execution_order: 4
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 进程重启后安全缓存仍可命中。
+      - 文件或策略变化后依赖缓存准确失效。
+      - 任何失败、部分流式或含工具调用的响应不得进入可重放缓存。
+      - 缓存损坏可自动隔离并回源，不影响主流程。
+  -
+    id: R7-W005
+    phase: R7
+    title: 严格缓存安全分类
+    objective: 有 tools/functions、流式、实时信息、高随机性、无版本元数据或用户 no-cache 时默认禁用。
+    depends_on:
+      - R7-W004
+    status: planned
+    execution_order: 5
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 进程重启后安全缓存仍可命中。
+      - 文件或策略变化后依赖缓存准确失效。
+      - 任何失败、部分流式或含工具调用的响应不得进入可重放缓存。
+      - 缓存损坏可自动隔离并回源，不影响主流程。
+  -
+    id: R7-W006
+    phase: R7
+    title: 淘汰、压缩、修复与并发
+    objective: 实现 LRU/TTL/空间上限、原子写入、校验哈希、损坏隔离和并发事务。
+    depends_on:
+      - R7-W005
+    status: planned
+    execution_order: 6
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 进程重启后安全缓存仍可命中。
+      - 文件或策略变化后依赖缓存准确失效。
+      - 任何失败、部分流式或含工具调用的响应不得进入可重放缓存。
+      - 缓存损坏可自动隔离并回源，不影响主流程。
+  -
+    id: R7-W007
+    phase: R7
+    title: 缓存可解释统计
+    objective: 区分本地计算复用、实际未回源 Token、Provider cached input 和估算节省；不得混为一个数字。
+    depends_on:
+      - R7-W006
+    status: planned
+    execution_order: 7
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 进程重启后安全缓存仍可命中。
+      - 文件或策略变化后依赖缓存准确失效。
+      - 任何失败、部分流式或含工具调用的响应不得进入可重放缓存。
+      - 缓存损坏可自动隔离并回源，不影响主流程。
+  -
+    id: R8-W001
+    phase: R8
+    title: 拆分独立 Gateway 项目
+    objective: 从 Core 移出 Server、Provider、缓存运行实现；建立 CacheHub.Gateway 进程，Core 只保留契约。
+    depends_on:
+
+    status: planned
+    execution_order: 1
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - OpenAI-compatible 非流式与 SSE 客户端均可使用。
+      - 上游状态码、错误体和关键响应头准确传递。
+      - 缓存未命中能够安全回源，命中时完全不调用 Provider。
+      - Gateway 关闭或故障不影响 Context Engine、CLI 和索引。
+  -
+    id: R8-W002
+    phase: R8
+    title: 使用 ASP.NET Core 流式管线
+    objective: 采用 ResponseHeadersRead 转发，限制请求大小，支持取消和背压；避免 HttpListener 原型长期扩展。
+    depends_on:
+      - R8-W001
+    status: planned
+    execution_order: 2
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - OpenAI-compatible 非流式与 SSE 客户端均可使用。
+      - 上游状态码、错误体和关键响应头准确传递。
+      - 缓存未命中能够安全回源，命中时完全不调用 Provider。
+      - Gateway 关闭或故障不影响 Context Engine、CLI 和索引。
+  -
+    id: R8-W003
+    phase: R8
+    title: 实现 SSE 透明转发
+    objective: 逐帧转发 data/event/id/retry；客户端断开后取消上游；流式默认不进入响应缓存。
+    depends_on:
+      - R8-W002
+    status: planned
+    execution_order: 3
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - OpenAI-compatible 非流式与 SSE 客户端均可使用。
+      - 上游状态码、错误体和关键响应头准确传递。
+      - 缓存未命中能够安全回源，命中时完全不调用 Provider。
+      - Gateway 关闭或故障不影响 Context Engine、CLI 和索引。
+  -
+    id: R8-W004
+    phase: R8
+    title: 保持真实状态码与响应头
+    objective: SingleFlight 必须共享 status+headers+body；401/429/5xx 不得改写为 200；过滤 hop-by-hop headers。
+    depends_on:
+      - R8-W003
+    status: planned
+    execution_order: 4
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - OpenAI-compatible 非流式与 SSE 客户端均可使用。
+      - 上游状态码、错误体和关键响应头准确传递。
+      - 缓存未命中能够安全回源，命中时完全不调用 Provider。
+      - Gateway 关闭或故障不影响 Context Engine、CLI 和索引。
+  -
+    id: R8-W005
+    phase: R8
+    title: 本地认证与令牌生命周期
+    objective: 随机令牌可轮换、保存在受限权限文件或系统凭据库；GUI/CLI 自动配置；日志永不输出 Provider Key。
+    depends_on:
+      - R8-W004
+    status: planned
+    execution_order: 5
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - OpenAI-compatible 非流式与 SSE 客户端均可使用。
+      - 上游状态码、错误体和关键响应头准确传递。
+      - 缓存未命中能够安全回源，命中时完全不调用 Provider。
+      - Gateway 关闭或故障不影响 Context Engine、CLI 和索引。
+  -
+    id: R8-W006
+    phase: R8
+    title: Provider Adapter 与模型发现
+    objective: 实现 OpenAI-compatible 基线；/v1/models 携带认证；模型能力、上下文窗口和 Tokenizer 可发现。
+    depends_on:
+      - R8-W005
+    status: planned
+    execution_order: 6
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - OpenAI-compatible 非流式与 SSE 客户端均可使用。
+      - 上游状态码、错误体和关键响应头准确传递。
+      - 缓存未命中能够安全回源，命中时完全不调用 Provider。
+      - Gateway 关闭或故障不影响 Context Engine、CLI 和索引。
+  -
+    id: R8-W007
+    phase: R8
+    title: Provider Router 与 Fallback
+    objective: 支持 Explicit、Fallback、健康检查、429/5xx 重试、超时和熔断；禁止对非幂等工具调用自动跨 Provider 重放。
+    depends_on:
+      - R8-W006
+    status: planned
+    execution_order: 7
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - OpenAI-compatible 非流式与 SSE 客户端均可使用。
+      - 上游状态码、错误体和关键响应头准确传递。
+      - 缓存未命中能够安全回源，命中时完全不调用 Provider。
+      - Gateway 关闭或故障不影响 Context Engine、CLI 和索引。
+  -
+    id: R8-W008
+    phase: R8
+    title: 解析真实 Usage 与费用
+    objective: 解析 chat/responses 的 usage；流式从最终事件提取；实际值与估算值分开，价格表版本化。
+    depends_on:
+      - R8-W007
+    status: planned
+    execution_order: 8
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - OpenAI-compatible 非流式与 SSE 客户端均可使用。
+      - 上游状态码、错误体和关键响应头准确传递。
+      - 缓存未命中能够安全回源，命中时完全不调用 Provider。
+      - Gateway 关闭或故障不影响 Context Engine、CLI 和索引。
+  -
+    id: R8-W009
+    phase: R8
+    title: Gateway 协议与压力测试
+    objective: 覆盖非流式、SSE、取消、慢上游、429、401、5xx、超大请求、并发 SingleFlight 和缓存重启。
+    depends_on:
+      - R8-W008
+    status: planned
+    execution_order: 9
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - OpenAI-compatible 非流式与 SSE 客户端均可使用。
+      - 上游状态码、错误体和关键响应头准确传递。
+      - 缓存未命中能够安全回源，命中时完全不调用 Provider。
+      - Gateway 关闭或故障不影响 Context Engine、CLI 和索引。
+  -
+    id: R9-W001
+    phase: R9
+    title: 定义 Contextual Completion 协议
+    objective: 请求显式包含 workspace_id、task、model、budget 和安全模式；服务构建 Context Package 后再调用 Gateway。
+    depends_on:
+
+    status: planned
+    execution_order: 1
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 一个自研最小客户端可从任务到云端模型完成全链路。
+      - 仅 Gateway、仅 Context、统一工作流三种模式均可独立运行。
+      - 任何工作区绑定都由显式元数据或唯一映射产生。
+      - 通用 Skill 不包含对 Codex、Claude Code 等私有实现的强依赖。
+  -
+    id: R9-W002
+    phase: R9
+    title: 定义 Gateway 元数据契约
+    objective: 支持 context_package_id、snapshot_id、dirty_state_hash、client_id；无元数据时按普通 Gateway 请求处理。
+    depends_on:
+      - R9-W001
+    status: planned
+    execution_order: 2
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 一个自研最小客户端可从任务到云端模型完成全链路。
+      - 仅 Gateway、仅 Context、统一工作流三种模式均可独立运行。
+      - 任何工作区绑定都由显式元数据或唯一映射产生。
+      - 通用 Skill 不包含对 Codex、Claude Code 等私有实现的强依赖。
+  -
+    id: R9-W003
+    phase: R9
+    title: 实现 Prompt Assembly Service
+    objective: 只拼装明确模板和 Context Payload，不猜测 Agent 私有提示；允许客户端选择 Manifest-only、Payload 或自动请求。
+    depends_on:
+      - R9-W002
+    status: planned
+    execution_order: 3
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 一个自研最小客户端可从任务到云端模型完成全链路。
+      - 仅 Gateway、仅 Context、统一工作流三种模式均可独立运行。
+      - 任何工作区绑定都由显式元数据或唯一映射产生。
+      - 通用 Skill 不包含对 Codex、Claude Code 等私有实现的强依赖。
+  -
+    id: R9-W004
+    phase: R9
+    title: 禁止隐式工作区猜测
+    objective: 路径无法唯一映射时返回 WORKSPACE_NOT_UNIQUE；不得使用最近工作区或任意默认项目。
+    depends_on:
+      - R9-W003
+    status: planned
+    execution_order: 4
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 一个自研最小客户端可从任务到云端模型完成全链路。
+      - 仅 Gateway、仅 Context、统一工作流三种模式均可独立运行。
+      - 任何工作区绑定都由显式元数据或唯一映射产生。
+      - 通用 Skill 不包含对 Codex、Claude Code 等私有实现的强依赖。
+  -
+    id: R9-W005
+    phase: R9
+    title: Integration Kit V2
+    objective: 更新 Universal Skill、CLI/API 教程、Base URL 教程、自动配置、备份、验证和回滚。
+    depends_on:
+      - R9-W004
+    status: planned
+    execution_order: 5
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 一个自研最小客户端可从任务到云端模型完成全链路。
+      - 仅 Gateway、仅 Context、统一工作流三种模式均可独立运行。
+      - 任何工作区绑定都由显式元数据或唯一映射产生。
+      - 通用 Skill 不包含对 Codex、Claude Code 等私有实现的强依赖。
+  -
+    id: R9-W006
+    phase: R9
+    title: 反馈与全生命周期统计
+    objective: 关联 Context Build、Expand、Gateway 请求、额外文件读取、补丁和测试结果；统计整个任务 Token。
+    depends_on:
+      - R9-W005
+    status: planned
+    execution_order: 6
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 一个自研最小客户端可从任务到云端模型完成全链路。
+      - 仅 Gateway、仅 Context、统一工作流三种模式均可独立运行。
+      - 任何工作区绑定都由显式元数据或唯一映射产生。
+      - 通用 Skill 不包含对 Codex、Claude Code 等私有实现的强依赖。
+  -
+    id: R9-W007
+    phase: R9
+    title: 通用客户端示例
+    objective: "提供 Shell、C#、TypeScript、Python 和一个最小 Agent 示例；示例只依赖公共协议。"
+    depends_on:
+      - R9-W006
+    status: planned
+    execution_order: 7
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 一个自研最小客户端可从任务到云端模型完成全链路。
+      - 仅 Gateway、仅 Context、统一工作流三种模式均可独立运行。
+      - 任何工作区绑定都由显式元数据或唯一映射产生。
+      - 通用 Skill 不包含对 Codex、Claude Code 等私有实现的强依赖。
+  -
+    id: R10-W001
+    phase: R10
+    title: 冻结语义模式与安全边界
+    objective: 定义 Off、Reference、StrictExperimental；默认 Reference，只增加候选或提示，不直接返回历史模型回答。
+    depends_on:
+
+    status: planned
+    execution_order: 1
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 关闭 Semantic 时核心功能和结果不受影响。
+      - 语义命中不得绕过工作区版本和安全策略。
+      - 默认模式不直接返回旧模型回答。
+      - 只有真实评测证明有收益后才在 GUI 中推荐开启。
+  -
+    id: R10-W002
+    phase: R10
+    title: 实现可插拔 Embedding Provider
+    objective: 支持本地模型优先和可选远程模型；记录 provider、model、dimensions、version、normalization。
+    depends_on:
+      - R10-W001
+    status: planned
+    execution_order: 2
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 关闭 Semantic 时核心功能和结果不受影响。
+      - 语义命中不得绕过工作区版本和安全策略。
+      - 默认模式不直接返回旧模型回答。
+      - 只有真实评测证明有收益后才在 GUI 中推荐开启。
+  -
+    id: R10-W003
+    phase: R10
+    title: 持久化向量存储
+    objective: 初期可用 SQLite BLOB+线性检索；接口允许后续 HNSW；所有向量绑定 workspace、snapshot 和 content hash。
+    depends_on:
+      - R10-W002
+    status: planned
+    execution_order: 3
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 关闭 Semantic 时核心功能和结果不受影响。
+      - 语义命中不得绕过工作区版本和安全策略。
+      - 默认模式不直接返回旧模型回答。
+      - 只有真实评测证明有收益后才在 GUI 中推荐开启。
+  -
+    id: R10-W004
+    phase: R10
+    title: 建立语义对象生命周期
+    objective: 为 Task、Error、ContextPackage、Feedback 建立向量；源码变化后按依赖失效或降权。
+    depends_on:
+      - R10-W003
+    status: planned
+    execution_order: 4
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 关闭 Semantic 时核心功能和结果不受影响。
+      - 语义命中不得绕过工作区版本和安全策略。
+      - 默认模式不直接返回旧模型回答。
+      - 只有真实评测证明有收益后才在 GUI 中推荐开启。
+  -
+    id: R10-W005
+    phase: R10
+    title: 语义召回接入 Ranking
+    objective: Semantic 只作为独立特征，设置上限，不能压过显式路径、精确符号和 Git Diff。
+    depends_on:
+      - R10-W004
+    status: planned
+    execution_order: 5
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 关闭 Semantic 时核心功能和结果不受影响。
+      - 语义命中不得绕过工作区版本和安全策略。
+      - 默认模式不直接返回旧模型回答。
+      - 只有真实评测证明有收益后才在 GUI 中推荐开启。
+  -
+    id: R10-W006
+    phase: R10
+    title: 可解释性与隐私
+    objective: 显示相似来源、相似度、版本和是否跨工作区；默认禁止跨工作区语义共享。
+    depends_on:
+      - R10-W005
+    status: planned
+    execution_order: 6
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 关闭 Semantic 时核心功能和结果不受影响。
+      - 语义命中不得绕过工作区版本和安全策略。
+      - 默认模式不直接返回旧模型回答。
+      - 只有真实评测证明有收益后才在 GUI 中推荐开启。
+  -
+    id: R10-W007
+    phase: R10
+    title: 语义增益实验
+    objective: 比较启用/关闭语义后的 Recall、Precision、任务成功率和 Token；无正向收益时保持默认关闭。
+    depends_on:
+      - R10-W006
+    status: planned
+    execution_order: 7
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 关闭 Semantic 时核心功能和结果不受影响。
+      - 语义命中不得绕过工作区版本和安全策略。
+      - 默认模式不直接返回旧模型回答。
+      - 只有真实评测证明有收益后才在 GUI 中推荐开启。
+  -
+    id: R11-W001
+    phase: R11
+    title: 集中式 SecurityApplicationService
+    objective: CLI、API、Payload、Export、Gateway 元数据统一调用；禁止各模块自行解释策略。
+    depends_on:
+
+    status: planned
+    execution_order: 1
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 任何外发出口都无法在没有安全决定的情况下输出源码。
+      - 本地恶意网页或仓库内容不能调用 API 读取任意文件。
+      - Offline 模式下网络层无法发送工作区内容。
+      - 安全测试失败时禁止发布。
+  -
+    id: R11-W002
+    phase: R11
+    title: 出口强制检查
+    objective: PayloadGenerator、Markdown/File Export、Contextual Completion 在发送/导出前强制扫描；未传 Enforcer 不再等于允许。
+    depends_on:
+      - R11-W001
+    status: planned
+    execution_order: 2
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 任何外发出口都无法在没有安全决定的情况下输出源码。
+      - 本地恶意网页或仓库内容不能调用 API 读取任意文件。
+      - Offline 模式下网络层无法发送工作区内容。
+      - 安全测试失败时禁止发布。
+  -
+    id: R11-W003
+    phase: R11
+    title: Local API 与 GUI 加固
+    objective: Bearer Token、Host 校验、CSP、SameSite、禁止未转义 innerHTML、路径只接受 workspace-relative。
+    depends_on:
+      - R11-W002
+    status: planned
+    execution_order: 3
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 任何外发出口都无法在没有安全决定的情况下输出源码。
+      - 本地恶意网页或仓库内容不能调用 API 读取任意文件。
+      - Offline 模式下网络层无法发送工作区内容。
+      - 安全测试失败时禁止发布。
+  -
+    id: R11-W004
+    phase: R11
+    title: 不可信仓库内容标记
+    objective: README、AGENTS.md、注释和检索文本在 Context Payload 中标记为 untrusted data，不能覆盖系统安全规则。
+    depends_on:
+      - R11-W003
+    status: planned
+    execution_order: 4
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 任何外发出口都无法在没有安全决定的情况下输出源码。
+      - 本地恶意网页或仓库内容不能调用 API 读取任意文件。
+      - Offline 模式下网络层无法发送工作区内容。
+      - 安全测试失败时禁止发布。
+  -
+    id: R11-W005
+    phase: R11
+    title: 秘密扫描与外发审计
+    objective: 扩展规则、允许自定义正则；审计只记录元数据和范围，默认不保存完整敏感正文。
+    depends_on:
+      - R11-W004
+    status: planned
+    execution_order: 5
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 任何外发出口都无法在没有安全决定的情况下输出源码。
+      - 本地恶意网页或仓库内容不能调用 API 读取任意文件。
+      - Offline 模式下网络层无法发送工作区内容。
+      - 安全测试失败时禁止发布。
+  -
+    id: R11-W006
+    phase: R11
+    title: 审批与计划/执行分离
+    objective: 导出受限文件、访问工作区外路径、执行仓库脚本和 Git 写操作必须有 ApprovalId。
+    depends_on:
+      - R11-W005
+    status: planned
+    execution_order: 6
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 任何外发出口都无法在没有安全决定的情况下输出源码。
+      - 本地恶意网页或仓库内容不能调用 API 读取任意文件。
+      - Offline 模式下网络层无法发送工作区内容。
+      - 安全测试失败时禁止发布。
+  -
+    id: R11-W007
+    phase: R11
+    title: 攻击面测试
+    objective: 覆盖路径穿越、symlink、DNS rebinding、XSS、恶意文件名、提示注入、超大文件和缓存投毒。
+    depends_on:
+      - R11-W006
+    status: planned
+    execution_order: 7
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 任何外发出口都无法在没有安全决定的情况下输出源码。
+      - 本地恶意网页或仓库内容不能调用 API 读取任意文件。
+      - Offline 模式下网络层无法发送工作区内容。
+      - 安全测试失败时禁止发布。
+  -
+    id: R12-W001
+    phase: R12
+    title: 真实仓库夹具与重置器
+    objective: 每个任务固定 commit/dirty state；运行前清理构建产物和缓存；支持本地镜像避免网络不稳定。
+    depends_on:
+
+    status: planned
+    execution_order: 1
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - Benchmark 不再包含模拟成功、硬编码 Token 或 Ground Truth 直接选中。
+      - Relevant File Recall@10 ≥ 90% 或给出明确未达标报告。
+      - Test Pass Rate 不低于基线 95%，平均输入 Token 降低目标 ≥20%。
+      - 任何阶段门调整必须通过 ADR 记录，不能因结果不好静默降低标准。
+  -
+    id: R12-W002
+    phase: R12
+    title: Ground Truth 管理
+    objective: 标注 Required、Helpful、Distractor、Symbols、Tests；保存标注来源和复核人。
+    depends_on:
+      - R12-W001
+    status: planned
+    execution_order: 2
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - Benchmark 不再包含模拟成功、硬编码 Token 或 Ground Truth 直接选中。
+      - Relevant File Recall@10 ≥ 90% 或给出明确未达标报告。
+      - Test Pass Rate 不低于基线 95%，平均输入 Token 降低目标 ≥20%。
+      - 任何阶段门调整必须通过 ADR 记录，不能因结果不好静默降低标准。
+  -
+    id: R12-W003
+    phase: R12
+    title: 基线 Runner
+    objective: 让 Agent 使用原生搜索/读取工具，记录每次读文件、Token、轮数、补丁和测试。
+    depends_on:
+      - R12-W002
+    status: planned
+    execution_order: 3
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - Benchmark 不再包含模拟成功、硬编码 Token 或 Ground Truth 直接选中。
+      - Relevant File Recall@10 ≥ 90% 或给出明确未达标报告。
+      - Test Pass Rate 不低于基线 95%，平均输入 Token 降低目标 ≥20%。
+      - 任何阶段门调整必须通过 ADR 记录，不能因结果不好静默降低标准。
+  -
+    id: R12-W004
+    phase: R12
+    title: CacheHub Runner
+    objective: 强制在 Prompt 前调用 Context Build，允许 Expand，记录 Context Package 和实际额外读取。
+    depends_on:
+      - R12-W003
+    status: planned
+    execution_order: 4
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - Benchmark 不再包含模拟成功、硬编码 Token 或 Ground Truth 直接选中。
+      - Relevant File Recall@10 ≥ 90% 或给出明确未达标报告。
+      - Test Pass Rate 不低于基线 95%，平均输入 Token 降低目标 ≥20%。
+      - 任何阶段门调整必须通过 ADR 记录，不能因结果不好静默降低标准。
+  -
+    id: R12-W005
+    phase: R12
+    title: 真实任务执行与测试
+    objective: 任务成功必须由补丁应用和项目测试验证，不能硬编码 success 或直接使用 Ground Truth 作为选择结果。
+    depends_on:
+      - R12-W004
+    status: planned
+    execution_order: 5
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - Benchmark 不再包含模拟成功、硬编码 Token 或 Ground Truth 直接选中。
+      - Relevant File Recall@10 ≥ 90% 或给出明确未达标报告。
+      - Test Pass Rate 不低于基线 95%，平均输入 Token 降低目标 ≥20%。
+      - 任何阶段门调整必须通过 ADR 记录，不能因结果不好静默降低标准。
+  -
+    id: R12-W006
+    phase: R12
+    title: 重复运行与统计
+    objective: 每任务多次运行，报告均值、方差、成功率、最坏结果；模型、参数和权限固定。
+    depends_on:
+      - R12-W005
+    status: planned
+    execution_order: 6
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - Benchmark 不再包含模拟成功、硬编码 Token 或 Ground Truth 直接选中。
+      - Relevant File Recall@10 ≥ 90% 或给出明确未达标报告。
+      - Test Pass Rate 不低于基线 95%，平均输入 Token 降低目标 ≥20%。
+      - 任何阶段门调整必须通过 ADR 记录，不能因结果不好静默降低标准。
+  -
+    id: R12-W007
+    phase: R12
+    title: 阶段门与失败归因
+    objective: 计算 Recall@K、Precision、Missing/Stale、Test Pass、全生命周期 Token；失败分为检索、压缩、Agent、模型和环境。
+    depends_on:
+      - R12-W006
+    status: planned
+    execution_order: 7
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - Benchmark 不再包含模拟成功、硬编码 Token 或 Ground Truth 直接选中。
+      - Relevant File Recall@10 ≥ 90% 或给出明确未达标报告。
+      - Test Pass Rate 不低于基线 95%，平均输入 Token 降低目标 ≥20%。
+      - 任何阶段门调整必须通过 ADR 记录，不能因结果不好静默降低标准。
+  -
+    id: R12-W008
+    phase: R12
+    title: 持续回归与公开报告
+    objective: 每次 Ranking/Chunking/Tokenizer 变更运行核心集合；报告带 commit、配置和原始证据。
+    depends_on:
+      - R12-W007
+    status: planned
+    execution_order: 8
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - Benchmark 不再包含模拟成功、硬编码 Token 或 Ground Truth 直接选中。
+      - Relevant File Recall@10 ≥ 90% 或给出明确未达标报告。
+      - Test Pass Rate 不低于基线 95%，平均输入 Token 降低目标 ≥20%。
+      - 任何阶段门调整必须通过 ADR 记录，不能因结果不好静默降低标准。
+  -
+    id: R13-W001
+    phase: R13
+    title: GUI 核心工作流
+    objective: 导入/Clone→索引→Context Build→查看原因→配置客户端→验证；每步显示真实状态和失败恢复。
+    depends_on:
+
+    status: planned
+    execution_order: 1
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 新用户可在五分钟内完成导入、索引、构建 Context 和接入验证。
+      - 升级/卸载不会修改源码或 Git 历史。
+      - GUI 展示的能力与 Capability Discovery 一致。
+      - 发布包通过干净机器安装、升级、卸载和回滚测试。
+  -
+    id: R13-W002
+    phase: R13
+    title: 后台任务中心
+    objective: 索引、Clone、Benchmark、缓存清理可取消、重试和恢复；应用重启后状态一致。
+    depends_on:
+      - R13-W001
+    status: planned
+    execution_order: 2
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 新用户可在五分钟内完成导入、索引、构建 Context 和接入验证。
+      - 升级/卸载不会修改源码或 Git 历史。
+      - GUI 展示的能力与 Capability Discovery 一致。
+      - 发布包通过干净机器安装、升级、卸载和回滚测试。
+  -
+    id: R13-W003
+    phase: R13
+    title: Gateway 与 Provider 页面
+    objective: 配置 Base URL、凭据引用、模型、Fallback、缓存策略；密钥不进入日志和数据库明文。
+    depends_on:
+      - R13-W002
+    status: planned
+    execution_order: 3
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 新用户可在五分钟内完成导入、索引、构建 Context 和接入验证。
+      - 升级/卸载不会修改源码或 Git 历史。
+      - GUI 展示的能力与 Capability Discovery 一致。
+      - 发布包通过干净机器安装、升级、卸载和回滚测试。
+  -
+    id: R13-W004
+    phase: R13
+    title: 可解释统计面板
+    objective: 分别展示 Context 压缩、Raw Exact 命中、Provider cached input、本地解析复用和估算费用。
+    depends_on:
+      - R13-W003
+    status: planned
+    execution_order: 4
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 新用户可在五分钟内完成导入、索引、构建 Context 和接入验证。
+      - 升级/卸载不会修改源码或 Git 历史。
+      - GUI 展示的能力与 Capability Discovery 一致。
+      - 发布包通过干净机器安装、升级、卸载和回滚测试。
+  -
+    id: R13-W005
+    phase: R13
+    title: 安装与自动接入
+    objective: Windows 首发安装器；检测 .NET/单文件包；生成 Agent 接入教程和验证命令，不直接破坏第三方配置。
+    depends_on:
+      - R13-W004
+    status: planned
+    execution_order: 5
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 新用户可在五分钟内完成导入、索引、构建 Context 和接入验证。
+      - 升级/卸载不会修改源码或 Git 历史。
+      - GUI 展示的能力与 Capability Discovery 一致。
+      - 发布包通过干净机器安装、升级、卸载和回滚测试。
+  -
+    id: R13-W006
+    phase: R13
+    title: 升级、迁移与回滚
+    objective: 数据库备份、Schema 迁移、旧缓存重建、版本降级说明和安装失败回滚。
+    depends_on:
+      - R13-W005
+    status: planned
+    execution_order: 6
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 新用户可在五分钟内完成导入、索引、构建 Context 和接入验证。
+      - 升级/卸载不会修改源码或 Git 历史。
+      - GUI 展示的能力与 Capability Discovery 一致。
+      - 发布包通过干净机器安装、升级、卸载和回滚测试。
+  -
+    id: R13-W007
+    phase: R13
+    title: 诊断包与隐私
+    objective: 导出脱敏日志、版本、配置摘要、任务状态；默认不包含源码、Prompt 和 Key。
+    depends_on:
+      - R13-W006
+    status: planned
+    execution_order: 7
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 新用户可在五分钟内完成导入、索引、构建 Context 和接入验证。
+      - 升级/卸载不会修改源码或 Git 历史。
+      - GUI 展示的能力与 Capability Discovery 一致。
+      - 发布包通过干净机器安装、升级、卸载和回滚测试。
+  -
+    id: R13-W008
+    phase: R13
+    title: 跨平台与发布矩阵
+    objective: Windows→macOS→Linux；验证路径大小写、权限、symlink、单文件发布和服务生命周期。
+    depends_on:
+      - R13-W007
+    status: planned
+    execution_order: 8
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 新用户可在五分钟内完成导入、索引、构建 Context 和接入验证。
+      - 升级/卸载不会修改源码或 Git 历史。
+      - GUI 展示的能力与 Capability Discovery 一致。
+      - 发布包通过干净机器安装、升级、卸载和回滚测试。
+  -
+    id: R14-W001
+    phase: R14
+    title: 解析器插件契约
+    objective: ICodeParser 输出符号、导入、关系、Anchor 和置信度；ParserId/Version 进入缓存键。
+    depends_on:
+
+    status: planned
+    execution_order: 1
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - Regex/Text 降级路径始终可用。
+      - Tree-sitter 启发式关系与 LSP 精确关系明确区分。
+      - 语言服务失败不得阻断索引和 Context Build。
+  -
+    id: R14-W002
+    phase: R14
+    title: Tree-sitter 首批三语言
+    objective: "C#、TypeScript、Python；语法错误可部分解析，失败回退 Regex/Text。"
+    depends_on:
+      - R14-W001
+    status: planned
+    execution_order: 2
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - Regex/Text 降级路径始终可用。
+      - Tree-sitter 启发式关系与 LSP 精确关系明确区分。
+      - 语言服务失败不得阻断索引和 Context Build。
+  -
+    id: R14-W003
+    phase: R14
+    title: 结构 Repo Map
+    objective: 按组件、文件和符号构建预算受限图；排名来自任务相关性和图中心性。
+    depends_on:
+      - R14-W002
+    status: planned
+    execution_order: 3
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - Regex/Text 降级路径始终可用。
+      - Tree-sitter 启发式关系与 LSP 精确关系明确区分。
+      - 语言服务失败不得阻断索引和 Context Build。
+  -
+    id: R14-W004
+    phase: R14
+    title: "Roslyn C# 深度语义"
+    objective: 作为可选插件提供 definition/reference/type/call hierarchy，不成为通用核心强依赖。
+    depends_on:
+      - R14-W003
+    status: planned
+    execution_order: 4
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - Regex/Text 降级路径始终可用。
+      - Tree-sitter 启发式关系与 LSP 精确关系明确区分。
+      - 语言服务失败不得阻断索引和 Context Build。
+  -
+    id: R14-W005
+    phase: R14
+    title: LSP 沙箱
+    objective: 每工作区授权、独立进程、资源限制、明确可能执行依赖恢复；崩溃隔离。
+    depends_on:
+      - R14-W004
+    status: planned
+    execution_order: 5
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - Regex/Text 降级路径始终可用。
+      - Tree-sitter 启发式关系与 LSP 精确关系明确区分。
+      - 语言服务失败不得阻断索引和 Context Build。
+  -
+    id: R14-W006
+    phase: R14
+    title: 语言增益 Benchmark
+    objective: 逐语言测量 Recall、精度、时间、内存和安全风险；无收益插件不默认启用。
+    depends_on:
+      - R14-W005
+    status: planned
+    execution_order: 6
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - Regex/Text 降级路径始终可用。
+      - Tree-sitter 启发式关系与 LSP 精确关系明确区分。
+      - 语言服务失败不得阻断索引和 Context Build。
+  -
+    id: R15-W001
+    phase: R15
+    title: 插件权限与签名
+    objective: 插件声明读写、网络、进程权限；默认隔离和禁用未签名插件。
+    depends_on:
+
+    status: planned
+    execution_order: 1
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 核心本地版在没有企业服务时仍完整可用。
+      - 团队功能不允许跨工作区或租户泄漏。
+  -
+    id: R15-W002
+    phase: R15
+    title: 团队共享索引
+    objective: 共享内容寻址对象和快照元数据；工作区权限、租户隔离和版本冲突处理。
+    depends_on:
+      - R15-W001
+    status: planned
+    execution_order: 2
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 核心本地版在没有企业服务时仍完整可用。
+      - 团队功能不允许跨工作区或租户泄漏。
+  -
+    id: R15-W003
+    phase: R15
+    title: 企业策略与内网部署
+    objective: 中央策略只能收紧本地安全，不允许放宽；支持无公网 Provider。
+    depends_on:
+      - R15-W002
+    status: planned
+    execution_order: 3
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 核心本地版在没有企业服务时仍完整可用。
+      - 团队功能不允许跨工作区或租户泄漏。
+  -
+    id: R15-W004
+    phase: R15
+    title: 多设备同步与审计
+    objective: 同步 Manifest/索引元数据时默认不传源码；审计可验证、可保留期限。
+    depends_on:
+      - R15-W003
+    status: planned
+    execution_order: 4
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 核心本地版在没有企业服务时仍完整可用。
+      - 团队功能不允许跨工作区或租户泄漏。
+  -
+    id: R15-W005
+    phase: R15
+    title: 插件市场与评测平台
+    objective: 所有插件必须声明兼容版本、权限和 Benchmark 证据。
+    depends_on:
+      - R15-W004
+    status: planned
+    execution_order: 5
+    required_actions:
+      - 读取相关现有代码、测试、协议和数据库结构，记录当前行为。
+      - 先新增或更新能复现缺口的测试，确认修复前失败或不足。
+      - 使用最小变更完成实现，禁止顺带重构无关模块。
+      - 运行目标单元测试、相关集成测试和完整测试集。
+      - 更新 Capability、README、AI_DEV_STATE 和必要 ADR/SPEC。
+      - 独立提交 Git，并记录 commit SHA 与验证证据。
+    required_evidence:
+      - baseline_build
+      - baseline_tests
+      - changed_files
+      - new_or_updated_tests
+      - final_build
+      - final_tests
+      - security_or_performance_notes
+      - commit_sha
+    forbidden:
+      - 使用模拟成功替代真实主链
+      - 删除测试或降低断言以通过
+      - 跨阶段混入无关功能
+      - 未更新状态就宣称完成
+    acceptance:
+      - 核心本地版在没有企业服务时仍完整可用。
+      - 团队功能不允许跨工作区或租户泄漏。

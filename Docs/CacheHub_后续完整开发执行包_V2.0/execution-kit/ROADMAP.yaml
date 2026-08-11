@@ -1,0 +1,253 @@
+schema_version: 2
+project: CacheHub
+product_name: AI_KV / CacheHub
+baseline:
+  repository: chenfengyimei/CacheHub
+  branch: main
+  commit: ca0896ec5e39acaf670af614fc9e3328d5fbe524
+  date: 2026-08-07
+  current_phase: R3-CORE-COMPLETE
+target: Local code knowledge base + precise context compression + version-safe exact cache + optional semantic reference + cloud model API fallback
+rules:
+  one_work_item_at_a_time: true
+  one_commit_per_work_item_minimum: true
+  continue_after_commit: true
+  no_stage_completion_without_gate: true
+  no_destructive_git_commands: true
+phases:
+  -
+    id: R4
+    name: 知识召回主链闭环
+    purpose: 让已经写入 SQLite/FTS5/符号/导入/关系表的数据真正参与 Context Build，解决“数据库里有知识、实际构建却不用知识”的核心断层。
+    dependencies:
+      - R0-R3 已完成
+      - 数据库迁移 1-8 可用
+      - 全量索引与 Context Package 基础管线可运行
+    task_ids:
+      - R4-W001
+      - R4-W002
+      - R4-W003
+      - R4-W004
+      - R4-W005
+      - R4-W006
+      - R4-W007
+      - R4-W008
+    gate:
+      - CLI 和 Local API 对同一输入返回相同的候选集合、排序和 Manifest。
+      - 模糊任务不依赖显式文件路径，也能通过 FTS 或符号命中目标文件。
+      - SelectedFile.Reasons 可追踪到实际数据库证据。
+      - FTS、符号、关系任一模块关闭时能够明确降级，不得静默伪装为成功。
+  -
+    id: R5
+    name: 精准上下文压缩与 Token 预算
+    purpose: 把“选中文件”升级为“选中真正相关的代码范围”，确保 Manifest、Payload 和 Token 预算使用同一不可变计划。
+    dependencies:
+      - R4 召回证据和 LineAnchor 可用
+    task_ids:
+      - R5-W001
+      - R5-W002
+      - R5-W003
+      - R5-W004
+      - R5-W005
+      - R5-W006
+      - R5-W007
+      - R5-W008
+    gate:
+      - Chunks 模式必须优先围绕 Anchor，不得无理由从第 1 行开始。
+      - Payload 实际估算不得超过 ContextHardLimit。
+      - Manifest 记录的范围与导出的代码逐行一致。
+      - 同一快照、任务和策略版本重复构建结果稳定。
+  -
+    id: R6
+    name: 增量索引、快照与失效正确性
+    purpose: 修复当前 refresh 清空整个 FTS 快照等问题，使工作区变化后索引与缓存能够准确、原子地更新。
+    dependencies:
+      - R4 查询服务稳定
+      - R5 PayloadPlan 版本字段冻结
+    task_ids:
+      - R6-W001
+      - R6-W002
+      - R6-W003
+      - R6-W004
+      - R6-W005
+      - R6-W006
+      - R6-W007
+      - R6-W008
+    gate:
+      - 修改任意单文件后，未变化文件仍可被 FTS 搜索。
+      - Building Snapshot 失败时旧 Active Snapshot 保持完整可用。
+      - Verify 与 Build 使用完全一致的忽略范围。
+      - 工作区内容变化后，不允许复用旧 Context Package 或模型响应缓存。
+  -
+    id: R7
+    name: 持久化缓存与版本安全精确缓存
+    purpose: 把当前进程内 Dictionary 原型升级为可持久化、可失效、可审计的多层缓存。
+    dependencies:
+      - R6 快照和失效语义稳定
+    task_ids:
+      - R7-W001
+      - R7-W002
+      - R7-W003
+      - R7-W004
+      - R7-W005
+      - R7-W006
+      - R7-W007
+    gate:
+      - 进程重启后安全缓存仍可命中。
+      - 文件或策略变化后依赖缓存准确失效。
+      - 任何失败、部分流式或含工具调用的响应不得进入可重放缓存。
+      - 缓存损坏可自动隔离并回源，不影响主流程。
+  -
+    id: R8
+    name: 生产级 Gateway 与云端回源
+    purpose: 完成 OpenAI-compatible 请求转发、SSE、状态码、认证、Provider 路由、真实 Usage 和安全回源。
+    dependencies:
+      - R7 Raw Exact Cache 可用
+    task_ids:
+      - R8-W001
+      - R8-W002
+      - R8-W003
+      - R8-W004
+      - R8-W005
+      - R8-W006
+      - R8-W007
+      - R8-W008
+      - R8-W009
+    gate:
+      - OpenAI-compatible 非流式与 SSE 客户端均可使用。
+      - 上游状态码、错误体和关键响应头准确传递。
+      - 缓存未命中能够安全回源，命中时完全不调用 Provider。
+      - Gateway 关闭或故障不影响 Context Engine、CLI 和索引。
+  -
+    id: R9
+    name: 上下文与模型调用统一工作流
+    purpose: 把 Context Engine 与 Gateway 从两条独立链连接成可由 Agent 主动调用的通用工作流，同时保持模块可独立使用。
+    dependencies:
+      - R5 Context Package 稳定
+      - R8 Gateway 稳定
+    task_ids:
+      - R9-W001
+      - R9-W002
+      - R9-W003
+      - R9-W004
+      - R9-W005
+      - R9-W006
+      - R9-W007
+    gate:
+      - 一个自研最小客户端可从任务到云端模型完成全链路。
+      - 仅 Gateway、仅 Context、统一工作流三种模式均可独立运行。
+      - 任何工作区绑定都由显式元数据或唯一映射产生。
+      - 通用 Skill 不包含对 Codex、Claude Code 等私有实现的强依赖。
+  -
+    id: R10
+    name: 语义参考缓存与本地向量检索
+    purpose: 增加相似任务、错误和历史 Context Package 的辅助召回；默认不把语义相似旧答案直接重放。
+    dependencies:
+      - R4-R6 确定性召回可作为基线
+      - R11 Benchmark 框架至少可执行检索评测
+    task_ids:
+      - R10-W001
+      - R10-W002
+      - R10-W003
+      - R10-W004
+      - R10-W005
+      - R10-W006
+      - R10-W007
+    gate:
+      - 关闭 Semantic 时核心功能和结果不受影响。
+      - 语义命中不得绕过工作区版本和安全策略。
+      - 默认模式不直接返回旧模型回答。
+      - 只有真实评测证明有收益后才在 GUI 中推荐开启。
+  -
+    id: R11
+    name: 安全策略与出口强制执行
+    purpose: 确保所有代码读取、Payload 导出、统一工作流和 Gateway 都遵守同一安全策略。
+    dependencies:
+      - 可与 R4-R10 并行，但发布门必须在其后
+    task_ids:
+      - R11-W001
+      - R11-W002
+      - R11-W003
+      - R11-W004
+      - R11-W005
+      - R11-W006
+      - R11-W007
+    gate:
+      - 任何外发出口都无法在没有安全决定的情况下输出源码。
+      - 本地恶意网页或仓库内容不能调用 API 读取任意文件。
+      - Offline 模式下网络层无法发送工作区内容。
+      - 安全测试失败时禁止发布。
+  -
+    id: R12
+    name: 真实 Benchmark、阶段门与质量闭环
+    purpose: 用真实 Context Engine、真实 Agent/客户端、真实补丁和测试证明产品是否达到 Token 优化目标。
+    dependencies:
+      - R4-R6 至少完成
+      - R9 统一工作流可选
+    task_ids:
+      - R12-W001
+      - R12-W002
+      - R12-W003
+      - R12-W004
+      - R12-W005
+      - R12-W006
+      - R12-W007
+      - R12-W008
+    gate:
+      - Benchmark 不再包含模拟成功、硬编码 Token 或 Ground Truth 直接选中。
+      - Relevant File Recall@10 ≥ 90% 或给出明确未达标报告。
+      - Test Pass Rate 不低于基线 95%，平均输入 Token 降低目标 ≥20%。
+      - 任何阶段门调整必须通过 ADR 记录，不能因结果不好静默降低标准。
+  -
+    id: R13
+    name: GUI、安装、发布与运维体验
+    purpose: 让普通用户无需命令行完成导入、索引、上下文构建、Gateway 配置、统计、诊断和升级。
+    dependencies:
+      - 核心功能 API 稳定
+      - R11 安全门通过
+    task_ids:
+      - R13-W001
+      - R13-W002
+      - R13-W003
+      - R13-W004
+      - R13-W005
+      - R13-W006
+      - R13-W007
+      - R13-W008
+    gate:
+      - 新用户可在五分钟内完成导入、索引、构建 Context 和接入验证。
+      - 升级/卸载不会修改源码或 Git 历史。
+      - GUI 展示的能力与 Capability Discovery 一致。
+      - 发布包通过干净机器安装、升级、卸载和回滚测试。
+  -
+    id: R14
+    name: Tree-sitter、Roslyn、LSP 与语言智能
+    purpose: 在确定性基础链稳定后提高多语言语法结构和精确定义引用能力。
+    dependencies:
+      - R12 评测框架可衡量增益
+    task_ids:
+      - R14-W001
+      - R14-W002
+      - R14-W003
+      - R14-W004
+      - R14-W005
+      - R14-W006
+    gate:
+      - Regex/Text 降级路径始终可用。
+      - Tree-sitter 启发式关系与 LSP 精确关系明确区分。
+      - 语言服务失败不得阻断索引和 Context Build。
+  -
+    id: R15
+    name: 长期生态与企业模块
+    purpose: 在本地单机产品稳定后扩展团队、内网、插件和策略管理，且不能削弱本地安全基线。
+    dependencies:
+      - 1.0 核心发布质量
+    task_ids:
+      - R15-W001
+      - R15-W002
+      - R15-W003
+      - R15-W004
+      - R15-W005
+    gate:
+      - 核心本地版在没有企业服务时仍完整可用。
+      - 团队功能不允许跨工作区或租户泄漏。
