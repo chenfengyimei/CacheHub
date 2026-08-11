@@ -39,6 +39,16 @@ public sealed class BenchmarkRunRecord
 }
 
 /// <summary>
+/// A fixture workspace that has been imported and indexed through the same
+/// SQLite/FTS pipeline used by the product. Matrix retrieval must never use a
+/// synthetic snapshot or an in-memory file list as its source of truth.
+/// </summary>
+internal sealed record MatrixFixtureWorkspace(
+    Core.Workspaces.Workspace Workspace,
+    IndexSnapshotId SnapshotId,
+    SqliteConnectionFactory Factory);
+
+/// <summary>
 /// Handles `cachehub benchmark` commands.
 /// Uses real ContextEngine to measure actual recall and token reduction.
 /// </summary>
@@ -789,14 +799,30 @@ public static class BenchmarkCommands
 
         Console.Error.WriteLine($"  Tasks: {tasks.Count}" + (language is not null ? $" (lang={language})" : ""));
 
-        // V8-P0-04: Use real ContextEngine for retrieval (blind to Ground Truth)
+        // V8-P0-04: Import and index every fixture with the production SQLite/FTS
+        // pipeline before retrieval. Ground truth remains unavailable to this step.
+        Dictionary<string, MatrixFixtureWorkspace> matrixWorkspaces;
+        try
+        {
+            matrixWorkspaces = PrepareMatrixWorkspaces(repoRoot, tasks);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Matrix setup failed: {ex.Message}");
+            return 1;
+        }
+
         var matrixRunner = new BenchmarkMatrixRunner();
         var result = matrixRunner.RunRetrievalMatrix(
-            task => GetFixtureFiles(repoRoot, task),
-            (task, path) => ReadFixtureFile(repoRoot, task, path),
-            (task, path) => ReadFixtureHash(repoRoot, task, path),
-            task => BuildContextForMatrixTask(repoRoot, task),
-            modelId: "retrieval-matrix",
+            task => GetIndexedMatrixFiles(matrixWorkspaces[task.RepositoryId]),
+            (task, path) => ResolveFileContent(matrixWorkspaces[task.RepositoryId].Workspace.RootPath, path),
+            (task, path) => ResolveFileHash(
+                matrixWorkspaces[task.RepositoryId].Factory,
+                matrixWorkspaces[task.RepositoryId].SnapshotId,
+                path,
+                matrixWorkspaces[task.RepositoryId].Workspace.RootPath),
+            task => BuildContextForMatrixTask(matrixWorkspaces[task.RepositoryId], task),
+            modelId: "sqlite-fts-matrix",
             tasks: tasks);
 
         // Console report
@@ -843,6 +869,106 @@ public static class BenchmarkCommands
             dir = Path.GetDirectoryName(dir);
         }
         return Environment.CurrentDirectory;
+    }
+
+    private static Dictionary<string, MatrixFixtureWorkspace> PrepareMatrixWorkspaces(
+        string repoRoot, IReadOnlyList<BenchmarkTask> tasks)
+    {
+        var appData = new AppDataDirectory();
+        appData.EnsureCreated();
+        var dbPath = appData.GetWorkspaceDatabasePath("main");
+        var factory = new SqliteConnectionFactory(dbPath);
+        var migrationRunner = new MigrationRunner(factory, dbPath,
+        [
+            new Migration0001Initial(),
+            new Migration0002Fts5(),
+            new Migration0003ContextPackages(),
+            new Migration0004Feedback(),
+            new Migration0005ContextPackageDetails(),
+            new Migration0006SchemaV2(),
+            new Migration0007ContextPackageFields(),
+            new Migration0008ContextPackageFk(),
+            new Migration0009PersistentCache(),
+            new Migration0010RelationSourceColumn(),
+            new Migration0011SnapshotGitState(),
+        ]);
+        migrationRunner.Migrate();
+
+        var workspaceRepo = new SqliteWorkspaceRepository(factory);
+        var querySvc = new SqliteIndexQueryService(factory);
+        var prepared = new Dictionary<string, MatrixFixtureWorkspace>(StringComparer.Ordinal);
+
+        foreach (var group in tasks.GroupBy(task => task.RepositoryId, StringComparer.Ordinal))
+        {
+            var task = group.First();
+            var fixtureRoot = GetFixtureRoot(repoRoot, task);
+            if (!Directory.Exists(fixtureRoot))
+                throw new DirectoryNotFoundException($"Fixture not found: {fixtureRoot} (repository {task.RepositoryId})");
+
+            var rootHash = Core.Paths.PathNormalizer.ComputePathHash(Core.Paths.PathNormalizer.Normalize(fixtureRoot));
+            var workspace = workspaceRepo.FindByRootPathHashAsync(rootHash).GetAwaiter().GetResult();
+            if (workspace is null)
+            {
+                workspace = Core.Workspaces.Workspace.CreateValidated($"matrix-{task.RepositoryId}", fixtureRoot);
+                workspaceRepo.InsertAsync(workspace).GetAwaiter().GetResult();
+            }
+
+            // Reuse a previously imported fixture, but always refresh it before
+            // evaluation so the active snapshot reflects the files being scored.
+            var activeSnapshot = querySvc.GetActiveSnapshotWithGitStateAsync(workspace.Id.Value).GetAwaiter().GetResult();
+            var indexArgs = activeSnapshot is null
+                ? new[] { "build", $"--id={workspace.Id.Value}" }
+                : new[] { "refresh", $"--id={workspace.Id.Value}" };
+            var indexExitCode = RunMatrixIndexCommand(indexArgs);
+            if (indexExitCode != 0)
+                throw new InvalidOperationException($"Index {indexArgs[0]} failed for fixture '{task.RepositoryId}' (exit {indexExitCode}).");
+
+            activeSnapshot = querySvc.GetActiveSnapshotWithGitStateAsync(workspace.Id.Value).GetAwaiter().GetResult();
+            if (activeSnapshot is null)
+                throw new InvalidOperationException($"No active SQLite snapshot was produced for fixture '{task.RepositoryId}'.");
+
+            prepared.Add(task.RepositoryId, new MatrixFixtureWorkspace(workspace, activeSnapshot.SnapshotId, factory));
+        }
+
+        return prepared;
+    }
+
+    private static int RunMatrixIndexCommand(string[] args)
+    {
+        // IndexCommands writes progress to stdout. Matrix --json reserves stdout
+        // for exactly one JSON document, so forward index progress to stderr.
+        var originalOut = Console.Out;
+        try
+        {
+            Console.SetOut(Console.Error);
+            return IndexCommands.HandleAsync(args).GetAwaiter().GetResult();
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+        }
+    }
+
+    private static string GetFixtureRoot(string repoRoot, BenchmarkTask task)
+    {
+        var fixturePath = task.RepositoryPath ?? ".";
+        return Path.IsPathRooted(fixturePath)
+            ? fixturePath
+            : Path.Combine(repoRoot, fixturePath);
+    }
+
+    private static List<MatrixFileInfo> GetIndexedMatrixFiles(MatrixFixtureWorkspace fixture)
+    {
+        var querySvc = new SqliteIndexQueryService(fixture.Factory);
+        return querySvc.GetIndexedFilesBySnapshotAsync(fixture.SnapshotId).GetAwaiter().GetResult()
+            .Select(file => new MatrixFileInfo
+            {
+                Path = file.NormalizedPath,
+                NormalizedPath = file.NormalizedPath,
+                Language = file.Language,
+                Size = checked((int)file.Size),
+            })
+            .ToList();
     }
 
     private static List<MatrixFileInfo> GetFixtureFiles(string repoRoot, BenchmarkTask task)
@@ -952,41 +1078,53 @@ public static class BenchmarkCommands
     }
 
     /// <summary>
-    /// V8-P0-04: Builds context for a matrix task using the real ContextEngine.
-    /// This callback is blind to Ground Truth — it only receives the task description and fixture files.
+    /// Builds matrix context from a real active SQLite snapshot. This callback is
+    /// blind to Ground Truth and uses the same recall wiring as product entry points.
     /// </summary>
-    private static Core.Context.ContextPackageManifest BuildContextForMatrixTask(string repoRoot, BenchmarkTask task)
+    private static Core.Context.ContextPackageManifest BuildContextForMatrixTask(
+        MatrixFixtureWorkspace fixture, BenchmarkTask task)
     {
-        var fixturePath = task.RepositoryPath ?? ".";
-        var fullPath = Path.IsPathRooted(fixturePath)
-            ? fixturePath
-            : Path.Combine(repoRoot, fixturePath);
+        var querySvc = new SqliteIndexQueryService(fixture.Factory);
+        var indexedFiles = querySvc.GetIndexedFilesBySnapshotAsync(fixture.SnapshotId).GetAwaiter().GetResult()
+            .Select(file => new Context.Recall.IndexedFileInfo
+            {
+                Path = file.NormalizedPath,
+                NormalizedPath = file.NormalizedPath,
+                Language = file.Language,
+                Size = file.Size,
+                ContentHash = file.ContentHash,
+            }).ToList();
 
-        var files = GetFixtureFiles(repoRoot, task);
-        var indexedFiles = files.Select(f => new Context.Recall.IndexedFileInfo
-        {
-            Path = f.NormalizedPath,
-            NormalizedPath = f.NormalizedPath,
-            Language = f.Language,
-            Size = f.Size,
-            ContentHash = "sha256:pending",
-        }).ToList();
+        var activeSnapshot = querySvc.GetActiveSnapshotWithGitStateAsync(fixture.Workspace.Id.Value).GetAwaiter().GetResult()
+            ?? throw new InvalidOperationException($"Matrix fixture '{fixture.Workspace.Name}' has no active snapshot.");
 
         var tokenizers = Core.Tokens.TokenizerRegistry.CreateWithDefaults();
         var (secPolicy, _) = Core.Security.SecurityPolicyResolver.CreateEnforcer();
         var engine = new ContextEngine(tokenizers, secPolicy, cache: null);
-
-        var snapshotId = Core.Identifiers.IndexSnapshotId.New();
+        var recallCallbacks = new Context.Recall.RecallWiringFactory(fixture.Factory).Create(fixture.SnapshotId);
         var manifest = engine.Build(
             new ContextBuildRequest
             {
-                WorkspaceId = Core.Identifiers.WorkspaceId.New(),
-                IndexSnapshotId = snapshotId,
+                WorkspaceId = fixture.Workspace.Id,
+                IndexSnapshotId = fixture.SnapshotId,
                 Task = task.TaskDescription,
+                SecurityPolicyVersion = secPolicy.Version,
+                RepositoryCommit = activeSnapshot.RepositoryCommit,
+                Branch = activeSnapshot.Branch,
+                IsDirty = activeSnapshot.IsDirty,
+                WorkspaceFingerprint = activeSnapshot.WorkspaceFingerprint,
+                CurrentWorkspaceFingerprint = activeSnapshot.WorkspaceFingerprint,
             },
             () => indexedFiles,
-            path => ReadFixtureFile(repoRoot, task, path),
-            _ => "sha256:pending");
+            path => ResolveFileContent(fixture.Workspace.RootPath, path),
+            path => ResolveFileHash(fixture.Factory, fixture.SnapshotId, path, fixture.Workspace.RootPath),
+            ftsSearch: recallCallbacks.FtsSearch,
+            symbolSearch: recallCallbacks.SymbolSearch,
+            importSearch: recallCallbacks.ImportSearch,
+            symbolSearchDetailed: recallCallbacks.SymbolSearchDetailed,
+            relationSearch: recallCallbacks.RelationSearch,
+            reverseRelationSearch: recallCallbacks.ReverseRelationSearch,
+            fileSymbolsProvider: recallCallbacks.FileSymbolsProvider);
 
         return manifest;
     }
