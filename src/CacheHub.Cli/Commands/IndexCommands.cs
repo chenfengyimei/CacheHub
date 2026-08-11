@@ -634,6 +634,18 @@ public static class IndexCommands
         var newFileCount = activeSnapshot.Value.fileCount + addedCount - deletedCount;
         await UpdateSnapshotFileCountAsync(factory, snapshotId, newFileCount);
 
+        // The refresh must be version-consistent just like a full build.  Do not
+        // activate a snapshot whose files may have been read from different
+        // workspace states while the refresh was in progress.
+        var endRefreshGitState = await new GitStateProvider().CaptureAsync(workspace.RootPath, fingerprintFilter);
+        if (!string.Equals(refreshGitState.Fingerprint, endRefreshGitState.Fingerprint, StringComparison.Ordinal))
+        {
+            await DeleteSnapshotDataAsync(factory, buildingSnapshotId);
+            Console.Error.WriteLine("  ✗ Workspace changed during refresh; discarded the Building snapshot.");
+            Console.Error.WriteLine($"  Active snapshot {oldSnapshotId.Value} remains unchanged. Run refresh again.");
+            return 3;
+        }
+
         // Atomically activate Building snapshot and supersede old Active
         // Use Degraded status if FTS had failures
         var refreshStatus = ftsFailedPaths.Count > 0 ? "ActiveDegraded" : "Active";

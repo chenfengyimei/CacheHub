@@ -288,7 +288,12 @@ static string ResolveFileHashFromDb(SqliteConnectionFactory factory, IndexSnapsh
 }
 
 // V6: Extracted indexing logic — shared by /index and /bootstrap endpoints
-static async Task IndexWorkspaceAsync(SqliteConnectionFactory factory, Workspace ws, IndexSnapshotId snapshotId)
+static async Task IndexWorkspaceAsync(
+    SqliteConnectionFactory factory,
+    Workspace ws,
+    IndexSnapshotId snapshotId,
+    CacheHub.Core.Repository.GitState startGitState,
+    Func<string, bool> fingerprintFilter)
 {
     var ignoreEngine = new CacheHub.Indexing.IgnoreRules.IgnoreRuleEngine()
         .WithDefaults()
@@ -417,6 +422,14 @@ static async Task IndexWorkspaceAsync(SqliteConnectionFactory factory, Workspace
     {
         await fts.IndexFileAsync(snapshotId, relativePath, relativePath, content, language, hash);
     }
+
+    // Preserve the old Active snapshot unless the workspace stayed unchanged
+    // throughout indexing. This gives Desktop/Bootstrap the same two-pass
+    // version-integrity guarantee as the CLI index build.
+    var endGitState = await new CacheHub.Core.Repository.GitStateProvider()
+        .CaptureAsync(ws.RootPath, fingerprintFilter);
+    if (!string.Equals(startGitState.Fingerprint, endGitState.Fingerprint, StringComparison.Ordinal))
+        throw new InvalidOperationException("Workspace changed during indexing; the Building snapshot cannot be activated.");
 
     // Activate snapshot (workspace-scoped)
     await using var activateConn = factory.CreateOpenConnection();
@@ -566,7 +579,8 @@ app.MapPost("/api/v1/workspaces/bootstrap", async (BootstrapApiRequest req, IWor
 
     // V7-W01: Capture Git state for version-aware snapshots
     var gitStateProvider = new CacheHub.Core.Repository.GitStateProvider();
-    var gitState = await gitStateProvider.CaptureAsync(workspace.RootPath);
+    var fingerprintFilter = CreateDesktopFingerprintFilter(workspace.RootPath);
+    var gitState = await gitStateProvider.CaptureAsync(workspace.RootPath, fingerprintFilter);
 
     // Step 4: Build index (reuse the same indexing logic as /index endpoint)
     var snapshotId = IndexSnapshotId.New();
@@ -587,7 +601,7 @@ app.MapPost("/api/v1/workspaces/bootstrap", async (BootstrapApiRequest req, IWor
     {
         try
         {
-            await IndexWorkspaceAsync(factory, workspace, snapshotId);
+            await IndexWorkspaceAsync(factory, workspace, snapshotId, gitState, fingerprintFilter);
             await repo.UpdateStatusAsync(workspace.Id, WorkspaceStatus.Ready);
         }
         catch (Exception)
@@ -639,7 +653,8 @@ app.MapPost("/api/v1/workspaces/{id}/index", async (string id, IWorkspaceReposit
 
     // V7-W01: Capture Git state for version-aware snapshots
     var gitStateProvider = new CacheHub.Core.Repository.GitStateProvider();
-    var gitState = await gitStateProvider.CaptureAsync(ws.RootPath);
+    var fingerprintFilter = CreateDesktopFingerprintFilter(ws.RootPath);
+    var gitState = await gitStateProvider.CaptureAsync(ws.RootPath, fingerprintFilter);
 
     // Insert snapshot as Building
     await using var initConn = factory.CreateOpenConnection();
@@ -659,7 +674,7 @@ app.MapPost("/api/v1/workspaces/{id}/index", async (string id, IWorkspaceReposit
     {
         try
         {
-            await IndexWorkspaceAsync(factory, ws, snapshotId);
+            await IndexWorkspaceAsync(factory, ws, snapshotId, gitState, fingerprintFilter);
             await repo.UpdateStatusAsync(ws.Id, WorkspaceStatus.Ready);
         }
         catch (Exception)
