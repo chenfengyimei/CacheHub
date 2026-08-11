@@ -797,7 +797,7 @@ app.MapGet("/api/v1/context/{id}", async (string id, IContextPackageRepository c
     return Results.Ok(manifest);
 });
 
-app.MapPost("/api/v1/context/{id}/expand", async (string id, ExpandApiRequest req, IContextPackageRepository ctxRepo, IWorkspaceRepository wsRepo) =>
+app.MapPost("/api/v1/context/{id}/expand", async (string id, ExpandApiRequest req, IContextPackageRepository ctxRepo, IWorkspaceRepository wsRepo, SqliteConnectionFactory factory) =>
 {
     var manifest = await ctxRepo.FindByIdAsync(ContextPackageId.Parse(id));
     if (manifest is null) return Results.NotFound(ErrorEnvelope.From(ErrorCode.ContextPackageNotFound, "Context package not found"));
@@ -1326,7 +1326,7 @@ app.MapPost("/api/v1/workflows/contextual-completion", async (ContextualCompleti
     // V7-W02 / V8-P0-01: Stale detection — default: reject build when stale
     var staleResult = await CacheHub.Core.Indexing.StaleDetector.CheckAsync(
         workspace.RootPath, activeSnapshot.WorkspaceFingerprint,
-        fileFilter: CreateDesktopFingerprintFilter(workspace.RootPath, indexedFiles.Select(f => f.Path)));
+        fileFilter: CreateDesktopFingerprintFilter(workspace.RootPath, indexedFiles.Select(f => f.NormalizedPath)));
     if (!staleResult.IsFresh)
     {
         return Results.Json(ErrorEnvelope.From(ErrorCode.ContextStale,

@@ -4,6 +4,9 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using CacheHub.Storage;
 
 namespace CacheHub.Tests;
 
@@ -279,11 +282,31 @@ public class LocalApiContractTests : IClassFixture<LocalApiFactory>
 public class LocalApiFactory : WebApplicationFactory<Program>
 {
     public const string TestToken = "test-token-for-contract-tests";
+    private readonly string _appDataRoot = Path.Combine(Path.GetTempPath(), $"cachehub_api_{Guid.NewGuid():N}");
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         // Set environment variable so Program.cs reads the known token
         Environment.SetEnvironmentVariable("CACHEHUB_API_TOKEN", TestToken);
         builder.UseEnvironment("Testing");
+        builder.ConfigureServices(services =>
+        {
+            // The test host must never use the profile-dependent production
+            // AppData path. Inject a writable, isolated database root instead.
+            services.RemoveAll<AppDataDirectory>();
+            services.AddSingleton(new AppDataDirectory(_appDataRoot));
+        });
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+        if (disposing)
+        {
+            try { Directory.Delete(_appDataRoot, recursive: true); }
+            catch (DirectoryNotFoundException) { }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
     }
 }

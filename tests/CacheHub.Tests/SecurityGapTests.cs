@@ -28,11 +28,17 @@ public class SecurityGapTests
             }
             catch (PlatformNotSupportedException)
             {
-                return; // Skip on platforms without symlink support
+                return; // Symlink support is unavailable in this test environment.
             }
             catch (UnauthorizedAccessException)
             {
-                return; // Skip if no privilege
+                return; // Creating symlinks requires an unavailable OS privilege.
+            }
+            catch (IOException) when (OperatingSystem.IsWindows())
+            {
+                // Windows reports ERROR_PRIVILEGE_NOT_HELD as IOException rather
+                // than UnauthorizedAccessException.
+                return;
             }
 
             var resolver = new SafePathResolver(root);
@@ -68,11 +74,17 @@ public class SecurityGapTests
             }
             catch (PlatformNotSupportedException)
             {
-                return; // Skip on platforms without symlink support
+                return; // Symlink support is unavailable in this test environment.
             }
             catch (UnauthorizedAccessException)
             {
-                return; // Skip if no privilege
+                return; // Creating symlinks requires an unavailable OS privilege.
+            }
+            catch (IOException) when (OperatingSystem.IsWindows())
+            {
+                // Windows reports ERROR_PRIVILEGE_NOT_HELD as IOException rather
+                // than UnauthorizedAccessException.
+                return;
             }
 
             var resolver = new SafePathResolver(root);

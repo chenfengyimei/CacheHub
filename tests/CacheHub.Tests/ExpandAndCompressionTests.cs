@@ -90,7 +90,7 @@ public class ExpandAndCompressionTests
             parentManifest.Id.Value, "src/new.ts", fullContent, "add new file");
 
         var revision = expander.CreateRevision(parentManifest, expansion, _ => fullContent);
-        var selectedFile = Assert.Single(revision.SelectedFiles.Where(f => f.Path == "src/new.ts"));
+        var selectedFile = Assert.Single(revision.SelectedFiles, f => f.Path == "src/new.ts");
         var expectedHash = "sha256:" + Convert.ToHexString(
             SHA256.HashData(Encoding.UTF8.GetBytes(fullContent))).ToLowerInvariant();
 
