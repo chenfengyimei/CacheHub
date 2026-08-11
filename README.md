@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/download/dotnet/10.0)
 [![Tests](https://img.shields.io/badge/Tests-990%20passed-brightgreen.svg)](#测试覆盖率)
-[![CI](https://img.shields.io/badge/CI-3%20platforms%20%E2%9C%93-success.svg)](.github/workflows/ci.yml)
+[![CI](https://img.shields.io/badge/CI-3%20platforms%20%E2%9C%93-success.svg)](#测试覆盖率)
 [![Status: Pre-Alpha](https://img.shields.io/badge/Status-Pre--Alpha-orange.svg)](#功能成熟度矩阵)
 
 </div>
@@ -164,7 +164,7 @@ src/auth/refresh.ts  Score: 0.92  Mode: chunks  Tokens: 450
 | 发布 | 单文件自包含 (PublishSingleFile + SelfContained) |
 | 测试 | xUnit — 990 测试通过 |
 | 代码质量 | TreatWarningsAsErrors + Nullable + AnalysisLevel latest-recommended |
-| CI/CD | GitHub Actions — Ubuntu + Windows + macOS 三平台 |
+| CI/CD | 三平台 CI — Ubuntu + Windows + macOS（push / PR 自动触发） |
 | 行尾符 | .gitattributes 强制 LF（全平台一致） |
 | 许可证 | MIT |
 
@@ -223,7 +223,7 @@ CacheHub/
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/chenfengyimei/CacheHub.git
+git clone https://gitee.com/chenfengloveyuri/CacheHub.git
 cd CacheHub
 
 # 2. 一键安装（自动构建 + 测试 + 发布）
@@ -412,6 +412,8 @@ CacheHub 当前处于 **Pre-Alpha** 阶段。核心链路已通过 990 个测试
 
 **如果这个项目对你有帮助，请给一个 ⭐ Star！**
 
-[报告问题](https://github.com/chenfengyimei/CacheHub/issues) · [发起讨论](https://github.com/chenfengyimei/CacheHub/discussions) · [查看文档](Docs/)
+[报告问题](https://gitee.com/chenfengloveyuri/CacheHub/issues) · [发起讨论](https://gitee.com/chenfengloveyuri/CacheHub/issues) · [查看文档](Docs/)
+
+> 📌 本项目同时在 [Gitee](https://gitee.com/chenfengloveyuri/CacheHub) 和 [GitHub](https://github.com/chenfengyimei/CacheHub) 开源，欢迎在任一平台 Star / 提 Issue / 提 PR。
 
 </div>
