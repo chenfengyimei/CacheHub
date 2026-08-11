@@ -94,6 +94,36 @@ public sealed class BenchmarkMatrixRunner
     }
 
     /// <summary>
+    /// Merges verified CacheHub-vs-baseline agent runs into a retrieval Matrix
+    /// result and re-evaluates the release gate. Missing task evidence remains
+    /// null so a partially executed Matrix cannot appear complete.
+    /// </summary>
+    public MatrixResult AttachAgentResults(
+        MatrixResult retrievalResult,
+        IReadOnlyDictionary<string, MatrixAgentTaskResult> agentResults)
+    {
+        var enriched = retrievalResult.Tasks.Select(task =>
+        {
+            if (!agentResults.TryGetValue(task.TaskId, out var agent))
+                return task;
+
+            return task with
+            {
+                CacheHubTaskCompleted = agent.CacheHubTaskCompleted,
+                BaselineTaskCompleted = agent.BaselineTaskCompleted,
+                CacheHubInputTokens = agent.CacheHubInputTokens,
+                BaselineInputTokens = agent.BaselineInputTokens,
+                CacheHubRounds = agent.CacheHubRounds,
+                BaselineRounds = agent.BaselineRounds,
+                CacheHubCost = agent.CacheHubCost,
+                BaselineCost = agent.BaselineCost,
+            };
+        }).ToList();
+
+        return BuildResult(enriched, retrievalResult.ModelId);
+    }
+
+    /// <summary>
     /// V8-P0-04: Evaluates Recall@10 using Ground Truth against ContextEngine predictions.
     /// This is the ONLY place where RequiredFiles is used — after retrieval is complete.
     /// </summary>

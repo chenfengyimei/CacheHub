@@ -51,6 +51,23 @@ public sealed record MatrixResult
 }
 
 /// <summary>
+/// Actual agent evidence for one Matrix task. These values come from model
+/// execution and test verification; callers must not populate them from
+/// retrieval ground truth or heuristics.
+/// </summary>
+public sealed record MatrixAgentTaskResult
+{
+    public required bool CacheHubTaskCompleted { get; init; }
+    public required bool BaselineTaskCompleted { get; init; }
+    public required int CacheHubInputTokens { get; init; }
+    public required int BaselineInputTokens { get; init; }
+    public required int CacheHubRounds { get; init; }
+    public required int BaselineRounds { get; init; }
+    public required double CacheHubCost { get; init; }
+    public required double BaselineCost { get; init; }
+}
+
+/// <summary>
 /// V7-W18: Summary statistics across all tasks.
 /// </summary>
 public sealed record MatrixSummary
@@ -93,7 +110,8 @@ public sealed record MatrixPhaseGate
         // V8-P0-05: If no Agent results, gate is Incomplete — not Passed.
         // Retrieval-only metrics (Recall@10, TokenReduction) are still evaluated for information,
         // but the gate cannot Pass without Agent data.
-        var hasAgentResults = summary.TasksWithAgentResults is > 0;
+        var hasCompleteAgentResults = summary.TotalTasks > 0 &&
+            summary.TasksWithAgentResults == summary.TotalTasks;
 
         if (summary.MeanFileRecallAt10 < 0.90)
             gates.Add($"FileRecall@10 {summary.MeanFileRecallAt10:F2} < 0.90");
@@ -101,7 +119,7 @@ public sealed record MatrixPhaseGate
         if (summary.MeanTokenReduction < 0.20)
             gates.Add($"TokenReduction {summary.MeanTokenReduction:F2} < 0.20");
 
-        if (hasAgentResults && summary.CacheHubSuccessRate.HasValue && summary.BaselineSuccessRate.HasValue)
+        if (hasCompleteAgentResults && summary.CacheHubSuccessRate.HasValue && summary.BaselineSuccessRate.HasValue)
         {
             if (summary.CacheHubSuccessRate < summary.BaselineSuccessRate * 0.95)
                 gates.Add($"CacheHub Success {summary.CacheHubSuccessRate:F2} < Baseline×95% {summary.BaselineSuccessRate * 0.95:F2}");
@@ -112,14 +130,16 @@ public sealed record MatrixPhaseGate
             if (summary.PositiveTokenTaskRatio < 0.60)
                 gates.Add($"PositiveTokenTaskRatio {summary.PositiveTokenTaskRatio:F2} < 0.60");
         }
-        else if (!hasAgentResults)
+        else
         {
+            var completed = summary.TasksWithAgentResults ?? 0;
+            gates.Add($"Agent results incomplete ({completed}/{summary.TotalTasks})");
             // V8-P0-05: No agent results = gate is incomplete
             gates.Add("No Agent results — Agent Product Gate not evaluated");
         }
 
         // V8-P0-05: Determine status
-        var status = !hasAgentResults
+        var status = !hasCompleteAgentResults
             ? MatrixGateStatus.Incomplete
             : gates.Count == 0
                 ? MatrixGateStatus.Passed

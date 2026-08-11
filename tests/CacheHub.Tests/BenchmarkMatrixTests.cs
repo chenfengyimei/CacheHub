@@ -215,6 +215,36 @@ public class BenchmarkMatrixTests
     }
 
     [Fact]
+    public void AttachAgentResults_PartialEvidence_LeavesGateIncomplete()
+    {
+        var runner = new BenchmarkMatrixRunner();
+        var retrieval = runner.RunRetrievalMatrix(
+            task => GetMockFiles(task),
+            (task, path) => "content",
+            (task, path) => "hash",
+            BuildMockContext);
+
+        var enriched = runner.AttachAgentResults(retrieval, new Dictionary<string, MatrixAgentTaskResult>
+        {
+            [BenchmarkTaskSet.Tasks[0].Id] = new()
+            {
+                CacheHubTaskCompleted = true,
+                BaselineTaskCompleted = true,
+                CacheHubInputTokens = 100,
+                BaselineInputTokens = 200,
+                CacheHubRounds = 1,
+                BaselineRounds = 1,
+                CacheHubCost = 0.01,
+                BaselineCost = 0.02,
+            },
+        });
+
+        Assert.Equal(MatrixGateStatus.Incomplete, enriched.PhaseGate.Status);
+        Assert.Equal(1, enriched.Summary.TasksWithAgentResults);
+        Assert.Contains(enriched.PhaseGate.FailedGates, gate => gate.Contains("incomplete"));
+    }
+
+    [Fact]
     public void BenchmarkTaskSet_GetTasksForRepository_ReturnsCorrectTasks()
     {
         var tsTasks = BenchmarkTaskSet.GetTasksForRepository("sample-ts-auth");
