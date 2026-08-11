@@ -66,7 +66,7 @@ public static class BenchmarkCommands
             Console.WriteLine("  list    List available benchmark tasks");
             Console.WriteLine("  run     Run a retrieval benchmark (Recall/Token) against a real workspace");
             Console.WriteLine("  agent   Run a real Agent Benchmark (task→model→patch→test→cost) via Gateway");
-            Console.WriteLine("  matrix  Run Benchmark Matrix across all fixture repositories (V7-W18)");
+            Console.WriteLine("  matrix  Run Benchmark Matrix across all fixture repositories (use --agent for verified product runs)");
             Console.WriteLine("  report  Generate aggregated report from all retrieval benchmark runs");
             Console.WriteLine();
             Console.WriteLine("Agent options:");
@@ -81,6 +81,11 @@ public static class BenchmarkCommands
             Console.WriteLine("  --test-command=<cmd>    Build/test command for --real-test (default: dotnet test)");
             Console.WriteLine("  --price=<in,out>        Override model pricing in USD per 1M tokens,");
             Console.WriteLine("                          e.g. --price=3.0,15.0 for Claude (review #17)");
+            Console.WriteLine();
+            Console.WriteLine("Matrix Agent options:");
+            Console.WriteLine("  --agent                 Run CacheHub and full-repository baseline for each fixture task");
+            Console.WriteLine("  --real-test             Required with --agent; validates patches in isolated Git worktrees");
+            Console.WriteLine("  --runs-per-task=<n>     Repetitions per fixture task (default: 1)");
             return 1;
         }
 
@@ -787,8 +792,15 @@ public static class BenchmarkCommands
     private static int Matrix(string[] args)
     {
         var jsonOutput = HasFlag(args, "--json") || HasFlag(args, "--output=json");
+        var runAgentMatrix = HasFlag(args, "--agent");
         var repoRoot = GetOpt(args, "--repo-root") ?? FindRepoRoot();
         var language = GetOpt(args, "--lang"); // filter by language
+
+        if (runAgentMatrix && !HasFlag(args, "--real-test"))
+        {
+            Console.Error.WriteLine("Error: matrix --agent requires --real-test; heuristic patch checks cannot satisfy the product gate.");
+            return 1;
+        }
 
         Console.Error.WriteLine("CacheHub Benchmark Matrix — Retrieval Mode");
         Console.Error.WriteLine($"  Repository root: {repoRoot}");
@@ -824,6 +836,20 @@ public static class BenchmarkCommands
             task => BuildContextForMatrixTask(matrixWorkspaces[task.RepositoryId], task),
             modelId: "sqlite-fts-matrix",
             tasks: tasks);
+
+        if (runAgentMatrix)
+        {
+            try
+            {
+                var evidence = RunMatrixAgentTasks(args, tasks, matrixWorkspaces);
+                result = matrixRunner.AttachAgentResults(result, evidence);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Agent Matrix failed: {ex.Message}");
+                return 1;
+            }
+        }
 
         // Console report
         if (!jsonOutput)
@@ -969,6 +995,120 @@ public static class BenchmarkCommands
                 Size = checked((int)file.Size),
             })
             .ToList();
+    }
+
+    private static Dictionary<string, MatrixAgentTaskResult> RunMatrixAgentTasks(
+        string[] args,
+        IReadOnlyList<BenchmarkTask> tasks,
+        Dictionary<string, MatrixFixtureWorkspace> fixtures)
+    {
+        var model = GetOpt(args, "--model") ?? "gpt-4o-mini";
+        var gatewayUrl = GetOpt(args, "--gateway-url") ?? "http://127.0.0.1:5218";
+        var gatewayToken = GetOpt(args, "--gateway-token")
+            ?? Environment.GetEnvironmentVariable("CACHEHUB_GATEWAY_TOKEN")
+            ?? "";
+        var maxRounds = int.TryParse(GetOpt(args, "--rounds"), out var parsedRounds) ? Math.Max(1, parsedRounds) : 2;
+        var runsPerTask = int.TryParse(GetOpt(args, "--runs-per-task"), out var parsedRuns) ? Math.Max(1, parsedRuns) : 1;
+        var tokenizers = TokenizerRegistry.CreateWithDefaults();
+        var runner = new AgentBenchmarkRunner(
+            new GatewayAgentModelExecutor(gatewayUrl, gatewayToken, model), tokenizers.Default, maxRounds);
+        var config = new BenchmarkConfig
+        {
+            ModelId = model,
+            AgentId = "cachehub-matrix-agent",
+            SystemPrompt = "cachehub matrix",
+            RunsPerTask = runsPerTask,
+            ResetBetweenRuns = true,
+            ShareBuildCache = false,
+            TestEnvironment = "isolated temporary git worktree",
+        };
+        var evidence = new Dictionary<string, MatrixAgentTaskResult>(StringComparer.Ordinal);
+
+        foreach (var task in tasks)
+        {
+            var fixture = fixtures[task.RepositoryId];
+            Console.Error.WriteLine($"  Agent task: {task.Id} ({task.RepositoryId})");
+            var cacheHub = runner.RunAllAsync(
+                [task], config,
+                _ => BuildMatrixAgentContext(fixture, task),
+                patch => EvaluateMatrixPatch(fixture.Workspace.RootPath, task, patch)).GetAwaiter().GetResult();
+            var baseline = runner.RunAllAsync(
+                [task], config,
+                _ => BuildFullRepositoryAgentContext(fixture.Workspace.RootPath, task.TaskDescription, tokenizers.Default),
+                patch => EvaluateMatrixPatch(fixture.Workspace.RootPath, task, patch)).GetAwaiter().GetResult();
+
+            evidence.Add(task.Id, new MatrixAgentTaskResult
+            {
+                CacheHubTaskCompleted = cacheHub.Runs.Count > 0 && cacheHub.Runs.All(run => run.TaskCompleted),
+                BaselineTaskCompleted = baseline.Runs.Count > 0 && baseline.Runs.All(run => run.TaskCompleted),
+                CacheHubInputTokens = checked((int)cacheHub.TotalPromptTokens),
+                BaselineInputTokens = checked((int)baseline.TotalPromptTokens),
+                CacheHubRounds = checked((int)cacheHub.Runs.Sum(run => run.Rounds)),
+                BaselineRounds = checked((int)baseline.Runs.Sum(run => run.Rounds)),
+                CacheHubCost = cacheHub.TotalCost,
+                BaselineCost = baseline.TotalCost,
+            });
+        }
+
+        return evidence;
+    }
+
+    private static AgentContextPackage BuildMatrixAgentContext(MatrixFixtureWorkspace fixture, BenchmarkTask task)
+    {
+        var manifest = BuildContextForMatrixTask(fixture, task);
+        var (_, enforcer) = Core.Security.SecurityPolicyResolver.CreateEnforcer();
+        var payload = new CacheHub.Context.Payload.PayloadGenerator().GenerateMarkdown(
+            manifest,
+            path => ResolveFileContent(fixture.Workspace.RootPath, path),
+            enforcer,
+            path => ResolveFileBytes(fixture.Workspace.RootPath, path));
+        return new AgentContextPackage
+        {
+            TaskDescription = task.TaskDescription,
+            SelectedFilePaths = manifest.SelectedFiles.Select(file => file.Path).ToList(),
+            FileSnippets = [payload],
+            EstimatedTokens = manifest.Budget.ActualEstimate,
+        };
+    }
+
+    private static AgentContextPackage BuildFullRepositoryAgentContext(string rootPath, string taskDescription, ITokenizer tokenizer)
+    {
+        var paths = Directory.EnumerateFiles(rootPath, "*", SearchOption.AllDirectories)
+            .Where(path => !path.Contains("\\.git\\", StringComparison.OrdinalIgnoreCase) &&
+                           !path.Contains("/.git/", StringComparison.OrdinalIgnoreCase) &&
+                           !path.Contains("\\bin\\", StringComparison.OrdinalIgnoreCase) &&
+                           !path.Contains("\\obj\\", StringComparison.OrdinalIgnoreCase) &&
+                           !path.Contains("node_modules", StringComparison.OrdinalIgnoreCase) &&
+                           !BaselineFileFilter.IsExcluded(path))
+            .Select(path => Path.GetRelativePath(rootPath, path).Replace('\\', '/'))
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .Take(500)
+            .ToList();
+        var snippets = paths.Select(path => $"// ---- {path} ----\n{ResolveFileContent(rootPath, path)}").ToList();
+        return new AgentContextPackage
+        {
+            TaskDescription = taskDescription,
+            SelectedFilePaths = paths,
+            FileSnippets = snippets,
+            EstimatedTokens = tokenizer.CountTokens(string.Join("\n", snippets)),
+        };
+    }
+
+    private static Task<AgentTestResult> EvaluateMatrixPatch(string fixtureRoot, BenchmarkTask task, string patch)
+    {
+        using var tester = new GitWorktreePatchTester();
+        tester.CreateWorktree(fixtureRoot, task.CommitHash);
+        if (!tester.ApplyPatch(patch))
+        {
+            return Task.FromResult(new AgentTestResult
+            {
+                Success = false,
+                Passed = 0,
+                Total = 1,
+                ErrorMessage = "Patch failed to apply cleanly (git apply)",
+            });
+        }
+        return Task.FromResult(tester.RunTests(task.TestCommand!, task.TestCommandArgs ?? ""));
     }
 
     private static List<MatrixFileInfo> GetFixtureFiles(string repoRoot, BenchmarkTask task)

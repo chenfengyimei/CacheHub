@@ -2,7 +2,7 @@
     "schemaVersion":  1,
     "project":  "CacheHub",
     "currentPhase":  "V8-Product-Proof-Context-Integrity",
-    "currentTask":  "V8 release proof follow-up in progress: two-pass index integrity, strict stale-context gate, immutable raw-byte payload verification, unified recall wiring, and stats separation are complete. Production Benchmark/Agent Matrix evidence remains active. 993 tests.",
+    "currentTask":  "V8 release proof follow-up in progress: two-pass index integrity, strict stale-context gate, immutable raw-byte payload verification, unified recall wiring, production SQLite/FTS Matrix, and Agent Matrix orchestration are complete. Real Gateway evidence remains active. 995 tests.",
     "repository":  {
                        "branch":  "main",
                        "dirty":  false,
@@ -12,7 +12,7 @@
                    },
     "qualityGates":  {
                          "build":  "pass (0 errors, 0 warnings, warnings-as-errors enabled)",
-                         "unitTests":  "pass (993/995, 2 skipped)",
+                         "unitTests":  "pass (995/997, 2 skipped)",
                          "integrationTests":  "pass (real SQLite + FTS5 + Context Engine pipeline + Snapshot Clone + Agent Benchmark + Cache Invalidate)",
                          "securityTests":  "pass (path traversal, auth, XSS, secret scan, symlink, offline mode, unified SecurityPolicyResolver, offline hard-block before gateway, Gateway Offline final defense V6-W04)",
                          "format":  "pass"
@@ -71,11 +71,11 @@
                                           "CacheHub.Gateway (server, provider, SSE, router, multi-provider config, Offline defense — separated from Core)",
                                           "CacheHub.Cli (CLI entry, 21 command groups)",
                                           "CacheHub.Desktop (Web UI, Minimal API, 17 routes, UsageStatsService)",
-                                          "CacheHub.Tests (993 tests)"
+                                          "CacheHub.Tests (995 tests)"
                                       ],
                          "dependencyChain":  "Core ← Storage, Indexing, Gateway; Context ← Core+Storage+Indexing; Cli/Desktop ← all",
                          "databaseMigrations":  11
                      },
-    "testCount":  993,
+    "testCount":  995,
     "lastUpdated":  "2026-08-11T00:00:00Z"
 }
