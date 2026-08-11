@@ -11,6 +11,7 @@ namespace CacheHub.Core.Benchmarks.Agent;
 public sealed class GitWorktreePatchTester : IDisposable
 {
     private string? _worktreePath;
+    private string? _temporarySourceRepoPath;
     private bool _disposed;
 
     /// <summary>
@@ -22,9 +23,10 @@ public sealed class GitWorktreePatchTester : IDisposable
         if (!Directory.Exists(sourceRepoPath))
             throw new DirectoryNotFoundException($"Source repo not found: {sourceRepoPath}");
 
+        var sourceForWorktree = sourceRepoPath;
         var gitDir = Path.Combine(sourceRepoPath, ".git");
-        if (!Directory.Exists(gitDir))
-            throw new InvalidOperationException("Source repo must be a git repository");
+        if (!Directory.Exists(gitDir) && !File.Exists(gitDir))
+            sourceForWorktree = CreateTemporaryGitRepository(sourceRepoPath);
 
         _worktreePath = Path.Combine(Path.GetTempPath(), "cachehub-bench-" + Guid.NewGuid().ToString("N")[..12]);
         // Do NOT pre-create the directory — `git worktree add` requires the target to not exist.
@@ -35,7 +37,7 @@ public sealed class GitWorktreePatchTester : IDisposable
         var psi = new ProcessStartInfo
         {
             FileName = "git",
-            WorkingDirectory = sourceRepoPath,
+            WorkingDirectory = sourceForWorktree,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -195,31 +197,104 @@ public sealed class GitWorktreePatchTester : IDisposable
     /// </summary>
     public void Reset()
     {
-        if (_worktreePath is null || !Directory.Exists(_worktreePath)) return;
+        if (_worktreePath is not null && Directory.Exists(_worktreePath))
+        {
+            // Remove the worktree
+            var psi = new ProcessStartInfo
+            {
+                FileName = "git",
+                WorkingDirectory = _worktreePath,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            };
+            psi.ArgumentList.Add("worktree");
+            psi.ArgumentList.Add("remove");
+            psi.ArgumentList.Add("--force");
+            psi.ArgumentList.Add(_worktreePath);
+            try
+            {
+                using var proc = Process.Start(psi);
+                proc?.WaitForExit(10_000);
+            }
+            catch { }
 
-        // Remove the worktree
+            // If git couldn't remove it, delete manually
+            try { Directory.Delete(_worktreePath, recursive: true); } catch { }
+        }
+        _worktreePath = null;
+
+        if (_temporarySourceRepoPath is not null)
+        {
+            try { Directory.Delete(_temporarySourceRepoPath, recursive: true); } catch { }
+            _temporarySourceRepoPath = null;
+        }
+    }
+
+    private string CreateTemporaryGitRepository(string sourceDirectory)
+    {
+        _temporarySourceRepoPath = Path.Combine(Path.GetTempPath(), "cachehub-bench-source-" + Guid.NewGuid().ToString("N")[..12]);
+        try
+        {
+            CopyFixtureSource(sourceDirectory, _temporarySourceRepoPath);
+            RunGit(_temporarySourceRepoPath, "init");
+            RunGit(_temporarySourceRepoPath, "config", "user.email", "cachehub-benchmark@local.invalid");
+            RunGit(_temporarySourceRepoPath, "config", "user.name", "CacheHub Benchmark");
+            RunGit(_temporarySourceRepoPath, "add", "--all");
+            RunGit(_temporarySourceRepoPath, "commit", "--no-gpg-sign", "-m", "Benchmark fixture seed");
+            return _temporarySourceRepoPath;
+        }
+        catch
+        {
+            if (Directory.Exists(_temporarySourceRepoPath))
+                try { Directory.Delete(_temporarySourceRepoPath, recursive: true); } catch { }
+            _temporarySourceRepoPath = null;
+            throw;
+        }
+    }
+
+    private static void CopyFixtureSource(string sourceDirectory, string destinationDirectory)
+    {
+        Directory.CreateDirectory(destinationDirectory);
+        foreach (var sourceFile in Directory.EnumerateFiles(sourceDirectory, "*", SearchOption.AllDirectories))
+        {
+            var relativePath = Path.GetRelativePath(sourceDirectory, sourceFile);
+            if (relativePath.Equals(".git", StringComparison.OrdinalIgnoreCase) ||
+                relativePath.StartsWith(".git" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+                relativePath.StartsWith(".git/", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var targetPath = Path.Combine(destinationDirectory, relativePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+            File.Copy(sourceFile, targetPath, overwrite: false);
+        }
+    }
+
+    private static void RunGit(string workingDirectory, params string[] arguments)
+    {
         var psi = new ProcessStartInfo
         {
             FileName = "git",
-            WorkingDirectory = _worktreePath,
+            WorkingDirectory = workingDirectory,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
         };
-        psi.ArgumentList.Add("worktree");
-        psi.ArgumentList.Add("remove");
-        psi.ArgumentList.Add("--force");
-        psi.ArgumentList.Add(_worktreePath);
-        try
-        {
-            using var proc = Process.Start(psi);
-            proc?.WaitForExit(10_000);
-        }
-        catch { }
+        foreach (var argument in arguments)
+            psi.ArgumentList.Add(argument);
 
-        // If git couldn't remove it, delete manually
-        try { Directory.Delete(_worktreePath, recursive: true); } catch { }
-        _worktreePath = null;
+        using var process = Process.Start(psi)
+            ?? throw new InvalidOperationException("Failed to start git process");
+        if (!process.WaitForExit(30_000))
+        {
+            try { process.Kill(entireProcessTree: true); } catch { }
+            throw new InvalidOperationException($"git {arguments[0]} timed out after 30s");
+        }
+        if (process.ExitCode != 0)
+        {
+            var error = process.StandardError.ReadToEnd();
+            throw new InvalidOperationException($"git {arguments[0]} failed: {error}");
+        }
     }
 
     private static int ParseCount(string output, params string[] prefixes)

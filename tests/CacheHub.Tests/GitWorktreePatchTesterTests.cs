@@ -31,6 +31,14 @@ public class GitWorktreePatchTesterTests
         return dir;
     }
 
+    private static string CreateTempDirectory()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "cachehub-wt-fixture-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "file.txt"), "fixture\n");
+        return dir;
+    }
+
     /// <summary>
     /// Best-effort cleanup that tolerates Windows file-lock races left by git.
     /// </summary>
@@ -68,6 +76,26 @@ public class GitWorktreePatchTesterTests
             var path = tester.CreateWorktree(source, "HEAD");
             Assert.True(Directory.Exists(path));
             Assert.True(File.Exists(Path.Combine(path, "file.txt")));
+        }
+        finally { Cleanup(source); }
+    }
+
+    [Fact]
+    public void CreateWorktree_FromNonGitFixture_CreatesIsolatedGitSeed()
+    {
+        var source = CreateTempDirectory();
+        try
+        {
+            using var tester = new GitWorktreePatchTester();
+            var path = tester.CreateWorktree(source, "HEAD");
+
+            Assert.True(Directory.Exists(path));
+            Assert.True(File.Exists(Path.Combine(path, "file.txt")));
+            Assert.False(Directory.Exists(Path.Combine(source, ".git")));
+
+            var patch = "--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-fixture\n+changed\n";
+            Assert.True(tester.ApplyPatch(patch));
+            Assert.Equal("fixture", File.ReadAllText(Path.Combine(source, "file.txt")).Trim());
         }
         finally { Cleanup(source); }
     }
