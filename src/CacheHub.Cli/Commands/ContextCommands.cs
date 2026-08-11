@@ -177,12 +177,13 @@ public static class ContextCommands
                 // V8-P0-01: Default behavior — reject build to prevent stale context
                 Console.Error.WriteLine($"  ✗ CONTEXT_STALE: {staleResult.Message}");
                 Console.Error.WriteLine("  Run 'cachehub index refresh --id=<workspace-id>' to update the index.");
-                Console.Error.WriteLine("  Or use --allow-stale to override (stale cache will be skipped).");
+                Console.Error.WriteLine("  Or use --allow-stale to override (only cache entries for the current workspace state may be reused).");
                 return 3; // distinct exit code for stale context
             }
-            // --allow-stale: warn but proceed, cache will be skipped
+            // --allow-stale: warn but proceed. The current fingerprint prevents reuse of
+            // cache entries built for the older indexed snapshot.
             Console.Error.WriteLine($"  ⚠ WARNING (stale, --allow-stale): {staleResult.Message}");
-            Console.Error.WriteLine("  Cache lookup will be skipped for this build.");
+            Console.Error.WriteLine("  Cache entries built for the indexed snapshot will not be reused.");
         }
         else if (staleResult.NoFingerprint)
         {

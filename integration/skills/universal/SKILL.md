@@ -124,7 +124,7 @@ Agent 应自动执行此三步循环，无需用户干预。这样可以确保�
 cachehub context build --workspace=<id> --task="..." --allow-stale --output=json
 ```
 
-注意：`--allow-stale` 会跳过缓存查找，每次都重新执行完整的 Recall→Ranking→Selection 流程。
+注意：`--allow-stale` 不会复用为旧索引快照生成的缓存。系统会把当前工作区指纹纳入缓存键；仅当此前已经为**相同当前状态**生成过 Context 时，才可能命中该条缓存。
 
 ## 手动分步（仅在需要精细控制时使用）
 

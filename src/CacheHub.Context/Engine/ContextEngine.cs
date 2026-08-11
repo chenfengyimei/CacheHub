@@ -40,7 +40,8 @@ public sealed record ContextBuildRequest
     public string? WorkspaceFingerprint { get; init; }
 
     /// <summary>V8-P0-01: Real-time workspace fingerprint captured at build time (not snapshot's).
-    /// When set and differs from WorkspaceFingerprint, cache lookup is skipped to prevent stale cache hits.</summary>
+    /// When set and differs from WorkspaceFingerprint, it becomes part of the cache key,
+    /// preventing reuse of entries built for the indexed snapshot.</summary>
     public string? CurrentWorkspaceFingerprint { get; init; }
 
     /// <summary>V8-P0-01: When true, allows building context even if the workspace is stale (index not refreshed).
