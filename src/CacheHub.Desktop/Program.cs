@@ -1114,28 +1114,24 @@ app.MapGet("/api/v1/stats", async (SqliteConnectionFactory factory, UsageStatsSe
         catch { /* non-fatal: Gateway may not have written stats yet */ }
     }
 
-    // Merge Desktop + Gateway stats
-    var mergedRequests = usage.TotalRequests + gwTotalRequests;
-    var mergedCacheHits = usage.CacheHits + gwCacheHits;
-    var mergedPromptTokens = usage.TotalPromptTokens + gwPromptTokens;
-    var mergedCompletionTokens = usage.TotalCompletionTokens + gwCompletionTokens;
-    var mergedCachedSaved = usage.ActualCacheTokensSaved + gwCachedSaved;
-    var mergedCacheHitRate = mergedRequests > 0 ? (double)mergedCacheHits / mergedRequests : 0;
+    // Gateway is the single source of truth for provider requests, token usage,
+    // and exact-cache hits. A Desktop workflow can issue a Gateway request, so
+    // adding the two counters would double count one business operation.
 
     return Results.Ok(new
     {
-        // Usage stats (Desktop + Gateway merged, for Dashboard)
-        totalRequests = mergedRequests,
-        cacheHits = mergedCacheHits,
-        cacheHitRate = mergedCacheHitRate,
-        totalPromptTokens = mergedPromptTokens,
-        totalCompletionTokens = mergedCompletionTokens,
+        // Provider/Gateway metrics
+        totalRequests = gwTotalRequests,
+        cacheHits = gwCacheHits,
+        cacheHitRate = gwCacheHitRate,
+        totalPromptTokens = gwPromptTokens,
+        totalCompletionTokens = gwCompletionTokens,
         // V7-W12: Separate estimated context savings from actual cache token savings
         estimatedContextTokensSaved = usage.EstimatedContextSaved,
-        actualCacheTokensSaved = mergedCachedSaved,
+        actualCacheTokensSaved = gwCachedSaved,
         avgLatencyMs = gwAvgLatency > 0 ? gwAvgLatency : usage.AvgLatencyMs,
         // V7-W14: Breakdown for transparency
-        desktopRequests = usage.TotalRequests,
+        workflowRequests = usage.TotalRequests,
         gatewayRequests = gwTotalRequests,
         // Workspace stats
         workspaces = workspaces.Count,
