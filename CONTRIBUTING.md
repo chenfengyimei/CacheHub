@@ -6,7 +6,7 @@
 
 ```bash
 # 1. Fork 并克隆
-git clone https://github.com/chenfengyimei/CacheHub.git
+git clone https://gitee.com/chenfengloveyuri/CacheHub.git
 cd CacheHub
 
 # 2. 构建 + 测试
@@ -102,7 +102,7 @@ feat(security): 新增符号链接逃逸检测
 
 ## CI
 
-GitHub Actions 在 **Ubuntu + Windows + macOS** 三平台上运行 `build + test + format`，每次 push 和 PR 自动触发。PR 必须在三平台全部通过才能合并。
+三平台 CI 在 **Ubuntu + Windows + macOS** 上运行 `build + test + format`，每次 push 和 PR 自动触发。PR 必须在三平台全部通过才能合并。
 
 ## 许可证
 

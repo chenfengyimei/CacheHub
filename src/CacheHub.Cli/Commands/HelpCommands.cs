@@ -69,7 +69,7 @@ public static class HelpCommands
                 cachehub doctor
 
             DOCUMENTATION:
-                https://github.com/chenfengyimei/CacheHub
+                https://gitee.com/chenfengloveyuri/CacheHub
                 AGENTS.md — Agent integration guide
 
             """);

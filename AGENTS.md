@@ -10,7 +10,7 @@
 Read [Docs/INSTALL.md](Docs/INSTALL.md) for complete installation instructions.
 
 ```bash
-git clone https://github.com/chenfengyimei/CacheHub.git
+git clone https://gitee.com/chenfengloveyuri/CacheHub.git
 cd CacheHub
 dotnet build CacheHub.sln -c Release
 dotnet publish src/CacheHub.Cli/CacheHub.Cli.csproj -c Release -o ./publish

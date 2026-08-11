@@ -11,7 +11,7 @@
 
 如发现安全漏洞，请勿公开提交 Issue。请通过以下方式私密报告：
 
-1. 在 GitHub 上创建 [私有 Security Advisory](https://github.com/chenfengyimei/CacheHub/security/advisories/new)
+1. 在 Gitee 上创建 [Issue 并设为私密](https://gitee.com/chenfengloveyuri/CacheHub/issues)，或在 GitHub 上创建 [私有 Security Advisory](https://github.com/chenfengyimei/CacheHub/security/advisories/new)
 2. 描述漏洞、影响范围、复现步骤和可能的修复方向
 3. 如果可能，附上概念验证代码
 

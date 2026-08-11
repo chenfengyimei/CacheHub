@@ -44,7 +44,7 @@ dotnet --version
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/chenfengyimei/CacheHub.git
+git clone https://gitee.com/chenfengloveyuri/CacheHub.git
 cd CacheHub
 
 # 2. 运行安装脚本
@@ -62,7 +62,7 @@ chmod +x install.sh
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/chenfengyimei/CacheHub.git
+git clone https://gitee.com/chenfengloveyuri/CacheHub.git
 cd CacheHub
 
 # 2. 构建
@@ -78,7 +78,7 @@ dotnet publish src/CacheHub.Cli/CacheHub.Cli.csproj -c Release -o ./publish
 ### 方式三：从源码直接运行（开发模式）
 
 ```bash
-git clone https://github.com/chenfengyimei/CacheHub.git
+git clone https://gitee.com/chenfengloveyuri/CacheHub.git
 cd CacheHub
 dotnet run --project src/CacheHub.Cli -- version
 ```
@@ -165,7 +165,7 @@ git --version
 
 ```bash
 # Step 1: 克隆仓库
-git clone https://github.com/chenfengyimei/CacheHub.git
+git clone https://gitee.com/chenfengloveyuri/CacheHub.git
 cd CacheHub
 
 # Step 2: 构建（确保编译通过）
