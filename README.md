@@ -359,7 +359,7 @@ cachehub context export --id=<ctx-id> --format=file
 | 真实 SQLite 集成测试 | 10+ | index→context→payload 完整闭环 |
 | 安全测试 | 40+ | 路径遍历、symlink 逃逸、XSS、密钥扫描、Offline 模式 |
 | Benchmark 度量 | 3 | 真实 Context Engine 指标（非 mock） |
-| **总计** | **774** | |
+| **总计** | **999** | |
 
 CI 在 **Ubuntu + Windows + macOS** 三平台上运行 `build + test + format`，每次 push 和 PR 自动触发。
 

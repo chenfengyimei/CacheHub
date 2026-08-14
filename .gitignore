@@ -73,6 +73,12 @@ benchmark-matrix-result.json
 # Docs build
 Docs/**/*.docx~
 
+# Release dist
+dist/staging/
+dist/cli-win-x64/
+dist/desktop/
+dist/*.zip
+
 # Temp
 *.tmp
 *.bak

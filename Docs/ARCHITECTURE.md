@@ -17,10 +17,10 @@ CacheHub 采用分层架构，从底到上分为 6 层：
 ├─────────────────────────────────────────────────┤
 │                  索引层 (Indexing)                │
 │  Enumerator · IgnoreRules · FileDetector         │
-│  Hasher · Parser(4语言) · RepoMap · FTS5 · Cache │
+│  Hasher · Parser(12语言) · RepoMap · FTS5 · Cache │
 ├─────────────────────────────────────────────────┤
 │                  存储层 (Storage)                 │
-│  SQLite · 9 Migrations · 3 Repositories · FTS5   │
+│  SQLite · 11 Migrations · 3 Repositories · FTS5   │
 ├─────────────────────────────────────────────────┤
 │                  核心层 (Core)                    │
 │  Domain Models · Errors · IDs · Context Schema   │
